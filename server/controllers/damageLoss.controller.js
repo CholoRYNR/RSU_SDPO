@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { DamageLossRecord, Transaction, Borrower, User, Item, Equipment, Category, MaintenanceFee } = require('../models');
+const { DamageLossRecord, Transaction, Borrower, User, Item, Equipment, Category, MaintenanceFee, sequelize } = require('../models');
 const { notifyBorrower } = require('../helpers/notify');
 const { logStatusChange } = require('../helpers/transactionLog');
 
@@ -116,7 +116,23 @@ exports.resolve = async (req, res) => {
 
   record.resolutionStatus = 'Resolved';
   record.resolutionDate = new Date();
-  await record.save();
+
+  // A verified replacement means the affected item is physically back in
+  // SDPO's hands in good condition — restore it to the lending pool and give
+  // the equipment's available count back the unit that return.controller.js
+  // deliberately withheld when the damage/loss was first reported.
+  await sequelize.transaction(async (t) => {
+    await record.save({ transaction: t });
+
+    const item = await Item.findByPk(record.itemId, { transaction: t });
+    if (item) {
+      await item.update(
+        { itemCondition: 'Good', availabilityStatus: 'Available', currentBorrowerId: null },
+        { transaction: t }
+      );
+      await Equipment.increment('availableQuantity', { by: 1, where: { id: item.equipmentId }, transaction: t });
+    }
+  });
 
   // The parent transaction only moves to Resolved once every one of its
   // Damage/Loss Records is Resolved — a transaction can have more than one

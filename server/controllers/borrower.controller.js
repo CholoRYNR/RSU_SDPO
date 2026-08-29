@@ -90,6 +90,7 @@ exports.uploadDocuments = async (req, res) => {
     );
   }
   await borrower.save();
+  await borrower.reload();
 
   res.json({ success: true, data: documentStatus(borrower) });
 };

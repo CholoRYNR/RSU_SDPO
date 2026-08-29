@@ -19,7 +19,7 @@
 </head>
 <body>
   <div id="app-root" data-page="dashboard" data-title="Dashboard Overview" data-subtitle="Sports Equipment &amp; Transaction Monitoring System">
-    <section class="welcome"><div class="live"><i></i>LIVE DASHBOARD</div><h2>Welcome back, Admin.</h2><p id="welcomeText">The Sports Equipment &amp; Transaction Monitoring System is active. Currently managing equipment items with real-time tracking.</p></section>
+    <section class="welcome"><div class="live"><i></i>LIVE DASHBOARD</div><h2 id="welcomeGreeting">Welcome back, Admin.</h2><p id="welcomeText">The Sports Equipment &amp; Transaction Monitoring System is active. Currently managing equipment items with real-time tracking.</p></section>
     <section class="stats"><article class="card"><div class="card-head"><span class="label">TOTAL EQUIPMENT</span><span class="metric-icon mint">▣</span></div><div class="value-row"><span class="value" id="statTotal">—</span><span class="badge" id="statTotalBadge"></span></div><div class="card-foot">Organized by type</div></article><article class="card"><div class="card-head"><span class="label">AVAILABLE</span><span class="metric-icon blue">✓</span></div><div class="value-row"><span class="value" id="statAvailable">—</span><span class="hint" id="statAvailableHint"></span></div><div class="card-foot">Ready for borrowing</div></article><article class="card"><div class="card-head"><span class="label">BORROWED</span><span class="metric-icon yellow">↗</span></div><div class="value-row"><span class="value" id="statBorrowed">—</span><span class="hint">Active</span></div><div class="card-foot">Currently borrowed</div></article><article class="card"><div class="card-head"><span class="label">OVERDUE</span><span class="metric-icon red">!</span></div><div class="value-row"><span class="value red-text" id="statOverdue">—</span><span class="hint">Urgent</span></div><div class="card-foot">Require action</div></article></section>
     <section class="filters"><div class="session">ACTIVE SESSION</div><div class="semester">2025-2026 • 1ST SEMESTER</div><div class="filter-actions"><select class="select" aria-label="Academic year"><option>A.Y. 2025-2026</option></select><select class="select" aria-label="Semester"><option>1ST SEMESTER</option></select><button class="sync" id="sync">SYNC</button></div></section>
     <section class="charts"><article class="chart-card"><div class="chart-head"><div class="chart-title">Equipment Usage Trends</div><select class="chart-select"><option>Last 7 days</option></select></div><div class="chart-space"><div class="y-axis" id="trendYAxis"></div><div class="gridline g1"></div><div class="gridline g2"></div><div class="gridline g3"></div><div class="gridline g4"></div><div class="gridline g5"></div><svg class="trend-svg" viewBox="0 0 430 180" preserveAspectRatio="none" aria-label="Usage trend chart"><polyline id="trendBorrowedLine" points="" fill="none" stroke="#006045" stroke-width="2.5"/><polyline id="trendReturnedLine" points="" fill="none" stroke="#d97706" stroke-width="2.5"/><g id="trendBorrowedDots" fill="#006045"></g></svg><div class="axis" id="trendXAxis"></div></div><div class="legend"><span>Borrowed</span><span>Returns</span></div></article>
@@ -64,6 +64,16 @@
         ?dist.map((c,i)=>`<div class="pie-legend-row"><span class="pie-legend-dot" style="background:${PIE_COLORS[i%PIE_COLORS.length]}"></span><span class="pie-legend-name">${esc(c.categoryName)}</span><span class="pie-legend-pct">${c.percent}%</span></div>`).join('')
         :'<div class="pie-legend-row" style="color:var(--muted)">No equipment yet</div>';
     }
+
+    function setGreeting(){
+      let username='Admin';
+      try{
+        const u=currentUser();
+        if(u&&u.username)username=u.username;
+      }catch(e){}
+      document.getElementById('welcomeGreeting').textContent=`Welcome back, ${username}.`;
+    }
+    setGreeting();
 
     function loadDashboard(){
       return apiFetch('/api/dashboard/summary').then(d=>{

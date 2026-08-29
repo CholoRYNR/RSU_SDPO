@@ -91,6 +91,7 @@
     .wizard-field+.wizard-field{margin-top:16px}
     .wizard-field label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px}
     .wizard-field label em{color:#fb2c36;font-style:normal}
+    .wizard-card__head h3 em{color:#fb2c36;font-style:normal}
     .wizard-field input[type=text],.wizard-field input[type=date],.wizard-field input[type=time],.wizard-field textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:13px Inter,sans-serif;color:var(--ink);background:#fff;box-sizing:border-box}
     .wizard-field input[readonly]{background:var(--softline);color:var(--muted)}
     .wizard-field textarea{resize:vertical;min-height:80px;font-family:inherit}
@@ -241,7 +242,7 @@
           <p class="wizard-quote">Borrowing of equipment must be requested and completed at least 2–5 days before the scheduled event to ensure equipment availability and proper preparation. Borrowers must present a valid identification card and all required documents.</p>
           <div class="wizard-section">
             <h4>Eligible to Borrow</h4>
-            <p>Faculty, staff, employees, and stakeholders (external users) may borrow equipment.</p>
+            <p>Faculty, staff, employees, students, and stakeholders (external users) may borrow equipment.</p>
           </div>
           <div class="wizard-section">
             <h4>Procedures</h4>
@@ -314,7 +315,7 @@
         <h2>Required Documents</h2>
         <p class="wizard-sub">Upload the documents required for your borrowing request.</p>
         <div class="wizard-card">
-          <div class="wizard-card__head"><h3>Valid ID</h3></div>
+          <div class="wizard-card__head"><h3>Valid ID <em>*</em></h3></div>
           <label class="dropzone" id="validIdZone" for="validIdUpload">
             <span class="dropzone__icon"><img src="../../assets/icons/icon-upload.svg" alt="" style="width:16px;height:16px"></span>
             <span class="dropzone__title" id="validIdZoneTitle">Upload Document</span>
@@ -323,7 +324,7 @@
           <input id="validIdUpload" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>
         </div>
         <div class="wizard-card">
-          <div class="wizard-card__head"><h3>Approved Proposal / Authorization</h3></div>
+          <div class="wizard-card__head"><h3>Approved Proposal / Authorization <em>*</em></h3></div>
           <label class="dropzone" id="authDocZone" for="authDocUpload">
             <span class="dropzone__icon"><img src="../../assets/icons/icon-upload.svg" alt="" style="width:16px;height:16px"></span>
             <span class="dropzone__title" id="authDocZoneTitle">Upload Document</span>
@@ -332,6 +333,7 @@
           <input id="authDocUpload" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>
         </div>
         <div class="wizard-note">🔒<span>Your uploaded documents are used only for processing your SDPO borrowing request and will not be shared with other borrowers.</span></div>
+        <p class="wizard-sub" id="docsRequiredHint">Upload both required documents to continue.</p>
         <div class="wizard-actions">
           <button type="button" class="btn-back" id="toStep1Back">← Back</button>
           <button type="button" class="btn-primary" id="toStep3" disabled>Continue</button>
@@ -620,7 +622,9 @@
       const hasEquip=equipmentRows.length>0&&equipmentRows.every(r=>r.equipmentId&&r.quantity>0);
       const infoValid=hasEquip&&$('purposeInput').value.trim()&&$('returnDateInput').value&&$('returnTimeInput').value;
       $('toStep2').disabled=!infoValid;
-      $('toStep3').disabled=!(uploadedValidId&&uploadedAuthDoc);
+      const docsReady=uploadedValidId&&uploadedAuthDoc;
+      $('toStep3').disabled=!docsReady;
+      $('docsRequiredHint').hidden=docsReady;
     }
 
     $('acknowledge').addEventListener('change',updateStepValidity);
