@@ -117,6 +117,7 @@
 
     <div class="save-toast" id="settingsToast"><p>✓ Settings saved</p></div>
   </div>
+  <script src="../../js/shared/api.js"></script>
   <script src="../../js/shared/app-shell.js"></script>
   <script>
     const PROFILE_KEY = 'rsuSdpoAdminProfile';
@@ -144,13 +145,13 @@
       el.__timer = setTimeout(() => el.classList.remove('show'), 2400);
     }
 
-    // Account summary, pulled from the profile page's saved data
+    // Account summary, pulled from the real logged-in user (set at login; see js/shared/api.js)
     (function renderAccount() {
       try {
-        const p = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
-        const first = p.firstName || 'SDPO', last = p.lastName || 'Staff';
-        $('acctName').textContent = (first + ' ' + last).trim();
-        $('acctMeta').textContent = 'Administrator · ' + (p.email || 'sdpo.staff@rsu.edu.ph');
+        const u = currentUser();
+        if (!u) return; // keep the static placeholder markup
+        $('acctName').textContent = u.username || 'SDPO Staff';
+        $('acctMeta').textContent = (u.userRole || 'Administrator') + ' · ' + (u.emailAddress || 'sdpo.staff@rsu.edu.ph');
       } catch (e) { /* keep defaults */ }
     })();
 
@@ -198,7 +199,7 @@
       });
     });
 
-    // Password form — client-side validation only, nothing is persisted (no backend, and passwords should never live in localStorage)
+    // Password form — client-side validation, then a real call to the change-password endpoint
     function setError(fieldId, errorId, message) {
       $(errorId).textContent = message || '';
       return !message;
@@ -210,10 +211,20 @@
       ok = setError('newPw', 'newPwError', $('newPw').value.length >= 8 ? '' : 'New password must be at least 8 characters.') && ok;
       ok = setError('confirmPw', 'confirmPwError', $('confirmPw').value === $('newPw').value && $('confirmPw').value ? '' : 'Passwords do not match.') && ok;
       if (!ok) return;
-      $('passwordForm').reset();
-      document.querySelectorAll('.pw-toggle').forEach((btn) => { btn.textContent = 'Show'; });
-      document.querySelectorAll('#passwordForm input').forEach((input) => { input.type = 'password'; });
-      flashToast('pwToast');
+      const currentPassword = $('currentPw').value;
+      const newPassword = $('newPw').value;
+      apiFetch('/api/users/change-password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword })
+      }).then(() => {
+        $('passwordForm').reset();
+        document.querySelectorAll('.pw-toggle').forEach((btn) => { btn.textContent = 'Show'; });
+        document.querySelectorAll('#passwordForm input').forEach((input) => { input.type = 'password'; });
+        flashToast('pwToast');
+      }).catch((err) => {
+        setError('currentPw', 'currentPwError', (err && err.message) || 'Unable to update password.');
+      });
     });
   </script>
 </body>
