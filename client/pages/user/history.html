@@ -111,11 +111,12 @@
     const HISTORY_STATUSES=['Returned','Completed','Cancelled','Rejected'];
     const STATUS_BUCKET={Returned:'completed',Completed:'completed',Cancelled:'cancelled',Rejected:'rejected'};
     const badgeIcon={completed:'✓',cancelled:'⊘',rejected:'⊗'};
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
     function groupItems(items){
       const counts=new Map();
       items.forEach(i=>counts.set(i.name,(counts.get(i.name)||0)+1));
-      return Array.from(counts.entries()).map(([name,qty])=>`${name} — ${qty} unit${qty===1?'':'s'}`);
+      return Array.from(counts.entries()).map(([name,qty])=>`${esc(name)} — ${qty} unit${qty===1?'':'s'}`);
     }
 
     function mapTransaction(t){
@@ -171,7 +172,7 @@
 
     function render(){
       const rows=data.filter(r=>(filter==='all'||filter===r.status)&&(r.id+r.date+r.items).toLowerCase().includes(searchInput.value.toLowerCase()));
-      list.innerHTML=rows.length?rows.map(r=>`<article class="trans-card" data-id="${r.id}"><header><div><div class="trans-title">Transaction #${r.id}</div><div class="trans-date">Requested: ${r.date}</div></div><span class="badge ${r.status}">${badgeIcon[r.status]} ${r.status[0].toUpperCase()+r.status.slice(1)}</span></header><div class="trans-body"><div class="field-label">Equipment</div><div class="trans-items">${r.items.map(i=>`<span>${i}</span>`).join('')}</div><div class="trans-total">Total: <b>${totalUnits(r.items)} units</b></div></div><div class="trans-return-row">${r.status==='completed'?'Returned: <b>'+(r.returned||'—')+'</b>':r.status==='cancelled'?'Cancelled request':'Rejected request'}</div><div class="trans-foot"><button type="button" class="btn btn-secondary">View Details</button></div></article>`).join(''):'<div class="empty-state"><p class="empty-state__title">No history found</p><p>Try adjusting your filter or search term.</p></div>';
+      list.innerHTML=rows.length?rows.map(r=>`<article class="trans-card" data-id="${esc(r.id)}"><header><div><div class="trans-title">Transaction #${esc(r.id)}</div><div class="trans-date">Requested: ${esc(r.date)}</div></div><span class="badge ${r.status}">${badgeIcon[r.status]} ${r.status[0].toUpperCase()+r.status.slice(1)}</span></header><div class="trans-body"><div class="field-label">Equipment</div><div class="trans-items">${r.items.map(i=>`<span>${i}</span>`).join('')}</div><div class="trans-total">Total: <b>${totalUnits(r.items)} units</b></div></div><div class="trans-return-row">${r.status==='completed'?'Returned: <b>'+esc(r.returned||'—')+'</b>':r.status==='cancelled'?'Cancelled request':'Rejected request'}</div><div class="trans-foot"><button type="button" class="btn btn-secondary">View Details</button></div></article>`).join(''):'<div class="empty-state"><p class="empty-state__title">No history found</p><p>Try adjusting your filter or search term.</p></div>';
     }
 
     function showDetails(r){
@@ -186,8 +187,8 @@
       }).join('')+`<div class="detail-row"><label>Total</label><strong>${totalUnits(r.items)} units</strong></div>`;
 
       $('activityRows').innerHTML=`
-        <div class="detail-row"><label>Purpose / Use</label><strong>${r.purpose&&r.purpose!=='—'?r.purpose:'Not specified'}</strong></div>
-        <div class="detail-row"><label>Expected Return Date</label><strong>${r.due||'—'}</strong></div>`;
+        <div class="detail-row"><label>Purpose / Use</label><strong>${r.purpose&&r.purpose!=='—'?esc(r.purpose):'Not specified'}</strong></div>
+        <div class="detail-row"><label>Expected Return Date</label><strong>${esc(r.due||'—')}</strong></div>`;
 
       const returnCard=$('returnCard');
       if(r.status==='completed'){
@@ -197,10 +198,10 @@
         const onTime=!r.returned||!r.due||new Date(r.returned)<=new Date(r.due);
         const conditionColor=worst==='Good'?'var(--color-accent-green-dark)':'#dc2626';
         const feesHtml=r.fees.length
-          ?`<div class="detail-row"><label>Outstanding Fees</label><strong style="color:#dc2626">${r.fees.map(f=>`₱${Number(f.feeAmount).toFixed(2)} (${f.feeType}, ${f.feeStatus})`).join(', ')}</strong></div>`
+          ?`<div class="detail-row"><label>Outstanding Fees</label><strong style="color:#dc2626">${r.fees.map(f=>`₱${Number(f.feeAmount).toFixed(2)} (${esc(f.feeType)}, ${esc(f.feeStatus)})`).join(', ')}</strong></div>`
           :'';
         $('returnRows').innerHTML=`
-          <div class="detail-row"><label>Actual Return Date</label><strong>${r.returned||'—'}</strong></div>
+          <div class="detail-row"><label>Actual Return Date</label><strong>${esc(r.returned||'—')}</strong></div>
           <div class="detail-row"><label>Returned Condition</label><strong style="color:${conditionColor}">${worst}</strong></div>
           <div class="detail-row"><label>Return Status</label><strong style="color:${onTime?'var(--color-accent-green-dark)':'#dc2626'}">◉ Returned ${onTime?'On Time':'Late'}</strong></div>
           ${feesHtml}`;

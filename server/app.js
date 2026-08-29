@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const rateLimit = require('express-rate-limit');
 
 const routes = require('./routes');
 const errorHandler = require('./middlewares/errorHandler');
@@ -43,7 +44,25 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Rate limit brute-force attempts against login/register specifically (not
+// the whole API — every other route stays unlimited). This capstone has
+// essentially zero real user base and is graded/demoed live, so the limit
+// errs generous: 10 requests per 15 minutes per IP is loose enough that a
+// grader retrying a typo'd password, or the whole panel testing the same
+// classroom Wi-Fi/NAT IP during a demo, won't get locked out, while still
+// stopping a scripted password-guessing loop, which needs far more than 10
+// attempts per 15 minutes to be practically useful.
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many attempts. Please try again later.' }
+});
+
 // API routes
+app.use('/api/auth/login', authRateLimiter);
+app.use('/api/auth/register', authRateLimiter);
 app.use('/api', routes);
 
 // Static client (optional, adjust if serving client separately)

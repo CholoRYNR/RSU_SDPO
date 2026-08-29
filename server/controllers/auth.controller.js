@@ -32,13 +32,16 @@ function serializeUser(user) {
 }
 
 exports.register = async (req, res) => {
-  const { username, emailAddress, password, userRole, firstName, lastName, collegeOrUnit, borrowerCategory } = req.body;
+  const { username, emailAddress, password, firstName, lastName, collegeOrUnit, borrowerCategory } = req.body;
   if (!username || !emailAddress || !password) {
     const err = new Error('username, emailAddress, and password are required');
     err.statusCode = 400;
     throw err;
   }
-  const role = userRole || 'Borrower';
+  // Self-registration always creates a Borrower account. Staff/admin roles
+  // (Director, Admin, Staff) must never be assignable from the public
+  // registration endpoint to prevent privilege escalation.
+  const role = 'Borrower';
   if (role === 'Borrower' && (!firstName || !lastName || !collegeOrUnit || !borrowerCategory)) {
     const err = new Error('firstName, lastName, collegeOrUnit, and borrowerCategory are required to register as a borrower');
     err.statusCode = 400;

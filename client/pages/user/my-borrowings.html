@@ -79,11 +79,12 @@
   <script>
     const statusIcon={active:'◉',due:'◷',overdue:'⊗',resolution:'⚠'};
     const statusLabel={active:'Active',due:'Due Soon',overdue:'Overdue',resolution:'Replacement Required'};
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
     function groupItems(items){
       const counts=new Map();
       items.forEach(i=>counts.set(i.name,(counts.get(i.name)||0)+1));
-      return Array.from(counts.entries()).map(([name,qty])=>[name,qty+' unit'+(qty===1?'':'s')]);
+      return Array.from(counts.entries()).map(([name,qty])=>[esc(name),qty+' unit'+(qty===1?'':'s')]);
     }
 
     // Released transactions are "currently borrowed" and get a due/overdue
@@ -139,7 +140,7 @@
       return `<article class="borrowing-card ${['overdue','resolution'].includes(b.status)?'overdue':''}">
         ${b.attention?`<div class="attention"><span>⊙</span>${b.attention}</div>`:''}
         <div class="card-head">
-          <div><div class="borrowing-id">Borrowing #${b.id}</div><div class="issued">Issued: ${b.issued}</div></div>
+          <div><div class="borrowing-id">Borrowing #${esc(b.id)}</div><div class="issued">Issued: ${esc(b.issued)}</div></div>
           <div class="status-pill-lg ${b.status}"><span>${statusIcon[b.status]}</span>${b.label}</div>
         </div>
         <div class="equipment">
@@ -148,10 +149,10 @@
           <div class="total-line">Total: <b>${b.total}</b></div>
         </div>
         <div class="return-row">
-          <span>${b.status==='overdue'?'Return was due on:':b.status==='resolution'?'Expected Return was:':'Expected Return:'} <b>${b.returnDate}</b></span>
-          ${b.message?`<span class="return-message">${b.message}</span>`:''}
+          <span>${b.status==='overdue'?'Return was due on:':b.status==='resolution'?'Expected Return was:':'Expected Return:'} <b>${esc(b.returnDate)}</b></span>
+          ${b.message?`<span class="return-message">${esc(b.message)}</span>`:''}
         </div>
-        <div class="card-foot"><button type="button" class="btn btn-secondary" data-detail="${b.id}">View Details</button></div>
+        <div class="card-foot"><button type="button" class="btn btn-secondary" data-detail="${esc(b.id)}">View Details</button></div>
       </article>`;
     }
     function renderCards(){
@@ -168,7 +169,7 @@
       title.textContent='Borrowing #'+b.id;
       subtitle.textContent='Issued: '+b.issued;
       body.innerHTML=`<section class="detail-block"><h3>Borrowed equipment</h3>${b.items.map(([n,q])=>`<div class="detail-line"><span>${n}</span><span>${q}</span></div>`).join('')}<div class="detail-line"><span>Total</span><span>${b.total}</span></div></section>
-      <section class="detail-block"><h3>Return schedule</h3><div class="detail-line"><span>Current status</span><span>${b.label}</span></div><div class="detail-line"><span>${b.status==='overdue'?'Due date':'Expected return'}</span><span>${b.returnDate}</span></div></section>`;
+      <section class="detail-block"><h3>Return schedule</h3><div class="detail-line"><span>Current status</span><span>${b.label}</span></div><div class="detail-line"><span>${b.status==='overdue'?'Due date':'Expected return'}</span><span>${esc(b.returnDate)}</span></div></section>`;
       modal.hidden=false;
     }
     function closeDetails(){modal.hidden=true;}
@@ -183,7 +184,7 @@
     function showToast(message,type){
       const toast=document.createElement('div');
       toast.className='toast toast--'+(type==='danger'?'danger':'success');
-      toast.innerHTML=`<span class="toast__dot"></span><span>${message}</span>`;
+      toast.innerHTML=`<span class="toast__dot"></span><span>${esc(message)}</span>`;
       $('toastStack').appendChild(toast);
       setTimeout(()=>toast.remove(),3200);
     }

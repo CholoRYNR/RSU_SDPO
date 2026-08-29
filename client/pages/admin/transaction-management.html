@@ -100,6 +100,7 @@
     if (!localStorage.getItem('rsuSdpoToken')) { location.href = '../auth/admin-login.html'; }
 
     let txns=[];
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const cls=s=>s.toLowerCase().replace(/\s+/g,'-'); let current=null;
     const myRole=()=>{try{return(currentUser()||{}).userRole}catch(e){return null}};
     const isDirector=()=>['Admin','Director'].includes(myRole());
@@ -119,7 +120,7 @@
     }
 
     const ACTION_LABEL={Pending:'Review',Acknowledged:'Review','For Approval':isDirector()?'Approve':'',Approved:'Release',Released:'Return',Overdue:'Return','For Resolution':'Resolve',Replacement:'Resolve',Resolved:'Complete'};
-    function render(rows=txns){document.getElementById('shown').textContent=rows.length;document.getElementById('transactions').innerHTML=rows.map(t=>{const label=ACTION_LABEL[t.status];return `<tr><td><span class="txn-id">${t.id}</span></td><td>${t.date}<span class="sub">${t.time}</span></td><td><b>${t.name}</b><span class="sub">${t.bsf}</span></td><td><span class="badge type">${t.type}</span></td><td>${t.college}</td><td class="purpose">${t.purpose}</td><td>${t.items.length}</td><td>${t.due}</td><td><span class="badge ${cls(t.status)}">${t.status}</span></td><td>${t.review}</td><td>${t.approve}</td><td><div class="actions"><button class="link-btn" onclick="openDrawer(${t.dbId})">View</button>${label?`<button class="link-btn primary" onclick="openDrawer(${t.dbId})">${label}</button>`:''}</div></td></tr>`}).join('')};
+    function render(rows=txns){document.getElementById('shown').textContent=rows.length;document.getElementById('transactions').innerHTML=rows.map(t=>{const label=ACTION_LABEL[t.status];return `<tr><td><span class="txn-id">${esc(t.id)}</span></td><td>${esc(t.date)}<span class="sub">${esc(t.time)}</span></td><td><b>${esc(t.name)}</b><span class="sub">${esc(t.bsf)}</span></td><td><span class="badge type">${esc(t.type)}</span></td><td>${esc(t.college)}</td><td class="purpose">${esc(t.purpose)}</td><td>${t.items.length}</td><td>${esc(t.due)}</td><td><span class="badge ${cls(t.status)}">${esc(t.status)}</span></td><td>${esc(t.review)}</td><td>${esc(t.approve)}</td><td><div class="actions"><button class="link-btn" onclick="openDrawer(${t.dbId})">View</button>${label?`<button class="link-btn primary" onclick="openDrawer(${t.dbId})">${label}</button>`:''}</div></td></tr>`}).join('')};
     function section(title,body){return `<section class="section"><div class="section-title">${title}</div><div class="section-body">${body}</div></section>`}
     function event(title,detail,done=true){return `<div class="event"><div class="dotline"><div class="dot ${done?'':'gray'}">${done?'✓':'•'}</div><div class="line"></div></div><div><b>${title}</b><p>${detail}</p></div></div>`}
     // itemConditions holds the per-item Good/Damaged/Lost pick during a return
@@ -130,10 +131,10 @@
       btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on','bad'));
       btn.classList.add('on');if(type!=='Good')btn.classList.add('bad');
     }
-    function equipment(t,returning=false){return t.items.map(it=>`<div class="equipment-row"><div class="qr">QR</div><div class="grow"><b>${it.name}</b><span class="sub">${it.code} · ${returning?'Released':'Available'}</span>${returning?`<div class="item-condition"><button class="on" onclick="chooseItemCondition(this,'${it.code}','Good')">Good</button><button onclick="chooseItemCondition(this,'${it.code}','Damaged')">Damaged</button><button onclick="chooseItemCondition(this,'${it.code}','Lost')">Lost</button></div>`:''}</div><button class="scan" data-code="${it.code}" data-name="${it.name.replace(/"/g,'&quot;')}" onclick="scanItem(this)">Scan QR</button></div>`).join('')}
+    function equipment(t,returning=false){return t.items.map(it=>`<div class="equipment-row"><div class="qr">QR</div><div class="grow"><b>${esc(it.name)}</b><span class="sub">${esc(it.code)} · ${returning?'Released':'Available'}</span>${returning?`<div class="item-condition"><button class="on" onclick="chooseItemCondition(this,'${it.code}','Good')">Good</button><button onclick="chooseItemCondition(this,'${it.code}','Damaged')">Damaged</button><button onclick="chooseItemCondition(this,'${it.code}','Lost')">Lost</button></div>`:''}</div><button class="scan" data-code="${esc(it.code)}" data-name="${esc(it.name)}" onclick="scanItem(this)">Scan QR</button></div>`).join('')}
     // Read-only listing for the Overview tab — just what was requested, no
     // scan control (scanning only happens during the actual Workflow step).
-    function equipmentDetails(t){return t.items.map(it=>`<div class="equipment-row"><div class="grow"><b>${it.name}</b><span class="sub">${it.code}</span></div></div>`).join('')}
+    function equipmentDetails(t){return t.items.map(it=>`<div class="equipment-row"><div class="grow"><b>${esc(it.name)}</b><span class="sub">${esc(it.code)}</span></div></div>`).join('')}
 
     // --- Submitted documents (Valid ID / Authorization Document) — viewable once approved ---
     const APPROVED_ONWARD=['Approved','Released','Returned','Overdue','For Resolution','Replacement','Resolved','Completed'];
@@ -141,11 +142,17 @@
       if(!APPROVED_ONWARD.includes(t.status)){
         return section('Submitted Documents','<div class="ack">Documents become viewable once the request is approved.</div>');
       }
-      const nameEsc=t.name.replace(/"/g,'&quot;');
-      const row=(type,label)=>`<div class="equipment-row" id="docRow-${type}"><div class="grow"><b>${label}</b><span class="sub" id="docStatus-${type}">Checking…</span></div><button class="scan" id="docBtn-${type}" onclick="viewDocument(${t.borrowerId},'${type}','${label} — ${nameEsc}')">View Document</button></div>`;
+      // Borrower name/label are passed via data-* attributes (not embedded in the
+      // onclick string) so a name containing a quote can never break out of an
+      // inline JS string — HTML-escaping alone would not stop that, since the
+      // browser HTML-decodes attribute text before running it as script.
+      const row=(type,label)=>`<div class="equipment-row" id="docRow-${type}"><div class="grow"><b>${label}</b><span class="sub" id="docStatus-${type}">Checking…</span></div><button class="scan" id="docBtn-${type}" data-doc-type="${type}" data-doc-label="${esc(label+' — '+t.name)}">View Document</button></div>`;
       return section('Submitted Documents',row('valid-id','Valid ID')+row('authorization-document','Authorization Document'));
     }
     function loadDocumentStatus(t){
+      document.querySelectorAll('#overview .scan[data-doc-type]').forEach(btn=>{
+        btn.onclick=()=>viewDocument(t.borrowerId,btn.dataset.docType,btn.dataset.docLabel);
+      });
       if(!APPROVED_ONWARD.includes(t.status)||!t.borrowerId)return;
       apiFetch(`/api/borrowers/${t.borrowerId}/documents`).then(status=>{
         updateDocRow('valid-id',status.validIdUploaded);
@@ -174,7 +181,7 @@
         const url=URL.createObjectURL(blob);
         body.innerHTML=blob.type==='application/pdf'
           ?`<iframe src="${url}" style="width:100%;height:70vh;border:0;background:#fff"></iframe>`
-          :`<img src="${url}" alt="${label}" style="max-width:100%;max-height:70vh;display:block;margin:auto">`;
+          :`<img src="${url}" alt="${esc(label)}" style="max-width:100%;max-height:70vh;display:block;margin:auto">`;
         status.textContent='';
       }catch(e){
         status.className='scan-status err';status.textContent=e.message;
@@ -205,10 +212,10 @@
       const approved=!['Pending','Acknowledged','For Review','For Approval'].includes(t.status)&&t.status!=='Rejected';
       const releasedOnward=['Released','Overdue','For Resolution','Replacement','Resolved','Completed'].includes(t.status);
       const returnedOnward=['For Resolution','Replacement','Resolved','Completed'].includes(t.status)||t.status==='Completed';
-      return `<div class="timeline">${event('Request Submitted',t.date+' · '+t.time)}${event('Reviewed',t.status==='Rejected'&&!approved?'Rejected':t.review!=='—'?'Reviewed by '+t.review:'Awaiting review',reviewed)}${event('Approved',t.status==='Rejected'?'Rejected':approved?'Approved by '+t.approve:'Awaiting approval',approved)}${event('Released',releasedOnward?'Equipment released':'',releasedOnward)}${event('Returned',returnedOnward?'Equipment returned':'',returnedOnward)}</div>`;
+      return `<div class="timeline">${event('Request Submitted',esc(t.date)+' · '+esc(t.time))}${event('Reviewed',t.status==='Rejected'&&!approved?'Rejected':t.review!=='—'?'Reviewed by '+esc(t.review):'Awaiting review',reviewed)}${event('Approved',t.status==='Rejected'?'Rejected':approved?'Approved by '+esc(t.approve):'Awaiting approval',approved)}${event('Released',releasedOnward?'Equipment released':'',releasedOnward)}${event('Returned',returnedOnward?'Equipment returned':'',returnedOnward)}</div>`;
     }
-    function openDrawer(dbId){current=txns.find(t=>t.dbId===dbId);if(!current)return;const t=current;document.getElementById('drawerBadges').innerHTML=`<span class="badge ${cls(t.status)}">${t.id}</span> <span class="badge ${cls(t.status)}">${t.status}</span> <span class="badge type">${t.type}</span>`;document.getElementById('drawerName').textContent=t.name;document.getElementById('drawerCollege').textContent=`${t.college} · ${t.bsf}`;document.getElementById('drawerActions').innerHTML=drawerActionsHtml(t);
-      document.getElementById('overview').innerHTML=section('Borrower Information',`<div class="info-grid"><div class="info"><label>Transaction No.</label><div>${t.id}</div></div><div class="info"><label>BSF Number</label><div>${t.bsf}</div></div><div class="info"><label>Borrower Name</label><div>${t.name}</div></div><div class="info"><label>Borrower Type</label><div>${t.type}</div></div><div class="info"><label>College / Unit</label><div>${t.college}</div></div><div class="info"><label>Email</label><div>${t.email}</div></div></div>`)+section('Request Details',`<div class="info-grid"><div class="info"><label>Request Date</label><div>${t.date} ${t.time}</div></div><div class="info"><label>Expected Return</label><div>${t.due}</div></div><div class="info" style="grid-column:1/-1"><label>Purpose</label><div>${t.purpose}</div></div></div>`)+section(`Equipment Requested · ${t.items.length} items`,equipmentDetails(t))+documentsSection(t);
+    function openDrawer(dbId){current=txns.find(t=>t.dbId===dbId);if(!current)return;const t=current;document.getElementById('drawerBadges').innerHTML=`<span class="badge ${cls(t.status)}">${esc(t.id)}</span> <span class="badge ${cls(t.status)}">${esc(t.status)}</span> <span class="badge type">${esc(t.type)}</span>`;document.getElementById('drawerName').textContent=t.name;document.getElementById('drawerCollege').textContent=`${t.college} · ${t.bsf}`;document.getElementById('drawerActions').innerHTML=drawerActionsHtml(t);
+      document.getElementById('overview').innerHTML=section('Borrower Information',`<div class="info-grid"><div class="info"><label>Transaction No.</label><div>${esc(t.id)}</div></div><div class="info"><label>BSF Number</label><div>${esc(t.bsf)}</div></div><div class="info"><label>Borrower Name</label><div>${esc(t.name)}</div></div><div class="info"><label>Borrower Type</label><div>${esc(t.type)}</div></div><div class="info"><label>College / Unit</label><div>${esc(t.college)}</div></div><div class="info"><label>Email</label><div>${esc(t.email)}</div></div></div>`)+section('Request Details',`<div class="info-grid"><div class="info"><label>Request Date</label><div>${esc(t.date)} ${esc(t.time)}</div></div><div class="info"><label>Expected Return</label><div>${esc(t.due)}</div></div><div class="info" style="grid-column:1/-1"><label>Purpose</label><div>${esc(t.purpose)}</div></div></div>`)+section(`Equipment Requested · ${t.items.length} items`,equipmentDetails(t))+documentsSection(t);
       loadDocumentStatus(t);
       let workflowBody;
       if(t.status==='Approved'){
@@ -279,13 +286,13 @@
       if(r.resolutionStatus==='Pending Replacement'){
         actionHtml=`<div class="resolution-field"><label>Replacement Equipment</label><input id="replEquip-${r.id}" placeholder="e.g. New Molten basketball, same spec"></div><div class="resolution-field"><label>Replacement Date</label><input id="replDate-${r.id}" type="date"></div><div class="resolution-actions"><button class="btn dark" onclick="submitReplacementFor(${r.id})">Submit Replacement</button></div>`;
       }else if(r.resolutionStatus==='Replacement Submitted'){
-        actionHtml=`<div class="sub">Submitted: ${r.replacementEquipment} (${r.replacementDate})</div><div class="resolution-actions"><button class="btn green" onclick="verifyReplacementFor(${r.id})">Verify Replacement</button></div>`;
+        actionHtml=`<div class="sub">Submitted: ${esc(r.replacementEquipment)} (${esc(r.replacementDate)})</div><div class="resolution-actions"><button class="btn green" onclick="verifyReplacementFor(${r.id})">Verify Replacement</button></div>`;
       }else if(r.resolutionStatus==='Replacement Verified'){
-        actionHtml=`<div class="sub">Verified by ${r.replacementVerifiedBy||'—'}</div><div class="resolution-actions"><button class="btn green" onclick="resolveRecordFor(${r.id})">Mark Resolved</button></div>`;
+        actionHtml=`<div class="sub">Verified by ${esc(r.replacementVerifiedBy||'—')}</div><div class="resolution-actions"><button class="btn green" onclick="resolveRecordFor(${r.id})">Mark Resolved</button></div>`;
       }else{
-        actionHtml=`<div class="sub">Resolved ${r.resolutionDate||''}</div>`;
+        actionHtml=`<div class="sub">Resolved ${esc(r.resolutionDate||'')}</div>`;
       }
-      return `<div class="resolution-record"><h5>${r.incidentType} — ${r.equipmentName} (${r.itemCode})</h5><span class="badge ${resolutionPillClass(r.resolutionStatus)} resolution-status-pill">${r.resolutionStatus}</span><div class="sub">${r.conditionDetails||''}</div><div class="sub">Recorded by ${r.recordedBy} on ${r.dateReported}</div>${actionHtml}</div>`;
+      return `<div class="resolution-record"><h5>${esc(r.incidentType)} — ${esc(r.equipmentName)} (${esc(r.itemCode)})</h5><span class="badge ${resolutionPillClass(r.resolutionStatus)} resolution-status-pill">${esc(r.resolutionStatus)}</span><div class="sub">${esc(r.conditionDetails||'')}</div><div class="sub">Recorded by ${esc(r.recordedBy)} on ${esc(r.dateReported)}</div>${actionHtml}</div>`;
     }
     async function loadResolutionRecords(t){
       const el=document.getElementById('resolutionRecords');
@@ -322,7 +329,7 @@
       if(!el)return;
       try{
         const rows=await apiFetch(`/api/audit-logs?transactionId=${t.dbId}`);
-        el.innerHTML=rows.length?rows.map(r=>`<div class="activity-log-row"><b>${r.oldStatus}</b><span class="arrow">→</span><b>${r.newStatus}</b><span class="sub"> · by ${r.changedBy}</span>${r.remarks?`<div class="sub">${r.remarks}</div>`:''}<time>${new Date(r.changeDatetime).toLocaleString()}</time></div>`).join(''):'<div class="ack">No status changes recorded yet.</div>';
+        el.innerHTML=rows.length?rows.map(r=>`<div class="activity-log-row"><b>${esc(r.oldStatus)}</b><span class="arrow">→</span><b>${esc(r.newStatus)}</b><span class="sub"> · by ${esc(r.changedBy)}</span>${r.remarks?`<div class="sub">${esc(r.remarks)}</div>`:''}<time>${new Date(r.changeDatetime).toLocaleString()}</time></div>`).join(''):'<div class="ack">No status changes recorded yet.</div>';
       }catch(e){el.textContent='Could not load activity: '+e.message}
     }
 
@@ -335,8 +342,8 @@
       try{
         const [borrowers,items]=await Promise.all([apiFetch('/api/borrowers'),apiFetch('/api/qr/items')]);
         const available=items.filter(i=>i.status==='Available');
-        document.getElementById('newTxnBorrower').innerHTML='<option value="">Select borrower…</option>'+borrowers.map(b=>`<option value="${b.id}">${b.firstName} ${b.lastName} — ${b.collegeOrUnit}</option>`).join('');
-        document.getElementById('newTxnItems').innerHTML=available.length?available.map(i=>`<label class="item-check"><input type="checkbox" value="${i.id}"> ${i.equipmentName} <span class="sub">${i.code}</span></label>`).join(''):'<p class="sub">No available items right now.</p>';
+        document.getElementById('newTxnBorrower').innerHTML='<option value="">Select borrower…</option>'+borrowers.map(b=>`<option value="${b.id}">${esc(b.firstName)} ${esc(b.lastName)} — ${esc(b.collegeOrUnit)}</option>`).join('');
+        document.getElementById('newTxnItems').innerHTML=available.length?available.map(i=>`<label class="item-check"><input type="checkbox" value="${i.id}"> ${esc(i.equipmentName)} <span class="sub">${esc(i.code)}</span></label>`).join(''):'<p class="sub">No available items right now.</p>';
       }catch(e){
         document.getElementById('newTxnError').textContent=e.message;
       }

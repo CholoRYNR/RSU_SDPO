@@ -127,6 +127,7 @@
     const countFor=s=>s==='All'?requests.length:requests.filter(r=>r.status===s).length;
 
     const $=id=>document.getElementById(id);
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const filtersEl=$('filters'),cards=$('cards'),searchInput=$('searchInput');
     const detailModalOverlay=$('detailModalOverlay'),detailModalTitle=$('detailModalTitle'),detailModalSub=$('detailModalSub'),detailModalBody=$('detailModalBody'),detailModalFoot=$('detailModalFoot');
 
@@ -138,22 +139,22 @@
       const rows=requests.filter(r=>(active==='All'||r.status===active)&&`${r.id} ${r.status} ${r.items.map(x=>x[0]).join(' ')}`.toLowerCase().includes(term));
       cards.innerHTML=rows.length?rows.map(r=>`<article class="request-card">
         <div class="request-card__head">
-          <div><div class="request-id">Request #${r.id}</div><div class="requested-on">Requested: ${r.date}</div></div>
-          <span class="badge ${classFor(r.status)}">${icon[r.status]} ${r.status}</span>
+          <div><div class="request-id">Request #${esc(r.id)}</div><div class="requested-on">Requested: ${esc(r.date)}</div></div>
+          <span class="badge ${classFor(r.status)}">${icon[r.status]} ${esc(r.status)}</span>
         </div>
         <div class="request-card__body">
           <div class="field-label">Equipment Requested</div>
-          <div class="items">${r.items.map(([n,q])=>`<span>${n} — <b>${q} ${q===1?'unit':'units'}</b></span>`).join('')}</div>
+          <div class="items">${r.items.map(([n,q])=>`<span>${esc(n)} — <b>${q} ${q===1?'unit':'units'}</b></span>`).join('')}</div>
           <div class="total-line">Total: <b>${r.total} units</b></div>
         </div>
         <div class="request-card__foot">
           <div class="return-row">
-            <span>Expected Return: <b>${r.returnDate}</b></span>
-            ${r.reason?`<span class="notice-reject">⊗ Reason: ${r.reason}</span>`:r.cancelled?`<span>Cancelled on: ${r.cancelled}</span>`:''}
+            <span>Expected Return: <b>${esc(r.returnDate)}</b></span>
+            ${r.reason?`<span class="notice-reject">⊗ Reason: ${esc(r.reason)}</span>`:r.cancelled?`<span>Cancelled on: ${esc(r.cancelled)}</span>`:''}
           </div>
           <div class="actions">
-            <button type="button" class="btn btn-secondary detail-btn" data-id="${r.id}">View Details</button>
-            ${r.status==='Pending'?`<button type="button" class="btn btn-outline-danger cancel-btn" data-id="${r.id}">Cancel Request</button>`:''}
+            <button type="button" class="btn btn-secondary detail-btn" data-id="${esc(r.id)}">View Details</button>
+            ${r.status==='Pending'?`<button type="button" class="btn btn-outline-danger cancel-btn" data-id="${esc(r.id)}">Cancel Request</button>`:''}
           </div>
         </div>
       </article>`).join(''):'<div class="empty-state"><p class="empty-state__title">No requests found</p><p>Try adjusting your filter or search term.</p></div>';
@@ -164,14 +165,14 @@
       detailModalTitle.textContent=`Request #${r.id}`;
       detailModalSub.textContent=`Requested: ${r.date}`;
       detailModalBody.innerHTML=`<div class="detail-grid">
-        <div class="detail-field"><small>Status</small><span class="badge ${classFor(r.status)}">${icon[r.status]} ${r.status}</span></div>
-        <div class="detail-field"><small>Expected return</small><b>${r.returnDate}</b></div>
-        <div class="detail-field"><small>Purpose</small><b>${r.purpose}</b></div>
+        <div class="detail-field"><small>Status</small><span class="badge ${classFor(r.status)}">${icon[r.status]} ${esc(r.status)}</span></div>
+        <div class="detail-field"><small>Expected return</small><b>${esc(r.returnDate)}</b></div>
+        <div class="detail-field"><small>Purpose</small><b>${esc(r.purpose)}</b></div>
         <div class="detail-field"><small>Total requested</small><b>${r.total} units</b></div>
       </div>
       <h3>Equipment requested</h3>
-      <ul class="detail-items">${r.items.map(([n,q])=>`<li><span>${n}</span><b>${q} ${q===1?'unit':'units'}</b></li>`).join('')}</ul>
-      <div class="modal-note ${r.reason?'reject':''}">${r.reason?'Reason for rejection: '+r.reason:(r.note||'')}</div>`;
+      <ul class="detail-items">${r.items.map(([n,q])=>`<li><span>${esc(n)}</span><b>${q} ${q===1?'unit':'units'}</b></li>`).join('')}</ul>
+      <div class="modal-note ${r.reason?'reject':''}">${r.reason?'Reason for rejection: '+esc(r.reason):esc(r.note||'')}</div>`;
       detailModalFoot.innerHTML=`<button type="button" class="btn btn-secondary" id="modalCloseBtn">Close</button>${r.status==='Pending'?'<button type="button" class="btn btn-outline-danger" id="modalCancelBtn">Cancel Request</button>':''}`;
       detailModalOverlay.hidden=false;
       $('modalCloseBtn').addEventListener('click',closeDetails);
@@ -193,7 +194,7 @@
     function showToast(message,type){
       const toast=document.createElement('div');
       toast.className='toast toast--'+(type==='danger'?'danger':'success');
-      toast.innerHTML=`<span class="toast__dot"></span><span>${message}</span>`;
+      toast.innerHTML=`<span class="toast__dot"></span><span>${esc(message)}</span>`;
       $('toastStack').appendChild(toast);
       setTimeout(()=>toast.remove(),3200);
     }

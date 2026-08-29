@@ -3,6 +3,40 @@
 const { Op } = require('sequelize');
 const { Transaction, TransactionDetail, Equipment, Category, Item, Borrower, User } = require('../models');
 const { INCLUDE, serialize } = require('./borrow.controller');
+const borrowingReportTemplate = require('../reports/templates/borrowingReportTemplate');
+const overdueReportTemplate = require('../reports/templates/overdueReportTemplate');
+const utilizationReportTemplate = require('../reports/templates/utilizationReportTemplate');
+const transactionHistoryTemplate = require('../reports/templates/transactionHistoryTemplate');
+const equipmentConditionTemplate = require('../reports/templates/equipmentConditionTemplate');
+const { sendPdf, sendExcel } = require('../reports/templates/reportRenderer');
+
+// Renders `reportData` ({ title, heads, data, stats }) as PDF/Excel using the
+// given per-report template when req.query.format asks for one, otherwise
+// falls through to the caller's own res.json(...) call so the existing JSON
+// API (used by the admin dashboard table views and already covered by
+// route-level auth tests) is completely unaffected.
+function renderFormat(req, res, template, reportData) {
+  const format = req.query.format;
+  if (format === 'pdf') {
+    template.pdf(res, reportData);
+    return true;
+  }
+  if (format === 'excel') {
+    template.excel(res, reportData).catch((err) => {
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: err.message });
+      } else {
+        // Headers (and possibly some body bytes) are already on the wire —
+        // res.json() would throw ERR_HTTP_HEADERS_SENT here. End the
+        // connection instead of leaving the client hanging indefinitely.
+        console.error('report.controller: excel export failed after headers sent:', err);
+        res.end();
+      }
+    });
+    return true;
+  }
+  return false;
+}
 
 function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -57,19 +91,19 @@ exports.borrowing = async (req, res) => {
   const approved = txns.filter((t) => t.transactionStatus !== 'Pending').length;
   const completed = txns.filter((t) => ['Returned', 'Completed'].includes(t.transactionStatus)).length;
 
-  res.json({
-    success: true,
-    data: {
-      title: 'BORROWING REPORT',
-      heads: ['Transaction No.', 'Borrower', 'Equipment', 'Qty', 'Borrow Date', 'Expected Return', 'Status'],
-      data,
-      stats: [
-        ['Total Borrowing Requests', String(txns.length)],
-        ['Approved Requests', String(approved)],
-        ['Completed Transactions', String(completed)]
-      ]
-    }
-  });
+  const reportData = {
+    title: 'BORROWING REPORT',
+    heads: ['Transaction No.', 'Borrower', 'Equipment', 'Qty', 'Borrow Date', 'Expected Return', 'Status'],
+    data,
+    stats: [
+      ['Total Borrowing Requests', String(txns.length)],
+      ['Approved Requests', String(approved)],
+      ['Completed Transactions', String(completed)]
+    ]
+  };
+
+  if (renderFormat(req, res, borrowingReportTemplate, reportData)) return;
+  res.json({ success: true, data: reportData });
 };
 
 exports.overdue = async (req, res) => {
@@ -103,18 +137,18 @@ exports.overdue = async (req, res) => {
 
   const restrictedBorrowers = await User.count({ where: { accountStatus: 'Restricted' } });
 
-  res.json({
-    success: true,
-    data: {
-      title: 'OVERDUE REPORT',
-      heads: ['Borrower', 'Equipment', 'Qty', 'Due Date', 'Days Overdue'],
-      data,
-      stats: [
-        ['Total Overdue Transactions', String(txns.length)],
-        ['Restricted Borrowers', String(restrictedBorrowers)]
-      ]
-    }
-  });
+  const reportData = {
+    title: 'OVERDUE REPORT',
+    heads: ['Borrower', 'Equipment', 'Qty', 'Due Date', 'Days Overdue'],
+    data,
+    stats: [
+      ['Total Overdue Transactions', String(txns.length)],
+      ['Restricted Borrowers', String(restrictedBorrowers)]
+    ]
+  };
+
+  if (renderFormat(req, res, overdueReportTemplate, reportData)) return;
+  res.json({ success: true, data: reportData });
 };
 
 exports.utilization = async (req, res) => {
@@ -143,18 +177,18 @@ exports.utilization = async (req, res) => {
     String(e.availableQuantity)
   ]);
 
-  res.json({
-    success: true,
-    data: {
-      title: 'EQUIPMENT UTILIZATION REPORT',
-      heads: ['Equipment', 'Category', 'Times Borrowed', 'Available Quantity'],
-      data,
-      stats: [
-        ['Total Equipment', String(equipment.length)],
-        ['Total Borrowing Transactions', String(details.length)]
-      ]
-    }
-  });
+  const reportData = {
+    title: 'EQUIPMENT UTILIZATION REPORT',
+    heads: ['Equipment', 'Category', 'Times Borrowed', 'Available Quantity'],
+    data,
+    stats: [
+      ['Total Equipment', String(equipment.length)],
+      ['Total Borrowing Transactions', String(details.length)]
+    ]
+  };
+
+  if (renderFormat(req, res, utilizationReportTemplate, reportData)) return;
+  res.json({ success: true, data: reportData });
 };
 
 exports.history = async (req, res) => {
@@ -181,15 +215,15 @@ exports.history = async (req, res) => {
     });
   });
 
-  res.json({
-    success: true,
-    data: {
-      title: 'TRANSACTION HISTORY REPORT',
-      heads: ['Date', 'Transaction No.', 'Borrower', 'Equipment', 'Action', 'Status'],
-      data,
-      stats: [['Total Transactions', String(txns.length)]]
-    }
-  });
+  const reportData = {
+    title: 'TRANSACTION HISTORY REPORT',
+    heads: ['Date', 'Transaction No.', 'Borrower', 'Equipment', 'Action', 'Status'],
+    data,
+    stats: [['Total Transactions', String(txns.length)]]
+  };
+
+  if (renderFormat(req, res, transactionHistoryTemplate, reportData)) return;
+  res.json({ success: true, data: reportData });
 };
 
 exports.inventory = async (req, res) => {
@@ -222,20 +256,34 @@ exports.inventory = async (req, res) => {
   const totalUnits = equipment.reduce((n, e) => n + e.totalQuantity, 0);
   const totalAvailable = equipment.reduce((n, e) => n + e.availableQuantity, 0);
 
-  res.json({
-    success: true,
-    data: {
-      title: 'EQUIPMENT INVENTORY REPORT',
-      heads: ['Equipment', 'Category', 'Total Qty', 'Available', 'Borrowed', 'Items Registered (QR)'],
-      data,
-      stats: [
-        ['Total Equipment Types', String(equipment.length)],
-        ['Total Units', String(totalUnits)],
-        ['Total Units Available', String(totalAvailable)],
-        ['Equipment Missing QR/Items', String(missingItems)]
-      ]
-    }
-  });
+  const reportData = {
+    title: 'EQUIPMENT INVENTORY REPORT',
+    heads: ['Equipment', 'Category', 'Total Qty', 'Available', 'Borrowed', 'Items Registered (QR)'],
+    data,
+    stats: [
+      ['Total Equipment Types', String(equipment.length)],
+      ['Total Units', String(totalUnits)],
+      ['Total Units Available', String(totalAvailable)],
+      ['Equipment Missing QR/Items', String(missingItems)]
+    ]
+  };
+
+  // No dedicated per-report template file was scaffolded for inventory (only
+  // 5 of the 7 report types had one); its shape is identical to the other
+  // table reports so it uses the shared renderer directly.
+  const format = req.query.format;
+  if (format === 'pdf') return sendPdf(res, reportData, 'equipment-inventory-report');
+  if (format === 'excel') {
+    return sendExcel(res, reportData, 'equipment-inventory-report').catch((err) => {
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: err.message });
+      } else {
+        console.error('report.controller: excel export failed after headers sent:', err);
+        res.end();
+      }
+    });
+  }
+  res.json({ success: true, data: reportData });
 };
 
 exports.condition = async (req, res) => {
@@ -267,19 +315,19 @@ exports.condition = async (req, res) => {
     return [e.equipmentName, e.category ? e.category.categoryName : '—', String(items.length), worst, remarks];
   });
 
-  res.json({
-    success: true,
-    data: {
-      title: 'EQUIPMENT CONDITION REPORT',
-      heads: ['Equipment', 'Category', 'Quantity', 'Condition', 'Remarks'],
-      data,
-      stats: [
-        ['Good Units', String(goodUnits)],
-        ['Damaged Units', String(damagedUnits)],
-        ['Lost Units', String(lostUnits)]
-      ]
-    }
-  });
+  const reportData = {
+    title: 'EQUIPMENT CONDITION REPORT',
+    heads: ['Equipment', 'Category', 'Quantity', 'Condition', 'Remarks'],
+    data,
+    stats: [
+      ['Good Units', String(goodUnits)],
+      ['Damaged Units', String(damagedUnits)],
+      ['Lost Units', String(lostUnits)]
+    ]
+  };
+
+  if (renderFormat(req, res, equipmentConditionTemplate, reportData)) return;
+  res.json({ success: true, data: reportData });
 };
 
 // Groups every transaction requested during the given month by the day of
@@ -304,6 +352,42 @@ exports.transactionLog = async (req, res) => {
     if (!byDay[day]) byDay[day] = [];
     byDay[day].push(serialize(t));
   });
+
+  const format = req.query.format;
+  if (format === 'pdf' || format === 'excel') {
+    // The calendar-by-day shape returned for the default JSON view doesn't
+    // translate to a table, so flatten it into the same
+    // { title, heads, data, stats } shape the other reports use.
+    const monthName = start.toLocaleDateString('en-US', { month: 'long' });
+    const heads = ['Day', 'Transaction No.', 'Time', 'Borrower', 'College/Unit', 'Status'];
+    const data = [];
+    Object.keys(byDay)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .forEach((day) => {
+        byDay[day].forEach((t) => {
+          data.push([String(day), t.id, t.time, t.name, t.college, t.status]);
+        });
+      });
+    const reportData = {
+      title: `TRANSACTION LOG REPORT - ${monthName} ${year}`,
+      heads,
+      data,
+      stats: [['Total Transactions', String(rows.length)]]
+    };
+
+    // No dedicated per-report template file was scaffolded for the
+    // transaction log either; it uses the shared renderer directly.
+    if (format === 'pdf') return sendPdf(res, reportData, 'transaction-log-report');
+    return sendExcel(res, reportData, 'transaction-log-report').catch((err) => {
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, message: err.message });
+      } else {
+        console.error('report.controller: excel export failed after headers sent:', err);
+        res.end();
+      }
+    });
+  }
 
   res.json({ success: true, data: { year, month, byDay } });
 };

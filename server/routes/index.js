@@ -4,7 +4,6 @@ const router = express.Router();
 router.use('/auth', require('./auth.routes'));
 router.use('/users', require('./user.routes'));
 router.use('/borrowers', require('./borrower.routes'));
-router.use('/inventory', require('./inventory.routes'));
 router.use('/equipment', require('./equipment.routes'));
 router.use('/categories', require('./category.routes'));
 router.use('/qr', require('./qr.routes'));

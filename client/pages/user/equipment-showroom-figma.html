@@ -418,6 +418,7 @@
     const STOCK_LABEL={available:'Available',limited:'Low Stock',low:'Critical Stock'};
 
     const $=id=>document.getElementById(id);
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const searchInput=$('searchInput'),grid=$('grid'),toolbarCount=$('toolbarCount');
     const categorySelect=$('categorySelect'),categoryTrigger=$('categoryTrigger'),categoryTriggerLabel=$('categoryTriggerLabel'),categoryPanel=$('categoryPanel');
     const reqModalOverlay=$('reqModalOverlay'),reqContinueBtn=$('reqContinueBtn');
@@ -449,7 +450,7 @@
     function renderCategoryPanel(){
       categoryPanel.innerHTML=categoryNames().map(name=>{
         const active=name===category?' category-select__option--active':'';
-        return `<button type="button" class="category-select__option${active}" data-category="${name}" role="option">${name}</button>`;
+        return `<button type="button" class="category-select__option${active}" data-category="${esc(name)}" role="option">${esc(name)}</button>`;
       }).join('');
     }
     function openCategoryPanel(){categoryPanel.hidden=false;categoryTrigger.setAttribute('aria-expanded','true');}
@@ -473,13 +474,13 @@
       const badgeLabel=p.available<=0?'Unavailable':level==='available'?'Available':`${STOCK_LABEL[level]} — ${p.available} left`;
       return `<article class="equipment-card" data-id="${p.id}">
         <div class="equipment-card__media">
-          <img src="${productImage(p.category)}" alt="${p.category}" onerror="this.onerror=null;this.src='${productSvg(icon[p.category]||'🏅')}'">
+          <img src="${productImage(p.category)}" alt="${esc(p.category)}" onerror="this.onerror=null;this.src='${productSvg(icon[p.category]||'🏅')}'">
           <span class="equipment-card__badge equipment-card__badge--${badgeClass}">${badgeLabel}</span>
           <div class="equipment-card__id-strip"><span class="equipment-card__id">${displayId(p)}</span></div>
         </div>
         <div class="equipment-card__body">
-          <h3>${p.name}</h3>
-          <div class="equipment-card__tags"><span class="chip chip--neutral">${p.category}</span><span class="chip chip--good">Good</span></div>
+          <h3>${esc(p.name)}</h3>
+          <div class="equipment-card__tags"><span class="chip chip--neutral">${esc(p.category)}</span><span class="chip chip--good">Good</span></div>
           <div class="equipment-card__stock-row${level!=='available'?' equipment-card__stock-row--'+level:''}"><span>Available</span><span>${p.available} / ${p.total}</span></div>
           <div class="equipment-card__actions">
             <button type="button" class="btn-details" data-id="${p.id}" ${p.available?'':'disabled'}>${p.available?'Request to Borrow':'Unavailable'}</button>
@@ -548,7 +549,7 @@
     const productById=id=>products.find(p=>p.id===id);
 
     function equipmentOptionsHtml(selectedId){
-      const opts=products.map(p=>`<option value="${p.id}" ${p.id===selectedId?'selected':''} ${p.available?'':'disabled'}>${p.name} (Available: ${p.available})</option>`).join('');
+      const opts=products.map(p=>`<option value="${p.id}" ${p.id===selectedId?'selected':''} ${p.available?'':'disabled'}>${esc(p.name)} (Available: ${p.available})</option>`).join('');
       return `<option value="">Select equipment...</option>${opts}`;
     }
 
@@ -641,7 +642,7 @@
       $('reviewCollege').textContent=$('slipCollege').value;
       $('reviewEquipment').innerHTML=equipmentRows.map(r=>{
         const p=productById(r.equipmentId);
-        return `<div class="review-item"><span class="review-item__name">${icon[p&&p.category]||'🏅'}&nbsp; ${p?p.name:''}</span><span class="review-qty">${r.quantity} unit${r.quantity>1?'s':''}</span></div>`;
+        return `<div class="review-item"><span class="review-item__name">${icon[p&&p.category]||'🏅'}&nbsp; ${p?esc(p.name):''}</span><span class="review-qty">${r.quantity} unit${r.quantity>1?'s':''}</span></div>`;
       }).join('');
       $('reviewTotal').textContent=equipmentRows.reduce((s,r)=>s+r.quantity,0)+' unit(s)';
       $('reviewPurpose').textContent=$('purposeInput').value.trim();
@@ -696,7 +697,7 @@
     function showToast(message,type){
       const toast=document.createElement('div');
       toast.className='toast toast--'+(type==='danger'?'danger':'success');
-      toast.innerHTML=`<span class="toast__dot"></span><span>${message}</span>`;
+      toast.innerHTML=`<span class="toast__dot"></span><span>${esc(message)}</span>`;
       toastStack.appendChild(toast);
       setTimeout(()=>toast.remove(),3200);
     }

@@ -145,12 +145,13 @@
   <script src="../../js/shared/app-shell.js"></script>
   <script>
     const $=id=>document.getElementById(id);
+    const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const profileModalOverlay=$('profileModalOverlay'),passwordModalOverlay=$('passwordModalOverlay');
 
     function showToast(message,type){
       const toast=document.createElement('div');
       toast.className='toast toast--'+(type==='danger'?'danger':'success');
-      toast.innerHTML=`<span class="toast__dot"></span><span>${message}</span>`;
+      toast.innerHTML=`<span class="toast__dot"></span><span>${esc(message)}</span>`;
       $('toastStack').appendChild(toast);
       setTimeout(()=>toast.remove(),3200);
     }
