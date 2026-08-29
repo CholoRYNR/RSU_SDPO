@@ -82,18 +82,6 @@
     </section>
 
     <section class="settings-card">
-      <div class="settings-card-head"><span class="icon">🔔</span><div><h2>Notification Preferences</h2><p>Choose what the bell notifies you about</p></div></div>
-      <div class="settings-card-body" id="notifPrefs">
-        <div class="toggle-row"><div class="label"><b>Email Notifications</b><span>Send a copy of alerts to your email</span></div><label class="switch"><input type="checkbox" data-key="emailNotif"><span class="track"></span></label></div>
-        <div class="toggle-row"><div class="label"><b>In-App Notifications</b><span>Show alerts in the notification bell</span></div><label class="switch"><input type="checkbox" data-key="inAppNotif"><span class="track"></span></label></div>
-        <div class="toggle-row"><div class="label"><b>New Borrow Requests</b><span>Someone submits a new equipment request</span></div><label class="switch"><input type="checkbox" data-key="catBorrow"><span class="track"></span></label></div>
-        <div class="toggle-row"><div class="label"><b>Overdue Reminders</b><span>Equipment passes its expected return date</span></div><label class="switch"><input type="checkbox" data-key="catOverdue"><span class="track"></span></label></div>
-        <div class="toggle-row"><div class="label"><b>Damage / Loss Reports</b><span>A damage or loss record is submitted</span></div><label class="switch"><input type="checkbox" data-key="catDamage"><span class="track"></span></label></div>
-        <div class="toggle-row"><div class="label"><b>QR Regeneration Alerts</b><span>A QR label is regenerated for an item</span></div><label class="switch"><input type="checkbox" data-key="catQr"><span class="track"></span></label></div>
-      </div>
-    </section>
-
-    <section class="settings-card">
       <div class="settings-card-head"><span class="icon">▤</span><div><h2>System &amp; Display Preferences</h2><p>Personalize how data is shown when you sign in</p></div></div>
       <div class="settings-card-body">
         <div class="field-grid">
@@ -125,7 +113,6 @@
     const $ = (id) => document.getElementById(id);
 
     const settingsDefaults = {
-      emailNotif: true, inAppNotif: true, catBorrow: true, catOverdue: true, catDamage: true, catQr: false,
       density: 'comfortable', landing: 'dashboard.html', ay: 'A.Y. 2025-2026', semester: '1ST SEMESTER'
     };
 
@@ -155,12 +142,7 @@
       } catch (e) { /* keep defaults */ }
     })();
 
-    // Notification preference toggles
     const settings = loadSettings();
-    document.querySelectorAll('#notifPrefs input[type="checkbox"]').forEach((input) => {
-      input.checked = !!settings[input.dataset.key];
-      input.addEventListener('change', () => { saveSettings({ [input.dataset.key]: input.checked }); flashToast('settingsToast'); });
-    });
 
     // System/display preferences
     $('density').value = settings.density;

@@ -31,6 +31,13 @@ function serializeUser(user) {
   };
 }
 
+// Exported so server/routes/auth.routes.js's Google OAuth callback can
+// issue tokens/serialize the user identically to the password-login path —
+// a Google-authenticated session must be indistinguishable from a
+// password-authenticated one to the rest of the app.
+exports.signToken = signToken;
+exports.serializeUser = serializeUser;
+
 exports.register = async (req, res) => {
   const { username, emailAddress, password, firstName, lastName, collegeOrUnit, borrowerCategory } = req.body;
   if (!username || !emailAddress || !password) {

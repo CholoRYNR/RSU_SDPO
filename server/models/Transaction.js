@@ -56,7 +56,9 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'Pending'
       },
       borrowerAcknowledged: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: false },
-      acknowledgementTimestamp: { type: DataTypes.DATE, allowNull: true }
+      acknowledgementTimestamp: { type: DataTypes.DATE, allowNull: true },
+      dueReminderSentDatetime: { type: DataTypes.DATE, allowNull: true },
+      incompleteReqReminderSentDatetime: { type: DataTypes.DATE, allowNull: true }
     },
     {
       sequelize,

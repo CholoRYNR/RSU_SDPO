@@ -25,6 +25,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       emailAddress: { type: DataTypes.STRING(150), allowNull: false, unique: true, validate: { isEmail: true } },
       contactNumber: { type: DataTypes.STRING(15), allowNull: true },
+      googleId: { type: DataTypes.STRING(255), allowNull: true, unique: true },
       accountStatus: {
         type: DataTypes.ENUM('Active', 'Blocked', 'Restricted'),
         allowNull: true,

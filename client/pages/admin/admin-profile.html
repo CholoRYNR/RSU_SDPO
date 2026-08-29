@@ -50,10 +50,6 @@
         </div>
 
         <div class="field-grid">
-          <div class="field"><label for="firstName">First Name</label><input id="firstName" required><span class="field-error" id="firstNameError"></span></div>
-          <div class="field"><label for="lastName">Last Name</label><input id="lastName" required><span class="field-error" id="lastNameError"></span></div>
-        </div>
-        <div class="field-grid" style="margin-top:18px">
           <div class="field"><label for="department">Department</label><input id="department" value="Sports Development Program Office" disabled></div>
           <div class="field"><label for="role">Role</label><input id="role" value="Administrator" disabled></div>
         </div>
@@ -73,39 +69,44 @@
       </form>
     </div>
   </div>
+  <script src="../../js/shared/api.js"></script>
   <script src="../../js/shared/app-shell.js"></script>
   <script>
     const STORAGE_KEY = 'rsuSdpoAdminProfile';
     const $ = (id) => document.getElementById(id);
-    const defaults = { firstName: 'SDPO', lastName: 'Staff', email: 'sdpo.staff@rsu.edu.ph', phone: '+63 912 345 6789', avatar: '' };
 
-    function loadProfile() {
-      try { return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; }
-      catch (e) { return { ...defaults }; }
+    function usernameInitials() {
+      try {
+        const u = currentUser();
+        const name = u && u.username ? String(u.username).trim() : '';
+        return name ? name.slice(0, 2).toUpperCase() : 'SD';
+      } catch (e) { return 'SD'; }
     }
 
-    function applyAvatar(data) {
+    function loadAvatar() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}').avatar || ''; }
+      catch (e) { return ''; }
+    }
+
+    function applyAvatar(avatar) {
       const circle = $('avatarCircle');
-      if (data.avatar) {
-        circle.innerHTML = '<img src="' + data.avatar + '" alt="Profile photo">';
+      if (avatar) {
+        circle.innerHTML = '<img src="' + avatar + '" alt="Profile photo">';
       } else {
-        const isDefaultIdentity = data.firstName === defaults.firstName && data.lastName === defaults.lastName;
-        const initials = isDefaultIdentity ? 'SD' : ((data.firstName[0] || '') + (data.lastName[0] || '')).toUpperCase() || 'SD';
-        circle.textContent = initials;
+        circle.textContent = usernameInitials();
       }
     }
 
     let currentAvatar = '';
-    function fillForm(data) {
-      $('firstName').value = data.firstName;
-      $('lastName').value = data.lastName;
-      $('email').value = data.email;
-      $('phone').value = data.phone;
-      currentAvatar = data.avatar || '';
-      applyAvatar(data);
+    function fillForm() {
+      const u = (function () { try { return currentUser(); } catch (e) { return null; } })() || {};
+      $('email').value = u.emailAddress || '';
+      $('phone').value = u.contactNumber || '';
+      currentAvatar = loadAvatar();
+      applyAvatar(currentAvatar);
     }
 
-    fillForm(loadProfile());
+    fillForm();
 
     $('avatarUploadBtn').addEventListener('click', () => $('avatarFile').click());
     $('avatarFile').addEventListener('change', () => {
@@ -133,34 +134,39 @@
 
     function validate() {
       let ok = true;
-      ok = setError('firstName', 'firstNameError', $('firstName').value.trim() ? '' : 'First name is required.') && ok;
-      ok = setError('lastName', 'lastNameError', $('lastName').value.trim() ? '' : 'Last name is required.') && ok;
       const email = $('email').value.trim();
       ok = setError('email', 'emailError', EMAIL_RE.test(email) ? '' : 'Enter a valid email address.') && ok;
       const phone = $('phone').value.trim();
-      ok = setError('phone', 'phoneError', PHONE_RE.test(phone) ? '' : 'Enter a valid PH mobile number.') && ok;
+      ok = setError('phone', 'phoneError', !phone || PHONE_RE.test(phone) ? '' : 'Enter a valid PH mobile number.') && ok;
       return ok;
     }
 
     $('profileForm').addEventListener('submit', (e) => {
       e.preventDefault();
       if (!validate()) return;
-      const data = {
-        firstName: $('firstName').value.trim(),
-        lastName: $('lastName').value.trim(),
-        email: $('email').value.trim(),
-        phone: $('phone').value.trim(),
-        avatar: currentAvatar
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      applyAvatar(data);
-      const toast = $('saveToast');
-      toast.classList.add('show');
-      clearTimeout(window.__profileToastTimer);
-      window.__profileToastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+      const emailAddress = $('email').value.trim();
+      const contactNumber = $('phone').value.trim();
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      apiFetch('/api/users/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailAddress, contactNumber })
+      }).then(() => {
+        localStorage.setItem('rsuSdpoUser', JSON.stringify(Object.assign({}, currentUser(), { emailAddress, contactNumber })));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ avatar: currentAvatar }));
+        const toast = $('saveToast');
+        toast.classList.add('show');
+        clearTimeout(window.__profileToastTimer);
+        window.__profileToastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+      }).catch((err) => {
+        setError('email', 'emailError', (err && err.message) || 'Unable to update profile.');
+      }).finally(() => {
+        if (submitBtn) submitBtn.disabled = false;
+      });
     });
 
-    $('cancelBtn').addEventListener('click', () => { fillForm(loadProfile()); });
+    $('cancelBtn').addEventListener('click', () => { fillForm(); });
   </script>
 </body>
 </html>

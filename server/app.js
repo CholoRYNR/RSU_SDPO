@@ -4,11 +4,20 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const passport = require('passport');
 
 const routes = require('./routes');
+// Registers the Google OAuth 2.0 strategy against the shared passport
+// singleton above (see server/config/passport.js for what "requiring this
+// file" actually does). Required here, once, at server startup — routes
+// that call passport.authenticate('google', ...) then resolve the
+// already-registered strategy by name.
+require('./config/passport');
 const errorHandler = require('./middlewares/errorHandler');
 const sequelize = require('./database/connection');
 const { runOverdueSweep } = require('./jobs/overdueSweep');
+const { runDueDateReminderSweep } = require('./jobs/dueDateReminderSweep');
+const { runIncompleteRequirementsSweep } = require('./jobs/incompleteRequirementsSweep');
 
 const app = express();
 
@@ -43,6 +52,11 @@ app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// Stateless/JWT-based app — no express-session is set up anywhere, so
+// passport is initialized without session support. Every
+// passport.authenticate() call in server/routes/auth.routes.js passes
+// { session: false } to match.
+app.use(passport.initialize());
 
 // Rate limit brute-force attempts against login/register specifically (not
 // the whole API — every other route stays unlimited). This capstone has
@@ -78,13 +92,21 @@ app.listen(PORT, async () => {
     await sequelize.authenticate();
     console.log(`Database connected (${sequelize.getDialect()} @ ${sequelize.config.host || 'DATABASE_URL'})`);
 
-    // Flip Released transactions past their due date to Overdue — once at
-    // startup, then hourly. No new dependency: setInterval is enough at
-    // this project's scale and matches its plain-Node style elsewhere.
-    runOverdueSweep().catch((err) => console.error('Overdue sweep failed:', err.message));
-    setInterval(() => {
+    // Notification Engine sweeps — each runs once at startup, then hourly.
+    // No new dependency: setInterval is enough at this project's scale and
+    // matches its plain-Node style elsewhere. All three sweeps are kicked
+    // off together on the same tick; each keeps its own try/catch so one
+    // sweep failing (e.g. a transient DB error) never prevents the other
+    // two from running.
+    function runNotificationSweeps() {
       runOverdueSweep().catch((err) => console.error('Overdue sweep failed:', err.message));
-    }, 60 * 60 * 1000);
+      runDueDateReminderSweep().catch((err) => console.error('Due date reminder sweep failed:', err.message));
+      runIncompleteRequirementsSweep().catch((err) =>
+        console.error('Incomplete requirements sweep failed:', err.message)
+      );
+    }
+    runNotificationSweeps();
+    setInterval(runNotificationSweeps, 60 * 60 * 1000);
   } catch (err) {
     console.error('Database connection failed:', err.message);
     console.error('Check DATABASE_URL in .env — it must be the Supabase session pooler connection string.');

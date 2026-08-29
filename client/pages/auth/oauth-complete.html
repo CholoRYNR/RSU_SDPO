@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Signing In | RSU-SDPO</title>
+  <style>
+    :root{color-scheme:light;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%}
+    body{background:#02180f;min-height:100vh;display:grid;place-items:center;padding:32px 16px}
+    .card{width:min(100%,360px);background:#fff;border-radius:14px;box-shadow:0 25px 25px rgba(0,0,0,.25);padding:32px 24px;text-align:center}
+    .spinner{width:32px;height:32px;margin:0 auto 16px;border:3px solid #e5e7eb;border-top-color:#02704f;border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    h1{margin:0 0 4px;font-size:16px;font-weight:600;color:#02704f}
+    p{margin:0;color:#6a7282;font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner" aria-hidden="true"></div>
+    <h1>Signing you in&hellip;</h1>
+    <p>Please wait, this only takes a moment.</p>
+  </div>
+
+  <script>
+    // This page's only job: pull the token/user the server handed back in
+    // the URL fragment (server/routes/auth.routes.js's /google/callback),
+    // store them exactly the way a normal password login does, then redirect
+    // by role using the same logic user-login.html's goToDashboard() uses.
+    // A fragment (#...), not a query string, is used server-side specifically
+    // so the token never leaves the browser (never logged, never sent in a
+    // Referer header) — so it's read here via location.hash, not location.search.
+    function goToDashboard(user) {
+      const staffRoles = ['Admin', 'Director', 'Staff'];
+      window.location.href = staffRoles.includes(user.userRole) ? '../admin/dashboard.html' : '../user/equipment-showroom-figma.html';
+    }
+
+    function fail() {
+      window.location.replace('user-login.html?oauth_error=1');
+    }
+
+    (function () {
+      const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
+      if (!hash) return fail();
+
+      const params = new URLSearchParams(hash);
+      const token = params.get('token');
+      const rawUser = params.get('user');
+      if (!token || !rawUser) return fail();
+
+      let user;
+      try {
+        user = JSON.parse(rawUser);
+      } catch (e) {
+        return fail();
+      }
+      if (!user || !user.userRole) return fail();
+
+      localStorage.setItem('rsuSdpoToken', token);
+      localStorage.setItem('rsuSdpoUser', rawUser);
+      goToDashboard(user);
+    })();
+  </script>
+</body>
+</html>

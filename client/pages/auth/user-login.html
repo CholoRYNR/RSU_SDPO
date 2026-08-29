@@ -71,19 +71,6 @@
     .code-digit{width:100%;min-height:44px;padding:0;text-align:center;border:1px solid #d1d5db;border-radius:10px;font-size:1.1rem;font-weight:700;color:#0f172a;background:#f9fafb}
     .code-digit.invalid{border-color:#fda29b;background:#fef3f2}
 
-    .google-badge{background:#fff}
-    .google-account-list{display:grid;gap:10px;margin:16px 0}
-    .google-account{width:100%;display:grid;grid-template-columns:auto 1fr;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;color:#111827;text-align:left}
-    .google-account--selected{border-color:#d97706;box-shadow:0 12px 24px rgba(217,119,6,.08)}
-    .google-account--ghost{color:#6b7280}
-    .google-account__avatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#f3f4f6;color:#111827;font-weight:700;font-size:.85rem}
-    .google-account__avatar--alt{background:#e2e8f0}
-    .google-account__meta{display:grid;gap:2px}
-    .google-account__name{font-size:.9rem;font-weight:600}
-    .google-account__email{font-size:.78rem;color:#6b7280}
-    .google-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
-    .google-actions .primary-button{width:auto;padding:0 24px}
-
     @media(max-width:640px){
       .page{padding:16px}
       .card{width:100%;padding:20px}
@@ -239,38 +226,12 @@
       </div>
     </section>
 
-    <section class="screen" id="googleScreen">
-      <div class="card">
-        <div class="card-brand">
-          <div class="card-badge google-badge"><img src="../../assets/icons/icon-google.svg" alt="Google"></div>
-          <div><h2>accounts.google.com</h2><p class="screen-subtitle">Verify it&apos;s you to continue to RSU-SDPO</p></div>
-        </div>
-        <div class="google-account-list">
-          <button class="google-account google-account--selected" type="button">
-            <div class="google-account__avatar">JD</div>
-            <div class="google-account__meta"><span class="google-account__name">Juan dela Cruz</span><span class="google-account__email">juandelacruz@gmail.com</span></div>
-          </button>
-          <button class="google-account" type="button">
-            <div class="google-account__avatar google-account__avatar--alt">MS</div>
-            <div class="google-account__meta"><span class="google-account__name">Maria Santos</span><span class="google-account__email">mariasantos2024@gmail.com</span></div>
-          </button>
-          <button class="google-account google-account--ghost" type="button">
-            <div class="google-account__avatar">+</div>
-            <div class="google-account__meta"><span class="google-account__name">Use another account</span></div>
-          </button>
-        </div>
-        <div class="google-actions">
-          <button class="text-link" id="googleCancelButton" type="button">Cancel</button>
-          <button class="primary-button" id="googleAllowButton" type="button">Allow</button>
-        </div>
-      </div>
-    </section>
   </div>
 
   <script src="../../js/shared/api.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
-    const screens = ['loginScreen','signupScreen','forgotScreen','verifyScreen','facebookScreen','googleScreen'].map($);
+    const screens = ['loginScreen','signupScreen','forgotScreen','verifyScreen','facebookScreen'].map($);
 
     function clearScreens() { screens.forEach((s) => s.classList.remove('active')); }
     function showScreen(el) { clearScreens(); el.classList.add('active'); }
@@ -284,7 +245,6 @@
     function showForgot() { showScreen($('forgotScreen')); }
     function showVerify() { showScreen($('verifyScreen')); }
     function showFacebook() { showScreen($('facebookScreen')); }
-    function showGoogle() { showScreen($('googleScreen')); }
     function goToDashboard(user) {
       const staffRoles = ['Admin', 'Director', 'Staff'];
       window.location.href = staffRoles.includes(user.userRole) ? '../admin/dashboard.html' : '../user/equipment-showroom-figma.html';
@@ -293,17 +253,19 @@
     $('openSignupButton').addEventListener('click', showSignup);
     $('backToLoginButton').addEventListener('click', () => showLogin());
     $('forgotPasswordButton').addEventListener('click', showForgot);
-    $('openGoogleButton').addEventListener('click', showGoogle);
+    // Real navigation into the server-side OAuth flow (server/routes/auth.routes.js
+    // GET /api/auth/google), not a fetch — a browser redirect chain to Google and
+    // back can't happen over XHR/fetch.
+    $('openGoogleButton').addEventListener('click', () => { window.location.href = '/api/auth/google'; });
     $('openFacebookButton').addEventListener('click', showFacebook);
-    $('openGoogleButtonSignup').addEventListener('click', showGoogle);
+    $('openGoogleButtonSignup').addEventListener('click', () => { window.location.href = '/api/auth/google'; });
     $('openFacebookButtonSignup').addEventListener('click', showFacebook);
     $('backToLoginFromForgot').addEventListener('click', () => showLogin());
     $('backToLoginFromVerify').addEventListener('click', () => showLogin());
     $('backToLoginFromSocial').addEventListener('click', () => showLogin());
-    $('googleCancelButton').addEventListener('click', () => showLogin());
-    // Google/Facebook sign-in are decorative mocks until OAuth credentials exist —
-    // there's no real user to redirect by role, so they just go to the admin dashboard.
-    $('googleAllowButton').addEventListener('click', () => { window.location.href = '../admin/dashboard.html'; });
+    // Facebook sign-in is still a decorative mock (Meta OAuth is explicitly
+    // optional/out of scope) — there's no real user to redirect by role, so
+    // it just goes to the admin dashboard. Google sign-in above is real.
     $('facebookContinueButton').addEventListener('click', () => { window.location.href = '../admin/dashboard.html'; });
 
     // --- Validation helpers ---
@@ -439,6 +401,25 @@
       codeDigits.forEach((el) => { el.value = ''; el.classList.remove('invalid'); });
       showLogin('Password reset successfully. Please sign in with your new password.');
     });
+
+    // --- Google OAuth failure redirect ---
+    // server/routes/auth.routes.js's /api/auth/google/callback sends the
+    // browser back here with ?oauth_error=... when Google sign-in didn't
+    // complete (consent denied, or a rejection such as "this email belongs
+    // to a staff account"). Surface it through the same showLogin() error
+    // path used for every other login error.
+    (function showOAuthErrorIfAny() {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.has('oauth_error')) return;
+      // URLSearchParams#get() already percent-decodes the value, so this is
+      // the actual message text (or the literal '1' sentinel) as-is —
+      // decoding it again here would corrupt any '%'-containing message.
+      const raw = params.get('oauth_error');
+      const message = raw && raw !== '1'
+        ? raw
+        : 'Google sign-in failed. Please try again or use your username and password.';
+      showLogin(message, true);
+    })();
   </script>
 </body>
 </html>
