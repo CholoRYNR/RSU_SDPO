@@ -1,0 +1,95 @@
+:root {
+  /* Brand */
+  --color-primary: #e17100;
+  --color-primary-hover: #bb4d00;
+  --color-primary-text: #ffffff;
+
+  --color-brand-green: #d97706;
+  --color-accent-green: #007a55;
+  --color-accent-green-dark: #006045;
+  --color-accent-green-bg: #ecfdf5;
+  --color-accent-green-bg-strong: #d0fae5;
+  --color-accent-green-border: #a4f4cf;
+  --color-accent-green-line: #096;
+  --color-online-dot: #00bc7d;
+
+  /* Status */
+  --color-warn-bg: #fef3c6;
+  --color-warn-border: #fee685;
+  --color-warn-text: #bb4d00;
+
+  --color-danger-bg: #fef2f2;
+  --color-danger-text: #c10007;
+  --color-danger-border: #ffc9c9;
+  --color-danger-strong: #e7000b;
+  --color-danger-dot: #fb2c36;
+
+  /* Neutrals (slate) */
+  --color-text-900: #1d293d;
+  --color-text-700: #314158;
+  --color-text-600: #45556c;
+  --color-text-500: #62748e;
+  --color-text-400: #90a1b9;
+  --color-text-placeholder: rgba(10, 10, 10, 0.4);
+
+  --color-border: #e2e8f0;
+  --color-border-soft: #f1f5f9;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f8fafc;
+  --color-surface-muted: #f1f5f9;
+
+  /* Overlay */
+  --color-overlay: rgba(0, 0, 0, 0.5);
+
+  /* Radii */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-full: 9999px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow-dropdown: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  --shadow-button: 0 4px 3px rgba(0, 0, 0, 0.1), 0 2px 2px rgba(0, 0, 0, 0.1);
+  --shadow-thumb: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+
+  /* Layout */
+  --sidebar-width: 224px;
+  --topbar-height: 65px;
+
+  /* Font */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Dark mode: same trigger and same palette as client/css/shared/app-shell.css
+   (data-theme="dark" on <html>, set from the shared rsuSdpoTheme setting) so
+   this page's separate design system stays visually consistent with the rest
+   of the admin app. Only neutrals/surfaces are overridden — brand/status
+   colors already carry their own paired background and read fine on dark. */
+:root[data-theme="dark"] {
+  --color-text-900: #e6edf7;
+  --color-text-700: #d3ddee;
+  --color-text-600: #aebbd3;
+  --color-text-500: #94a6c2;
+  --color-text-400: #6d7fa3;
+  --color-text-placeholder: rgba(230, 237, 247, 0.35);
+
+  --color-border: #28374f;
+  --color-border-soft: #19233a;
+  --color-surface: #101a2c;
+  --color-surface-soft: #19233a;
+  --color-surface-muted: #19233a;
+
+  --color-accent-green-dark: #00c98a;
+}

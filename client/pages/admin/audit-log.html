@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audit Log | RSU-SDPO</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <style>
+    .content{padding:16px 32px 24px}
+    .page-head{padding:22px 0 24px}
+    .page-head p{margin:0;color:var(--muted);font-size:13px}
+    .records-card{background:var(--page);border:1px solid var(--line);border-radius:18px;overflow:auto}
+    .records-table{border-collapse:collapse;min-width:800px;width:100%}
+    .records-table th{border-bottom:1px solid var(--line);color:var(--muted);font-size:12px;font-weight:700;height:52px;padding:0 18px;text-align:left;text-transform:uppercase;white-space:nowrap}
+    .records-table td{border-bottom:1px solid var(--line);height:56px;padding:8px 18px;vertical-align:middle;font-size:13px;color:var(--ink)}
+    .records-table tr:last-child td{border-bottom:0}
+    .subline{color:var(--muted);font-size:12px}
+    .status-arrow{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+    .status-arrow .old{color:var(--muted)}
+    .status-arrow .new{color:var(--green)}
+    @media(max-width:650px){.content{padding:12px}}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-page="audit-log" data-title="Audit Log" data-subtitle="History of every transaction status change across the system">
+    <section class="page-head"><p>Most recent 200 status changes, newest first.</p></section>
+    <section class="records-card" aria-label="Audit log"><table class="records-table"><thead><tr><th>Date / Time</th><th>Transaction</th><th>Changed By</th><th>Status Change</th><th>Remarks</th></tr></thead><tbody id="records-body"></tbody></table></section>
+  </div>
+  <script src="../../js/shared/api.js"></script>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script>
+    function fmtWhen(iso){
+      const d=new Date(iso);
+      return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+' · '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+    }
+    function row(r){
+      return `<tr>
+        <td>${fmtWhen(r.changeDatetime)}</td>
+        <td>Transaction #${r.transactionId}</td>
+        <td>${r.changedBy}</td>
+        <td><span class="status-arrow"><span class="old">${r.oldStatus}</span>→<span class="new">${r.newStatus}</span></span></td>
+        <td class="subline">${r.remarks||'—'}</td>
+      </tr>`;
+    }
+    apiFetch('/api/audit-logs').then(rows=>{
+      document.getElementById('records-body').innerHTML=rows.length
+        ?rows.map(row).join('')
+        :'<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">No status changes recorded yet.</td></tr>';
+    }).catch(err=>{
+      document.getElementById('records-body').innerHTML=`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">Could not load audit log: ${err.message}</td></tr>`;
+    });
+  </script>
+</body>
+</html>

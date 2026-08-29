@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RSU-SDPO | Settings</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <style>
+    .content{max-width:760px;margin:auto}
+    .settings-card{background:var(--page);border:1px solid var(--softline);border-radius:14px;margin-bottom:16px;overflow:hidden}
+    .settings-card-head{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--softline)}
+    .settings-card-head .icon{width:32px;height:32px;border-radius:10px;background:#ecfdf5;color:#00865d;display:grid;place-items:center;font-size:15px;flex-shrink:0}
+    .settings-card-head h2{margin:0;font-size:14px}
+    .settings-card-head p{margin:2px 0 0;font-size:11px;color:var(--muted)}
+    .settings-card-body{padding:18px 20px}
+
+    .account-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+    .account-summary .who b{display:block;font-size:14px}
+    .account-summary .who span{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+    .link-btn{height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--green);background:var(--page);color:var(--deep);font-size:12px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center}
+
+    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .field{display:grid;gap:6px;margin-bottom:14px}
+    .field label{font-size:11px;font-weight:700;color:var(--ink)}
+    .field input,.field select{height:38px;border:1px solid var(--line);border-radius:8px;background:var(--softline);padding:0 11px;font-size:12px;color:var(--ink);outline-color:var(--green)}
+    .field-error{font-size:11px;color:#d92d20;min-height:14px}
+    .pw-row{position:relative}
+    .pw-toggle{position:absolute;right:8px;top:6px;background:transparent;border:0;color:var(--muted);font-size:11px;padding:4px 6px}
+
+    .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--softline)}
+    .toggle-row:last-child{border-bottom:0}
+    .toggle-row .label b{display:block;font-size:12px}
+    .toggle-row .label span{display:block;color:var(--muted);font-size:11px;margin-top:1px}
+    .switch{position:relative;width:38px;height:22px;flex-shrink:0}
+    .switch input{opacity:0;width:0;height:0}
+    .switch .track{position:absolute;inset:0;background:#cbd5e1;border-radius:999px;cursor:pointer;transition:background .15s}
+    .switch .track:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .15s}
+    .switch input:checked + .track{background:var(--green)}
+    .switch input:checked + .track:before{transform:translateX(16px)}
+
+    .btn-solid{height:36px;padding:0 16px;border-radius:9px;border:0;background:var(--deep);color:#fff;font-size:12px;font-weight:600}
+    .btn-outline{height:36px;padding:0 16px;border-radius:9px;border:1px solid var(--line);background:var(--page);color:var(--ink);font-size:12px;font-weight:600}
+    .row-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
+
+    .session-row{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
+    .session-row .field{margin-bottom:0;flex:1;min-width:160px}
+    .sync-btn{height:38px;padding:0 18px;border-radius:9px;border:0;background:var(--green);color:#fff;font-size:12px;font-weight:600}
+
+    .save-toast{max-height:0;overflow:hidden;transition:max-height .25s ease}
+    .save-toast.show{max-height:60px}
+    .save-toast p{margin:12px 0 0;padding:9px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #d0fae5;color:#007a55;font-size:12px;font-weight:600}
+
+    @media(max-width:600px){.field-grid{grid-template-columns:1fr}.settings-card-body{padding:16px}.account-summary{align-items:flex-start}.session-row{flex-direction:column;align-items:stretch}}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-page="" data-title="Settings" data-subtitle="Configure your account and system preferences">
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">◉</span><div><h2>Account</h2><p>Your signed-in administrator identity</p></div></div>
+      <div class="settings-card-body">
+        <div class="account-summary">
+          <div class="who"><b id="acctName">SDPO Staff</b><span id="acctMeta">Administrator · sdpo.staff@rsu.edu.ph</span></div>
+          <a class="link-btn" href="admin-profile.html">Edit Profile</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">🔒</span><div><h2>Security</h2><p>Change your account password</p></div></div>
+      <div class="settings-card-body">
+        <form id="passwordForm" novalidate>
+          <div class="field pw-row"><label for="currentPw">Current Password</label><input id="currentPw" type="password" required><button type="button" class="pw-toggle" data-target="currentPw">Show</button><span class="field-error" id="currentPwError"></span></div>
+          <div class="field-grid">
+            <div class="field pw-row"><label for="newPw">New Password</label><input id="newPw" type="password" required><button type="button" class="pw-toggle" data-target="newPw">Show</button><span class="field-error" id="newPwError"></span></div>
+            <div class="field pw-row"><label for="confirmPw">Confirm New Password</label><input id="confirmPw" type="password" required><button type="button" class="pw-toggle" data-target="confirmPw">Show</button><span class="field-error" id="confirmPwError"></span></div>
+          </div>
+          <div class="row-actions"><button type="submit" class="btn-solid">Update Password</button></div>
+          <div class="save-toast" id="pwToast"><p>✓ Password updated</p></div>
+        </form>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">🔔</span><div><h2>Notification Preferences</h2><p>Choose what the bell notifies you about</p></div></div>
+      <div class="settings-card-body" id="notifPrefs">
+        <div class="toggle-row"><div class="label"><b>Email Notifications</b><span>Send a copy of alerts to your email</span></div><label class="switch"><input type="checkbox" data-key="emailNotif"><span class="track"></span></label></div>
+        <div class="toggle-row"><div class="label"><b>In-App Notifications</b><span>Show alerts in the notification bell</span></div><label class="switch"><input type="checkbox" data-key="inAppNotif"><span class="track"></span></label></div>
+        <div class="toggle-row"><div class="label"><b>New Borrow Requests</b><span>Someone submits a new equipment request</span></div><label class="switch"><input type="checkbox" data-key="catBorrow"><span class="track"></span></label></div>
+        <div class="toggle-row"><div class="label"><b>Overdue Reminders</b><span>Equipment passes its expected return date</span></div><label class="switch"><input type="checkbox" data-key="catOverdue"><span class="track"></span></label></div>
+        <div class="toggle-row"><div class="label"><b>Damage / Loss Reports</b><span>A damage or loss record is submitted</span></div><label class="switch"><input type="checkbox" data-key="catDamage"><span class="track"></span></label></div>
+        <div class="toggle-row"><div class="label"><b>QR Regeneration Alerts</b><span>A QR label is regenerated for an item</span></div><label class="switch"><input type="checkbox" data-key="catQr"><span class="track"></span></label></div>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">▤</span><div><h2>System &amp; Display Preferences</h2><p>Personalize how data is shown when you sign in</p></div></div>
+      <div class="settings-card-body">
+        <div class="field-grid">
+          <div class="field"><label for="density">Table Density</label><select id="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></div>
+          <div class="field"><label for="landing">Default Landing Page</label><select id="landing"><option value="dashboard.html">Dashboard</option><option value="transaction-management.html">Transactions</option><option value="../user/equipment-showroom-figma.html">Equipment</option></select></div>
+        </div>
+        <div class="toggle-row"><div class="label"><b>Dark Mode</b><span>Switch the whole app to a dark theme</span></div><label class="switch"><input type="checkbox" id="themeToggle"><span class="track"></span></label></div>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">◉</span><div><h2>Active Academic Session</h2><p>Used across dashboard filters and reports</p></div></div>
+      <div class="settings-card-body">
+        <div class="session-row">
+          <div class="field"><label for="ay">Academic Year</label><select id="ay"><option>A.Y. 2025-2026</option><option>A.Y. 2026-2027</option></select></div>
+          <div class="field"><label for="semester">Semester</label><select id="semester"><option>1ST SEMESTER</option><option>2ND SEMESTER</option></select></div>
+          <button type="button" class="sync-btn" id="sessionSync">SYNC</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="save-toast" id="settingsToast"><p>✓ Settings saved</p></div>
+  </div>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script>
+    const PROFILE_KEY = 'rsuSdpoAdminProfile';
+    const SETTINGS_KEY = 'rsuSdpoAdminSettings';
+    const $ = (id) => document.getElementById(id);
+
+    const settingsDefaults = {
+      emailNotif: true, inAppNotif: true, catBorrow: true, catOverdue: true, catDamage: true, catQr: false,
+      density: 'comfortable', landing: 'dashboard.html', ay: 'A.Y. 2025-2026', semester: '1ST SEMESTER'
+    };
+
+    function loadSettings() {
+      try { return { ...settingsDefaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
+      catch (e) { return { ...settingsDefaults }; }
+    }
+    function saveSettings(patch) {
+      const merged = { ...loadSettings(), ...patch };
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+      return merged;
+    }
+    function flashToast(id) {
+      const el = $(id);
+      el.classList.add('show');
+      clearTimeout(el.__timer);
+      el.__timer = setTimeout(() => el.classList.remove('show'), 2400);
+    }
+
+    // Account summary, pulled from the profile page's saved data
+    (function renderAccount() {
+      try {
+        const p = JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+        const first = p.firstName || 'SDPO', last = p.lastName || 'Staff';
+        $('acctName').textContent = (first + ' ' + last).trim();
+        $('acctMeta').textContent = 'Administrator · ' + (p.email || 'sdpo.staff@rsu.edu.ph');
+      } catch (e) { /* keep defaults */ }
+    })();
+
+    // Notification preference toggles
+    const settings = loadSettings();
+    document.querySelectorAll('#notifPrefs input[type="checkbox"]').forEach((input) => {
+      input.checked = !!settings[input.dataset.key];
+      input.addEventListener('change', () => { saveSettings({ [input.dataset.key]: input.checked }); flashToast('settingsToast'); });
+    });
+
+    // System/display preferences
+    $('density').value = settings.density;
+    $('landing').value = settings.landing;
+    $('density').addEventListener('change', () => { saveSettings({ density: $('density').value }); flashToast('settingsToast'); });
+    $('landing').addEventListener('change', () => { saveSettings({ landing: $('landing').value }); flashToast('settingsToast'); });
+
+    // Theme (light/dark) — shared across the whole app via the same key app-shell.js reads on load
+    const THEME_KEY = 'rsuSdpoTheme';
+    $('themeToggle').checked = localStorage.getItem(THEME_KEY) === 'dark';
+    $('themeToggle').addEventListener('change', () => {
+      const dark = $('themeToggle').checked;
+      localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      flashToast('settingsToast');
+    });
+
+    // Active academic session
+    $('ay').value = settings.ay;
+    $('semester').value = settings.semester;
+    $('sessionSync').addEventListener('click', function () {
+      saveSettings({ ay: $('ay').value, semester: $('semester').value });
+      const btn = this;
+      btn.textContent = 'SYNCED';
+      btn.style.background = '#006045';
+      setTimeout(() => { btn.textContent = 'SYNC'; btn.style.background = ''; }, 1200);
+    });
+
+    // Password visibility toggles
+    document.querySelectorAll('.pw-toggle').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const input = $(btn.dataset.target);
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        btn.textContent = show ? 'Hide' : 'Show';
+      });
+    });
+
+    // Password form — client-side validation only, nothing is persisted (no backend, and passwords should never live in localStorage)
+    function setError(fieldId, errorId, message) {
+      $(errorId).textContent = message || '';
+      return !message;
+    }
+    $('passwordForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      let ok = true;
+      ok = setError('currentPw', 'currentPwError', $('currentPw').value ? '' : 'Enter your current password.') && ok;
+      ok = setError('newPw', 'newPwError', $('newPw').value.length >= 8 ? '' : 'New password must be at least 8 characters.') && ok;
+      ok = setError('confirmPw', 'confirmPwError', $('confirmPw').value === $('newPw').value && $('confirmPw').value ? '' : 'Passwords do not match.') && ok;
+      if (!ok) return;
+      $('passwordForm').reset();
+      document.querySelectorAll('.pw-toggle').forEach((btn) => { btn.textContent = 'Show'; });
+      document.querySelectorAll('#passwordForm input').forEach((input) => { input.type = 'password'; });
+      flashToast('pwToast');
+    });
+  </script>
+</body>
+</html>

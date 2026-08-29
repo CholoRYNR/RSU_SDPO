@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Equipment Showroom | RSU-SDPO</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <link rel="stylesheet" href="../../css/main.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    .content{max-width:1086px;margin:auto}
+
+    /* ---------- Welcome hero (same treatment as the admin dashboard) ---------- */
+    .welcome{height:120px;border-radius:14px;background:linear-gradient(180deg,#006045 8%,#007a55 92%);padding:12px 20px;color:#fff;overflow:hidden;position:relative}
+    .welcome:before{content:"";position:absolute;width:192px;height:192px;border-radius:50%;right:128px;top:-48px;background:rgba(255,255,255,.05);filter:blur(54px)}
+    .welcome:after{content:"";position:absolute;width:128px;height:128px;border-radius:50%;left:-32px;bottom:-40px;background:rgba(254,154,0,.12);filter:blur(40px)}
+    .live{position:relative;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.1);border-radius:999px;padding:5px 13px;font-size:10px;font-weight:500}
+    .live i{width:4px;height:4px;background:#00d492;border-radius:50%}
+    .welcome h2{position:relative;font-size:22px;line-height:33px;margin:6px 0 0}
+    .welcome p{position:relative;margin:0;color:#d0fae5;font-size:13px;line-height:20px}
+
+    /* ---------- Stat cards ---------- */
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+    .stat-card{height:104px;border:1px solid var(--softline);border-radius:14px;padding:16px;background:var(--page)}
+    .stat-head{display:flex;align-items:flex-start;justify-content:space-between}
+    .stat-label{color:#90a1b9;font-size:10px;letter-spacing:.6px;font-weight:700}
+    .metric-icon{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;font-size:17px;font-weight:700}
+    .mint{background:#ecfdf5;color:#00865d}
+    .blue{background:#eff6ff;color:#155dfc}
+    .yellow{background:#fef3c7;color:#d97706}
+    .stat-value{font-size:24px;line-height:36px;font-weight:700;margin-top:6px}
+
+    /* ---------- Toolbar / catalog ---------- */
+    .toolbar{margin-top:16px}
+    .equipment-grid{margin-top:16px}
+    .equipment-card__media{position:relative}
+    .btn-details:disabled{opacity:.5;cursor:not-allowed}
+    .empty-state{margin-top:16px}
+
+    /* ---------- Requirement modal ---------- */
+    .requirement-card{width:min(460px,100%)}
+    .requirement-card .modal__body{gap:0;padding:0 24px 4px}
+    .req-group{padding:16px 0;border-bottom:1px solid var(--color-border-soft)}
+    .req-group:last-child{border-bottom:0}
+    .req-group h3{margin:0 0 8px;font-size:12px;font-weight:700;color:var(--color-accent-green-dark)}
+    .req-group ul{margin:0;padding-left:16px;color:var(--color-text-600);font-size:12px;line-height:1.6}
+    .req-foot{display:flex;justify-content:space-between;align-items:center;padding:14px 24px;background:var(--color-surface-soft);border-top:1px solid var(--color-border-soft);color:var(--color-text-600);font-size:11px;border-radius:0 0 14px 14px}
+
+    /* ---------- Borrowing Sports Equipment Form flow (4-step wizard) ---------- */
+    .borrow-flow{display:none;position:fixed;inset:0;z-index:1000;overflow:auto;background:#f9fafb}
+    .borrow-flow.open{display:block}
+    .close-flow{position:fixed;top:16px;right:18px;border:0;border-radius:50%;height:34px;width:34px;background:#fff;color:#344054;font-size:22px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:5;cursor:pointer}
+    .wizard-shell{max-width:900px;margin:0 auto;padding:56px 24px 48px}
+    .wizard-letterhead{display:flex;align-items:center;gap:12px;padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid var(--line)}
+    .wizard-letterhead img{width:44px;height:44px;object-fit:contain;flex-shrink:0;border:1px solid var(--line);border-radius:8px;background:#fff;padding:4px}
+    .wizard-letterhead__title{margin:0;font-size:15px;font-weight:700;color:var(--ink)}
+    .wizard-letterhead__sub{margin:2px 0 0;font-size:11px;color:var(--muted)}
+
+    .wizard-progress{display:flex;align-items:flex-start;justify-content:center;padding:8px 0 36px}
+    .wizard-step{display:flex;flex-direction:column;align-items:center;gap:6px;width:120px}
+    .wizard-step__num{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;background:var(--softline);color:#9ca3af}
+    .wizard-step.is-done .wizard-step__num,.wizard-step.is-active .wizard-step__num{background:var(--deep);color:#fff}
+    .wizard-step__label{font-size:11px;font-weight:500;color:#9ca3af;text-align:center}
+    .wizard-step.is-done .wizard-step__label,.wizard-step.is-active .wizard-step__label{color:var(--deep)}
+    .wizard-connector{width:60px;height:2px;background:var(--softline);margin:15px 0 0}
+    .wizard-connector.is-done{background:var(--deep)}
+
+    .wizard-panel{display:none}
+    .wizard-panel.active{display:block}
+    .wizard-panel>h2{font-size:20px;margin:0;color:var(--ink)}
+    .wizard-sub{color:var(--muted);font-size:13px;margin:4px 0 0}
+
+    .wizard-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:16px}
+    .wizard-panel>.wizard-card:first-of-type{margin-top:24px}
+    .wizard-card__head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--softline);padding-bottom:12px;margin-bottom:16px}
+    .wizard-card__head h3{margin:0;font-size:13px;color:var(--ink)}
+    .wizard-edit{border:0;background:none;color:var(--deep);font-size:12px;font-weight:500;cursor:pointer;padding:0}
+
+    .wizard-quote{border-left:2px solid var(--deep);padding-left:12px;margin:0 0 20px;color:#374151;font-size:13px;font-style:italic;line-height:1.6}
+    .wizard-section{padding-top:20px;border-top:1px solid var(--softline)}
+    .wizard-section:first-of-type{border-top:0;padding-top:0}
+    .wizard-section h4{margin:0 0 8px;font-size:12px;letter-spacing:.3px;text-transform:uppercase;color:var(--ink)}
+    .wizard-section p{font-size:13px;color:#374151;line-height:1.6;margin:0}
+    .wizard-steplist,.wizard-numlist{list-style:none;margin:0;padding:0;font-size:13px;line-height:1.9;color:#374151}
+    .wizard-steplist li,.wizard-numlist li{display:flex;gap:8px}
+    .wizard-steplist b{color:var(--deep);flex-shrink:0}
+    .wizard-numlist li>span:first-child{color:var(--muted);flex-shrink:0}
+    .wizard-privacy{color:var(--muted);font-size:11px;font-style:italic;margin:16px 0 0;line-height:1.6}
+
+    .wizard-field{display:block}
+    .wizard-field+.wizard-field{margin-top:16px}
+    .wizard-field label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px}
+    .wizard-field label em{color:#fb2c36;font-style:normal}
+    .wizard-field input[type=text],.wizard-field input[type=date],.wizard-field input[type=time],.wizard-field textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:13px Inter,sans-serif;color:var(--ink);background:#fff;box-sizing:border-box}
+    .wizard-field input[readonly]{background:var(--softline);color:var(--muted)}
+    .wizard-field textarea{resize:vertical;min-height:80px;font-family:inherit}
+    .wizard-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+    .equip-row{background:var(--canvas);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start}
+    .equip-row+.equip-row{margin-top:10px}
+    .equip-row__main{flex:1;min-width:0}
+    .equip-row__main select{width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:13px Inter,sans-serif;background:#fff;color:var(--ink)}
+    .equip-row__meta{display:flex;align-items:center;gap:8px;margin-top:8px}
+    .equip-badge{background:#fef3c7;color:var(--amber);font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+    .equip-badge--available{background:#ecfdf5;color:#00865d}
+    .equip-badge--limited{background:#fef3c7;color:var(--amber)}
+    .equip-badge--low{background:#fef2f2;color:#c10007}
+    .equip-row__stepper{display:flex;align-items:center;gap:6px;flex-shrink:0;padding-top:2px}
+    .equip-row__stepper button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px;line-height:1;cursor:pointer;color:var(--ink)}
+    .equip-row__stepper button:disabled{opacity:.4;cursor:not-allowed}
+    .equip-row__stepper span{display:inline-block;width:22px;text-align:center;font-size:13px;font-weight:600}
+    .equip-row__remove{width:28px;height:28px;border:1px solid #fecaca;background:#fff5f5;border-radius:8px;cursor:pointer;flex-shrink:0}
+    .equip-add{border:0;background:none;color:var(--deep);font-size:13px;font-weight:500;cursor:pointer;padding:12px 0 0;display:flex;align-items:center;gap:6px}
+    .equip-empty{color:var(--muted);font-size:12px;margin:0}
+
+    .dropzone{border:1.6px dashed var(--line);border-radius:10px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;text-align:center;transition:border-color .15s ease,background .15s ease}
+    .dropzone:hover{border-color:var(--deep)}
+    .dropzone.uploaded{border-style:solid;border-color:#22c55e;background:#f0fdf4}
+    .dropzone__icon{width:36px;height:36px;border-radius:50%;background:var(--softline);display:grid;place-items:center}
+    .dropzone.uploaded .dropzone__icon{background:#dcfce7}
+    .dropzone__title{font-size:13px;font-weight:500;color:#374151}
+    .dropzone.uploaded .dropzone__title{color:#16a34a}
+    .dropzone__hint{font-size:11px;color:#9ca3af}
+    .wizard-note{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:16px;display:flex;gap:12px;align-items:flex-start;font-size:12px;color:#166534;margin-top:16px}
+    .wizard-warn{background:#fffbeb;border:1px solid #fde68a;border-radius:14px;padding:16px;font-size:12px;color:#92400e;margin-top:16px}
+
+    .review-row{display:flex;gap:12px;padding:6px 0;margin:0}
+    .review-row dt{width:150px;flex-shrink:0;color:var(--muted);font-size:12px}
+    .review-row dd{margin:0;font-size:13px;font-weight:500;color:var(--ink)}
+    .review-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--softline)}
+    .review-item:last-child{border-bottom:0}
+    .review-item__name{font-size:13px;color:var(--ink)}
+    .review-qty{background:var(--softline);color:var(--muted);font-size:12px;font-weight:500;padding:2px 8px;border-radius:999px}
+    .review-total{display:flex;justify-content:space-between;padding-top:10px;font-size:12px;color:var(--muted)}
+    .review-total b{color:var(--ink);font-size:13px}
+    .doc-status{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
+    .doc-status__name{font-size:13px;color:var(--ink)}
+    .doc-pill{font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px}
+    .doc-pill--ok{background:#dcfce7;color:#16a34a}
+    .doc-pill--missing{background:#fee2e2;color:#dc2626}
+
+    .wizard-actions{display:flex;gap:12px;margin-top:24px}
+    .wizard-actions .btn-back{flex:1;border:1px solid var(--line);background:#fff;border-radius:14px;padding:12px;font-size:14px;font-weight:600;color:#374151;cursor:pointer}
+    .wizard-actions .btn-primary{flex:1;border:0;background:var(--deep);border-radius:14px;padding:12px;font-size:14px;font-weight:600;color:#fff;cursor:pointer}
+    .wizard-actions .btn-primary:disabled{background:#d6dde6;cursor:not-allowed}
+
+    .success-screen{max-width:448px;margin:24px auto 0;text-align:center}
+    .success-icon{width:80px;height:80px;border-radius:50%;background:#dcfce7;display:grid;place-items:center;margin:0 auto;font-size:32px;color:#16a34a;font-weight:700}
+    .success-screen h2{font-size:22px;margin:20px 0 0;color:var(--ink)}
+    .success-screen>p{color:var(--muted);font-size:14px;line-height:1.6;margin:8px 0 0}
+    .success-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;text-align:left;margin-top:32px}
+    .success-row{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--softline);margin-bottom:12px}
+    .success-row span:first-child{color:var(--muted);font-size:12px}
+    .success-req-id{color:var(--deep);font-weight:700;font-size:13px;font-family:Consolas,monospace}
+    .status-pill{background:#fef3c7;color:var(--amber);font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px}
+    .success-next b{display:block;font-size:11px;color:#374151;margin-bottom:4px}
+    .success-next span{font-size:11px;color:var(--muted)}
+    .success-next em{color:var(--amber);font-weight:700;font-style:normal}
+    .success-actions{display:flex;flex-direction:column;gap:12px;margin-top:32px}
+    .success-actions .btn-primary{background:var(--deep);color:#fff;border:0;border-radius:14px;padding:12px;font-size:14px;font-weight:600;cursor:pointer}
+    .success-actions .btn-back{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;font-size:14px;font-weight:600;color:#374151;cursor:pointer}
+
+    @media(max-width:900px){.stats{grid-template-columns:1fr 1fr}}
+    @media(max-width:650px){.welcome{height:auto;min-height:140px}.welcome h2{font-size:20px}.stats{grid-template-columns:1fr}.wizard-grid-2{grid-template-columns:1fr}.wizard-progress{overflow-x:auto;justify-content:flex-start}.wizard-connector{width:32px}.wizard-shell{padding:52px 16px 32px}.equip-row{flex-wrap:wrap}}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-role="user" data-page="user-equipment" data-title="Equipment Showroom" data-subtitle="Browse and request sports equipment. Check real-time availability.">
+    <section class="welcome">
+      <div class="live"><i></i>LIVE CATALOG</div>
+      <h2 id="welcomeName">Welcome back.</h2>
+      <p>Browse real-time equipment availability and submit your borrowing request in minutes.</p>
+    </section>
+
+    <section class="stats">
+      <article class="stat-card"><div class="stat-head"><span class="stat-label">TOTAL EQUIPMENT</span><span class="metric-icon mint">▣</span></div><div class="stat-value" id="statTotal">0</div></article>
+      <article class="stat-card"><div class="stat-head"><span class="stat-label">AVAILABLE NOW</span><span class="metric-icon blue">✓</span></div><div class="stat-value" id="statAvailable">0</div></article>
+      <article class="stat-card"><div class="stat-head"><span class="stat-label">CATEGORIES</span><span class="metric-icon yellow">▤</span></div><div class="stat-value" id="statCategories">0</div></article>
+    </section>
+
+    <section class="toolbar" aria-label="Equipment filters">
+      <div class="search-field">
+        <img src="../../assets/icons/icon-search.svg" alt="">
+        <input type="text" id="searchInput" placeholder="Search equipment name or ID..." autocomplete="off">
+      </div>
+      <div class="category-select" id="categorySelect">
+        <button type="button" class="category-select__trigger" id="categoryTrigger" aria-haspopup="listbox" aria-expanded="false">
+          <span id="categoryTriggerLabel">All Categories</span>
+          <img src="../../assets/icons/icon-chevron-down.svg" alt="">
+        </button>
+        <div class="category-select__panel" id="categoryPanel" role="listbox" hidden></div>
+      </div>
+      <span class="toolbar__count" id="toolbarCount">Showing 0 of 0 items</span>
+    </section>
+
+    <section class="equipment-grid" id="grid" aria-live="polite"></section>
+  </div>
+
+  <!-- ---------- Borrowing requirements modal ---------- -->
+  <div class="modal-overlay" id="reqModalOverlay" hidden>
+    <div class="modal requirement-card" role="dialog" aria-modal="true" aria-labelledby="reqModalTitle">
+      <div class="modal__header">
+        <div><p class="modal__title" id="reqModalTitle" style="font-size:18px">Borrowing Requirements</p><p class="modal__subtitle">Please review the requirements for your borrower type before continuing.</p></div>
+        <button type="button" class="modal__close" data-close-modal="reqModalOverlay" aria-label="Close"><img src="../../assets/icons/icon-close.svg" alt=""></button>
+      </div>
+      <div class="modal__body">
+        <div class="req-group"><h3>Faculty</h3><ul><li>May borrow equipment for instructional purposes.</li><li>Must present the schedule of the activity before borrowing.</li></ul></div>
+        <div class="req-group"><h3>RSU Employees</h3><ul><li>Must submit an approved proposal or request letter.</li></ul></div>
+        <div class="req-group"><h3>Students</h3><ul><li>Must present an authorization letter signed by their adviser or faculty member.</li></ul></div>
+        <div class="req-group"><h3>Stakeholders (External Users)</h3><ul><li>Must present a valid identification card (ID).</li><li>Must submit an approved proposal or request letter.</li></ul></div>
+      </div>
+      <div class="req-foot"><span>Proceeds to Step 1 — Borrowing Guidelines</span><button type="button" class="btn btn-success" id="reqContinueBtn" style="height:32px">Continue</button></div>
+    </div>
+  </div>
+
+  <!-- ---------- Borrowing Sports Equipment Form flow (4-step wizard) ---------- -->
+  <section class="borrow-flow" id="borrowFlow" aria-label="Borrowing Sports Equipment Form">
+    <button class="close-flow" id="closeFlow" aria-label="Close Borrowing Sports Equipment Form">×</button>
+    <div class="wizard-shell">
+      <div class="wizard-letterhead">
+        <img src="../../assets/images/rsu-sdpo-logo.png" alt="RSU-SDPO logo">
+        <div>
+          <p class="wizard-letterhead__title">Borrowing Sports Equipment Form</p>
+          <p class="wizard-letterhead__sub">Sports Development Program Office &middot; Romblon State University</p>
+        </div>
+      </div>
+      <nav class="wizard-progress" aria-label="Progress">
+        <div class="wizard-step" data-step="0"><div class="wizard-step__num">1</div><span class="wizard-step__label">Guidelines</span></div>
+        <div class="wizard-connector"></div>
+        <div class="wizard-step" data-step="1"><div class="wizard-step__num">2</div><span class="wizard-step__label">Borrower's Information</span></div>
+        <div class="wizard-connector"></div>
+        <div class="wizard-step" data-step="2"><div class="wizard-step__num">3</div><span class="wizard-step__label">Requirements</span></div>
+        <div class="wizard-connector"></div>
+        <div class="wizard-step" data-step="3"><div class="wizard-step__num">4</div><span class="wizard-step__label">Review &amp; Submit</span></div>
+      </nav>
+
+      <section class="wizard-panel" id="panel-0">
+        <h2>Borrower's Guidelines</h2>
+        <p class="wizard-sub">Please read the guidelines carefully before proceeding.</p>
+        <div class="wizard-card">
+          <p class="wizard-quote">Borrowing of equipment must be requested and completed at least 2–5 days before the scheduled event to ensure equipment availability and proper preparation. Borrowers must present a valid identification card and all required documents.</p>
+          <div class="wizard-section">
+            <h4>Eligible to Borrow</h4>
+            <p>Faculty, staff, employees, and stakeholders (external users) may borrow equipment.</p>
+          </div>
+          <div class="wizard-section">
+            <h4>Procedures</h4>
+            <ol class="wizard-steplist">
+              <li><b>Step 1:</b><span>Acknowledge the Borrowing Sports Equipment Form.</span></li>
+              <li><b>Step 2:</b><span>Fill out the digital Borrowing Sports Equipment Form.</span></li>
+              <li><b>Step 3:</b><span>Submit the completed Borrowing Sports Equipment Form for review.</span></li>
+              <li><b>Step 4:</b><span>Await approval from the Director, SDPO.</span></li>
+              <li><b>Step 5:</b><span>Wait for the release of the equipment.</span></li>
+            </ol>
+          </div>
+          <div class="wizard-section">
+            <h4>Responsibilities of the Borrower</h4>
+            <ol class="wizard-numlist">
+              <li><span>1.</span><span>Use equipment responsibly and only for the stated purpose.</span></li>
+              <li><span>2.</span><span>Ensure the equipment is returned on time and in good condition.</span></li>
+              <li><span>3.</span><span>Report any damages or issues to SDPO personnel promptly.</span></li>
+            </ol>
+          </div>
+          <div class="wizard-section">
+            <h4>Return Process</h4>
+            <ol class="wizard-numlist">
+              <li><span>1.</span><span>Return equipment on the agreed date and time.</span></li>
+              <li><span>2.</span><span>The Sports Development Program Office staff will thoroughly inspect the equipment upon return to assess for any damages or loss. If the returned equipment is found to be damaged or lost, the borrower will be held accountable and required to either repair or replace the items, depending on the extent of the damage.</span></li>
+            </ol>
+          </div>
+        </div>
+        <p class="wizard-privacy">This is a computer-generated Borrowing Sports Equipment Form. All data collected complies with the Data Privacy Act of 2012 (Republic Act No. 10173). Personal information is used solely for equipment accountability and office operations. The system applies encryption and access controls to protect borrower data from unauthorized access.</p>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Acknowledgement</h3></div>
+          <label style="display:flex;gap:12px;align-items:flex-start;font-size:13px;color:#374151;cursor:pointer">
+            <input id="acknowledge" type="checkbox" style="margin-top:2px">
+            I have read and understood the borrowing guidelines and agree to comply with the SDPO borrowing policies.
+          </label>
+        </div>
+        <div class="wizard-actions"><button type="button" class="btn-primary" id="toStep1" style="flex:1" disabled>Continue</button></div>
+      </section>
+
+      <section class="wizard-panel" id="panel-1">
+        <h2>Borrower's Information</h2>
+        <p class="wizard-sub">Fill in your information and the equipment you want to borrow.</p>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Borrower Details</h3></div>
+          <div class="wizard-field"><label>Borrower's Name <em>*</em></label><input type="text" id="slipBorrowerName" readonly></div>
+          <div class="wizard-field wizard-grid-2">
+            <div><label>Borrower Type <em>*</em></label><input type="text" id="slipBorrowerType" readonly></div>
+            <div><label>College / Unit <em>*</em></label><input type="text" id="slipCollege" readonly></div>
+          </div>
+        </div>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Equipment Request</h3></div>
+          <div id="equipmentList"></div>
+          <button type="button" class="equip-add" id="addEquipmentBtn">+ Add Equipment</button>
+        </div>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Activity Information</h3></div>
+          <div class="wizard-field"><label>Purpose / Use <em>*</em></label><textarea id="purposeInput" placeholder="Describe the purpose of borrowing the equipment..."></textarea></div>
+          <div class="wizard-field wizard-grid-2">
+            <div><label>Expected Return Date <em>*</em></label><input type="date" id="returnDateInput"></div>
+            <div><label>Expected Return Time <em>*</em></label><input type="time" id="returnTimeInput"></div>
+          </div>
+        </div>
+        <div class="wizard-actions">
+          <button type="button" class="btn-back" id="toStep0Back">← Back</button>
+          <button type="button" class="btn-primary" id="toStep2" disabled>Continue</button>
+        </div>
+      </section>
+
+      <section class="wizard-panel" id="panel-2">
+        <h2>Required Documents</h2>
+        <p class="wizard-sub">Upload the documents required for your borrowing request.</p>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Valid ID</h3></div>
+          <label class="dropzone" id="validIdZone" for="validIdUpload">
+            <span class="dropzone__icon"><img src="../../assets/icons/icon-upload.svg" alt="" style="width:16px;height:16px"></span>
+            <span class="dropzone__title" id="validIdZoneTitle">Upload Document</span>
+            <span class="dropzone__hint">JPG, PNG, WEBP, or PDF — max 5MB</span>
+          </label>
+          <input id="validIdUpload" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>
+        </div>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Approved Proposal / Authorization</h3></div>
+          <label class="dropzone" id="authDocZone" for="authDocUpload">
+            <span class="dropzone__icon"><img src="../../assets/icons/icon-upload.svg" alt="" style="width:16px;height:16px"></span>
+            <span class="dropzone__title" id="authDocZoneTitle">Upload Document</span>
+            <span class="dropzone__hint">JPG, PNG, WEBP, or PDF — max 5MB</span>
+          </label>
+          <input id="authDocUpload" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>
+        </div>
+        <div class="wizard-note">🔒<span>Your uploaded documents are used only for processing your SDPO borrowing request and will not be shared with other borrowers.</span></div>
+        <div class="wizard-actions">
+          <button type="button" class="btn-back" id="toStep1Back">← Back</button>
+          <button type="button" class="btn-primary" id="toStep3" disabled>Continue</button>
+        </div>
+      </section>
+
+      <section class="wizard-panel" id="panel-3">
+        <h2>Review Your Request</h2>
+        <p class="wizard-sub">Review your information before submitting your borrowing request.</p>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Borrower Information</h3><button type="button" class="wizard-edit" data-jump="0">Edit</button></div>
+          <dl class="review-row"><dt>Borrower's Name</dt><dd id="reviewName"></dd></dl>
+          <dl class="review-row"><dt>Borrower Type</dt><dd id="reviewType"></dd></dl>
+          <dl class="review-row"><dt>College / Unit</dt><dd id="reviewCollege"></dd></dl>
+        </div>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Equipment</h3><button type="button" class="wizard-edit" data-jump="1">Edit</button></div>
+          <div id="reviewEquipment"></div>
+          <div class="review-total"><span>Total</span><b id="reviewTotal"></b></div>
+        </div>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Activity</h3><button type="button" class="wizard-edit" data-jump="1">Edit</button></div>
+          <dl class="review-row"><dt>Purpose / Use</dt><dd id="reviewPurpose"></dd></dl>
+          <dl class="review-row"><dt>Expected Return Date</dt><dd id="reviewDate"></dd></dl>
+          <dl class="review-row"><dt>Expected Return Time</dt><dd id="reviewTime"></dd></dl>
+        </div>
+        <div class="wizard-card">
+          <div class="wizard-card__head"><h3>Requirements</h3><button type="button" class="wizard-edit" data-jump="2">Edit</button></div>
+          <div class="doc-status"><span class="doc-status__name">Valid ID</span><span class="doc-pill" id="reviewValidIdPill"></span></div>
+          <div class="doc-status"><span class="doc-status__name">Approved Proposal / Authorization</span><span class="doc-pill" id="reviewAuthDocPill"></span></div>
+        </div>
+        <div class="wizard-warn">By submitting this request, you confirm that the information and documents provided are accurate and that you agree to comply with SDPO borrowing policies.</div>
+        <div class="wizard-actions">
+          <button type="button" class="btn-back" id="toStep2Back">← Back</button>
+          <button type="button" class="btn-primary" id="submitRequest">Submit Borrowing Request</button>
+        </div>
+      </section>
+
+      <section class="wizard-panel success-screen" id="panel-success">
+        <div class="success-icon">✓</div>
+        <h2>Request Submitted</h2>
+        <p>Your borrowing request has been successfully submitted and is now awaiting review by SDPO personnel.</p>
+        <div class="success-card">
+          <div class="success-row"><span>Request Number</span><span class="success-req-id" id="successReqId"></span></div>
+          <div class="success-row" style="margin-bottom:0;border-bottom:0;padding-bottom:0"><span>Status</span><span class="status-pill">Acknowledged</span></div>
+          <div class="success-next" style="padding-top:12px"><b>What happens next?</b><span>Acknowledged → Reviewed → <em>Pending Approval</em> → Approved → Released → Returned → Completed</span></div>
+        </div>
+        <div class="success-actions">
+          <button type="button" class="btn-primary" id="viewMyRequest">View My Request</button>
+          <button type="button" class="btn-back" id="backToEquipment">Back to Equipment</button>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="../../js/shared/api.js"></script>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script>
+    /* Backed by the real database via /api/equipment and /api/categories — no more hardcoded catalog. */
+    let products=[];
+
+    const icon={Badminton:'🏸',Baseball:'⚾',Basketball:'🏀',Boxing:'🥊',Chess:'♟',Football:'🏈',Futsal:'🥅',Volleyball:'🏐','Lawn Tennis':'🎾','Sports Training':'🏃','Sepak Takraw':'🟤',Softball:'🥎','Table Tennis':'🏓',Taekwondo:'🥋'};
+    /* Real product photography for the categories we have shots of — everything
+       else falls back to the generated emoji tile so the catalog never shows a
+       broken image for a category we haven't photographed yet. */
+    const categoryPhoto={Basketball:'equipment-basketball.png',Volleyball:'equipment-volleyball.png',Football:'equipment-soccer-ball.png',Futsal:'equipment-futsal-ball.png',Badminton:'equipment-badminton-shuttlecock.png',Boxing:'equipment-boxing-gloves.png',Chess:'equipment-chess-clock.png'};
+    const productSvg=(emoji)=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="90" height="90"><rect width="90" height="90" rx="16" fill="#eef3f6"/><text x="45" y="61" text-anchor="middle" font-size="52">${emoji}</text></svg>`)}`;
+    const productImage=(category)=>categoryPhoto[category]?`../../assets/images/${categoryPhoto[category]}`:productSvg(icon[category]||'🏅');
+    const displayId=(p)=>'EQ-'+String(p.id).padStart(3,'0');
+
+    /* Stock-level warning tier — thresholds scale off each equipment's own total
+       quantity rather than a fixed number, so a 10-unit item turns amber at 5 left /
+       red at 3 left, while a 3-unit item turns amber at 2 left / red at 1 left. */
+    function stockLevel(available,total){
+      if(!total||total<=0||available<=0)return'low';
+      const redMax=Math.max(1,Math.round(total*0.3));
+      const yellowMax=Math.max(redMax+1,Math.round(total*0.5));
+      if(available<=redMax)return'low';
+      if(available<=yellowMax)return'limited';
+      return'available';
+    }
+    const STOCK_LABEL={available:'Available',limited:'Low Stock',low:'Critical Stock'};
+
+    const $=id=>document.getElementById(id);
+    const searchInput=$('searchInput'),grid=$('grid'),toolbarCount=$('toolbarCount');
+    const categorySelect=$('categorySelect'),categoryTrigger=$('categoryTrigger'),categoryTriggerLabel=$('categoryTriggerLabel'),categoryPanel=$('categoryPanel');
+    const reqModalOverlay=$('reqModalOverlay'),reqContinueBtn=$('reqContinueBtn');
+    const borrowFlow=$('borrowFlow'),toastStack=$('toastStack');
+
+    let category='All Categories',current=null;
+
+    /* ---------- Stats ---------- */
+    function renderStats(){
+      $('statTotal').textContent=products.length;
+      $('statAvailable').textContent=products.filter(p=>p.available>0).length;
+      $('statCategories').textContent=new Set(products.map(p=>p.category)).size;
+    }
+
+    function loadEquipment(){
+      return apiFetch('/api/equipment').then(rows=>{
+        products=rows.map(e=>({
+          id:e.id,
+          name:e.equipmentName,
+          category:e.category?e.category.categoryName:'',
+          available:e.availableQuantity,
+          total:e.totalQuantity
+        }));
+      });
+    }
+
+    /* ---------- Category dropdown (same interaction pattern as the admin catalog) ---------- */
+    function categoryNames(){return ['All Categories',...new Set(products.map(p=>p.category))];}
+    function renderCategoryPanel(){
+      categoryPanel.innerHTML=categoryNames().map(name=>{
+        const active=name===category?' category-select__option--active':'';
+        return `<button type="button" class="category-select__option${active}" data-category="${name}" role="option">${name}</button>`;
+      }).join('');
+    }
+    function openCategoryPanel(){categoryPanel.hidden=false;categoryTrigger.setAttribute('aria-expanded','true');}
+    function closeCategoryPanel(){categoryPanel.hidden=true;categoryTrigger.setAttribute('aria-expanded','false');}
+    categoryTrigger.addEventListener('click',()=>{categoryPanel.hidden?openCategoryPanel():closeCategoryPanel();});
+    categoryPanel.addEventListener('click',e=>{
+      const btn=e.target.closest('[data-category]');
+      if(!btn)return;
+      category=btn.dataset.category;
+      categoryTriggerLabel.textContent=category;
+      renderCategoryPanel();
+      closeCategoryPanel();
+      render();
+    });
+    document.addEventListener('click',e=>{if(!categorySelect.contains(e.target))closeCategoryPanel();});
+
+    /* ---------- Catalog grid ---------- */
+    function cardTemplate(p){
+      const level=stockLevel(p.available,p.total);
+      const badgeClass=level==='available'?'available':level;
+      const badgeLabel=p.available<=0?'Unavailable':level==='available'?'Available':`${STOCK_LABEL[level]} — ${p.available} left`;
+      return `<article class="equipment-card" data-id="${p.id}">
+        <div class="equipment-card__media">
+          <img src="${productImage(p.category)}" alt="${p.category}" onerror="this.onerror=null;this.src='${productSvg(icon[p.category]||'🏅')}'">
+          <span class="equipment-card__badge equipment-card__badge--${badgeClass}">${badgeLabel}</span>
+          <div class="equipment-card__id-strip"><span class="equipment-card__id">${displayId(p)}</span></div>
+        </div>
+        <div class="equipment-card__body">
+          <h3>${p.name}</h3>
+          <div class="equipment-card__tags"><span class="chip chip--neutral">${p.category}</span><span class="chip chip--good">Good</span></div>
+          <div class="equipment-card__stock-row${level!=='available'?' equipment-card__stock-row--'+level:''}"><span>Available</span><span>${p.available} / ${p.total}</span></div>
+          <div class="equipment-card__actions">
+            <button type="button" class="btn-details" data-id="${p.id}" ${p.available?'':'disabled'}>${p.available?'Request to Borrow':'Unavailable'}</button>
+          </div>
+        </div>
+      </article>`;
+    }
+
+    function render(){
+      const q=searchInput.value.trim().toLowerCase();
+      const shown=products.filter(p=>(category==='All Categories'||p.category===category)&&(!q||p.name.toLowerCase().includes(q)||displayId(p).toLowerCase().includes(q)));
+      toolbarCount.textContent=`Showing ${shown.length} of ${products.length} items`;
+      grid.innerHTML=shown.length?shown.map(cardTemplate).join(''):'<div class="empty-state"><img src="../../assets/icons/icon-search.svg" alt="" style="width:32px;height:32px;opacity:.5"><p class="empty-state__title">No equipment found</p><p>Try adjusting your search term or category filter.</p></div>';
+    }
+    searchInput.addEventListener('input',render);
+    grid.addEventListener('click',e=>{
+      const btn=e.target.closest('[data-id]');
+      if(!btn||btn.disabled)return;
+      current=products.find(p=>p.id===Number(btn.dataset.id));
+      reqModalOverlay.hidden=false;
+    });
+
+    /* ---------- Requirements modal → Borrowing Sports Equipment Form wizard ---------- */
+    document.querySelectorAll('[data-close-modal]').forEach(btn=>btn.addEventListener('click',()=>{$(btn.dataset.closeModal).hidden=true;}));
+    reqModalOverlay.addEventListener('click',e=>{if(e.target===reqModalOverlay)reqModalOverlay.hidden=true;});
+
+    /* ---------- Attachments (valid ID + authorization document) ---------- */
+    let uploadedValidId=false,uploadedAuthDoc=false;
+
+    function markZoneUploaded(zoneId,titleId,fileName){
+      $(zoneId).classList.add('uploaded');
+      $(titleId).textContent=fileName;
+      updateStepValidity();
+    }
+
+    function checkExistingDocuments(){
+      return apiFetch('/api/borrowers/me/documents').then(status=>{
+        uploadedValidId=status.validIdUploaded;
+        uploadedAuthDoc=status.authorizationDocumentUploaded;
+        if(uploadedValidId)markZoneUploaded('validIdZone','validIdZoneTitle','On file');
+        if(uploadedAuthDoc)markZoneUploaded('authDocZone','authDocZoneTitle','On file');
+      }).catch(()=>{});
+    }
+
+    function uploadDocument(fieldName,zoneId,titleId,file){
+      const formData=new FormData();
+      formData.append(fieldName,file);
+      return apiFetch('/api/borrowers/me/documents',{method:'POST',body:formData})
+        .then(status=>{
+          uploadedValidId=status.validIdUploaded;
+          uploadedAuthDoc=status.authorizationDocumentUploaded;
+          markZoneUploaded(zoneId,titleId,file.name);
+        })
+        .catch(err=>showToast(err.message,'danger'));
+    }
+
+    $('validIdUpload').addEventListener('change',e=>{
+      if(e.target.files.length)uploadDocument('validId','validIdZone','validIdZoneTitle',e.target.files[0]);
+    });
+    $('authDocUpload').addEventListener('change',e=>{
+      if(e.target.files.length)uploadDocument('authorizationDocument','authDocZone','authDocZoneTitle',e.target.files[0]);
+    });
+
+    /* ---------- Equipment Request rows (Step 2) ---------- */
+    let equipmentRows=[],rowSeq=0;
+    const productById=id=>products.find(p=>p.id===id);
+
+    function equipmentOptionsHtml(selectedId){
+      const opts=products.map(p=>`<option value="${p.id}" ${p.id===selectedId?'selected':''} ${p.available?'':'disabled'}>${p.name} (Available: ${p.available})</option>`).join('');
+      return `<option value="">Select equipment...</option>${opts}`;
+    }
+
+    function renderEquipmentList(){
+      const list=$('equipmentList');
+      list.innerHTML=equipmentRows.length?equipmentRows.map(row=>{
+        const product=productById(row.equipmentId);
+        const available=product?product.available:0;
+        const level=product?stockLevel(available,product.total):'available';
+        return `<div class="equip-row" data-row="${row.rowId}">
+          <div class="equip-row__main">
+            <select class="equip-row__select">${equipmentOptionsHtml(row.equipmentId)}</select>
+            <div class="equip-row__meta">${product?`<span class="equip-badge equip-badge--${level}">${available} left</span>`:''}</div>
+          </div>
+          <div class="equip-row__stepper">
+            <button type="button" class="equip-row__dec" ${row.quantity<=1?'disabled':''}>−</button>
+            <span>${row.quantity}</span>
+            <button type="button" class="equip-row__inc" ${!product||row.quantity>=available?'disabled':''}>+</button>
+          </div>
+          <button type="button" class="equip-row__remove" title="Remove equipment"><img src="../../assets/icons/icon-trash.svg" alt="" style="width:12px;height:12px"></button>
+        </div>`;
+      }).join(''):'<p class="equip-empty">No equipment added yet.</p>';
+      updateStepValidity();
+    }
+
+    function addEquipmentRow(equipmentId){
+      equipmentRows.push({rowId:++rowSeq,equipmentId:equipmentId||null,quantity:1});
+      renderEquipmentList();
+    }
+
+    $('equipmentList').addEventListener('click',e=>{
+      const rowEl=e.target.closest('.equip-row');
+      if(!rowEl)return;
+      const rowId=Number(rowEl.dataset.row);
+      const row=equipmentRows.find(r=>r.rowId===rowId);
+      if(e.target.closest('.equip-row__remove')){equipmentRows=equipmentRows.filter(r=>r.rowId!==rowId);renderEquipmentList();return;}
+      if(e.target.closest('.equip-row__inc')){const p=productById(row.equipmentId);if(p&&row.quantity<p.available)row.quantity++;renderEquipmentList();return;}
+      if(e.target.closest('.equip-row__dec')){if(row.quantity>1)row.quantity--;renderEquipmentList();}
+    });
+    $('equipmentList').addEventListener('change',e=>{
+      if(!e.target.classList.contains('equip-row__select'))return;
+      const rowId=Number(e.target.closest('.equip-row').dataset.row);
+      const row=equipmentRows.find(r=>r.rowId===rowId);
+      row.equipmentId=Number(e.target.value)||null;
+      row.quantity=1;
+      renderEquipmentList();
+    });
+    $('addEquipmentBtn').addEventListener('click',()=>addEquipmentRow(null));
+
+    /* ---------- Wizard navigation ---------- */
+    const stepPanels=['panel-0','panel-1','panel-2','panel-3'];
+    const stepEls=Array.from(document.querySelectorAll('.wizard-step'));
+    const connectors=Array.from(document.querySelectorAll('.wizard-connector'));
+    let wizardStep=0;
+
+    function showWizardStep(n){
+      wizardStep=n;
+      const activeId=n===4?'panel-success':stepPanels[n];
+      ['panel-0','panel-1','panel-2','panel-3','panel-success'].forEach(id=>$(id).classList.toggle('active',id===activeId));
+      stepEls.forEach((el,i)=>{el.classList.toggle('is-active',i===n);el.classList.toggle('is-done',i<n||n===4);});
+      connectors.forEach((el,i)=>el.classList.toggle('is-done',i<n||n===4));
+      if(n===3)renderReview();
+      borrowFlow.scrollTo(0,0);
+    }
+
+    function updateStepValidity(){
+      $('toStep1').disabled=!$('acknowledge').checked;
+      const hasEquip=equipmentRows.length>0&&equipmentRows.every(r=>r.equipmentId&&r.quantity>0);
+      const infoValid=hasEquip&&$('purposeInput').value.trim()&&$('returnDateInput').value&&$('returnTimeInput').value;
+      $('toStep2').disabled=!infoValid;
+      $('toStep3').disabled=!(uploadedValidId&&uploadedAuthDoc);
+    }
+
+    $('acknowledge').addEventListener('change',updateStepValidity);
+    ['purposeInput','returnDateInput','returnTimeInput'].forEach(id=>$(id).addEventListener('input',updateStepValidity));
+
+    $('toStep1').addEventListener('click',()=>showWizardStep(1));
+    $('toStep0Back').addEventListener('click',()=>showWizardStep(0));
+    $('toStep2').addEventListener('click',()=>showWizardStep(2));
+    $('toStep1Back').addEventListener('click',()=>showWizardStep(1));
+    $('toStep3').addEventListener('click',()=>showWizardStep(3));
+    $('toStep2Back').addEventListener('click',()=>showWizardStep(2));
+    document.querySelectorAll('.wizard-edit').forEach(btn=>btn.addEventListener('click',()=>showWizardStep(Number(btn.dataset.jump))));
+
+    function formatTime(t){const[h,m]=t.split(':').map(Number);const d=new Date();d.setHours(h,m);return d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
+
+    function renderReview(){
+      $('reviewName').textContent=$('slipBorrowerName').value;
+      $('reviewType').textContent=$('slipBorrowerType').value;
+      $('reviewCollege').textContent=$('slipCollege').value;
+      $('reviewEquipment').innerHTML=equipmentRows.map(r=>{
+        const p=productById(r.equipmentId);
+        return `<div class="review-item"><span class="review-item__name">${icon[p&&p.category]||'🏅'}&nbsp; ${p?p.name:''}</span><span class="review-qty">${r.quantity} unit${r.quantity>1?'s':''}</span></div>`;
+      }).join('');
+      $('reviewTotal').textContent=equipmentRows.reduce((s,r)=>s+r.quantity,0)+' unit(s)';
+      $('reviewPurpose').textContent=$('purposeInput').value.trim();
+      $('reviewDate').textContent=$('returnDateInput').value?new Date($('returnDateInput').value+'T00:00').toLocaleDateString([],{month:'long',day:'numeric',year:'numeric'}):'—';
+      $('reviewTime').textContent=$('returnTimeInput').value?formatTime($('returnTimeInput').value):'—';
+      $('reviewValidIdPill').textContent=uploadedValidId?'Uploaded':'Missing';
+      $('reviewValidIdPill').className='doc-pill '+(uploadedValidId?'doc-pill--ok':'doc-pill--missing');
+      $('reviewAuthDocPill').textContent=uploadedAuthDoc?'Uploaded':'Missing';
+      $('reviewAuthDocPill').className='doc-pill '+(uploadedAuthDoc?'doc-pill--ok':'doc-pill--missing');
+    }
+
+    reqContinueBtn.addEventListener('click',()=>{
+      reqModalOverlay.hidden=true;
+      equipmentRows=[];
+      addEquipmentRow(current.id);
+      $('purposeInput').value='';
+      $('returnDateInput').value='';
+      $('returnTimeInput').value='';
+      $('acknowledge').checked=false;
+      borrowFlow.classList.add('open');
+      showWizardStep(0);
+      checkExistingDocuments();
+      updateStepValidity();
+    });
+    $('closeFlow').addEventListener('click',()=>borrowFlow.classList.remove('open'));
+    $('backToEquipment').addEventListener('click',()=>borrowFlow.classList.remove('open'));
+    $('viewMyRequest').addEventListener('click',()=>{window.location.href='my-requests.html';});
+
+    $('submitRequest').addEventListener('click',()=>{
+      const items=equipmentRows.filter(r=>r.equipmentId&&r.quantity>0).map(r=>({equipmentId:r.equipmentId,quantity:r.quantity}));
+      if(!items.length){
+        showToast('Add at least one equipment item.','danger');
+        return;
+      }
+      const expectedReturnDatetime=$('returnDateInput').value&&$('returnTimeInput').value?`${$('returnDateInput').value}T${$('returnTimeInput').value}`:null;
+      const btn=$('submitRequest');
+      btn.disabled=true;
+      apiFetch('/api/borrow/request',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({items,purpose:$('purposeInput').value.trim()||null,expectedReturnDatetime,acknowledged:$('acknowledge').checked})
+      })
+        .then(data=>{
+          $('successReqId').textContent=data.id;
+          showWizardStep(4);
+        })
+        .catch(err=>showToast(err.message,'danger'))
+        .then(()=>{btn.disabled=false;});
+    });
+
+    /* ---------- Toast (shared toast-stack markup) ---------- */
+    function showToast(message,type){
+      const toast=document.createElement('div');
+      toast.className='toast toast--'+(type==='danger'?'danger':'success');
+      toast.innerHTML=`<span class="toast__dot"></span><span>${message}</span>`;
+      toastStack.appendChild(toast);
+      setTimeout(()=>toast.remove(),3200);
+    }
+
+    /* ---------- Init ---------- */
+    const loggedInUser=currentUser();
+    const borrowerProfile=loggedInUser&&loggedInUser.borrowerProfile;
+    const displayName=borrowerProfile&&(borrowerProfile.firstName||borrowerProfile.lastName)
+      ?[borrowerProfile.firstName,borrowerProfile.lastName].filter(Boolean).join(' ')
+      :(loggedInUser&&(loggedInUser.username||loggedInUser.emailAddress))||'Borrower';
+    const firstName=(borrowerProfile&&borrowerProfile.firstName)||displayName.split(' ')[0];
+    // "Welcome back" only makes sense once they've actually borrowed
+    // something before — a brand-new account gets a plain welcome instead.
+    // Default to the neutral greeting until we know; never block the page
+    // on this, and keep the neutral greeting if the lookup fails.
+    $('welcomeName').textContent=`Welcome, ${firstName}.`;
+    apiFetch('/api/borrow/mine').then(rows=>{
+      if(rows.length)$('welcomeName').textContent=`Welcome back, ${firstName}.`;
+    }).catch(()=>{});
+    $('slipBorrowerName').value=displayName;
+    $('slipBorrowerType').value=(borrowerProfile&&borrowerProfile.borrowerCategory)||'—';
+    $('slipCollege').value=(borrowerProfile&&borrowerProfile.collegeOrUnit)||'—';
+
+    loadEquipment().then(()=>{
+      renderStats();
+      renderCategoryPanel();
+      render();
+    }).catch(err=>showToast('Could not load equipment: '+err.message,'danger'));
+  </script>
+</body>
+</html>

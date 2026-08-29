@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RSU-SDPO | Transactions</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <style>
+    /* RSU-SDPO transaction management — self-contained Figma implementation */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@700;800&display=swap');
+    :root{--deep:#007a55;--amber:#d97706;--red:#dc2626;--purple:#7c3aed}
+    .content{padding:26px 28px}
+    .heading-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:12px}.counts{display:flex;gap:9px;flex-wrap:wrap}.new-txn-btn{background:var(--green);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}.count{background:var(--page);border:1px solid var(--line);border-radius:9px;padding:8px 12px;color:var(--muted);font-size:11px}.count b{display:block;color:var(--ink);font-size:15px;margin-bottom:2px}.count.pending b{color:var(--amber)}.filters{background:var(--page);border:1px solid var(--line);border-radius:11px;padding:14px;margin-bottom:14px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}.search{flex:1;min-width:210px;border:1px solid var(--line);border-radius:7px;padding:9px 11px;color:var(--ink);outline-color:var(--green)}.filters select{background:var(--page);border:1px solid var(--line);border-radius:7px;padding:9px;color:var(--muted);font-size:11px}.filter-button{background:var(--page);border:1px solid var(--line);border-radius:7px;padding:9px 11px;color:var(--muted)}.filter-button.active{background:#ecfdf5;border-color:var(--green);color:var(--deep);font-weight:600}.table-card{background:var(--page);border:1px solid var(--line);border-radius:11px;overflow:hidden}.table-note{color:var(--muted);font-size:11px;padding:14px 16px;border-bottom:1px solid var(--line)}.scroll{overflow:auto}.txn-table{border-collapse:collapse;width:100%;min-width:1140px}.txn-table th{background:var(--softline);color:var(--muted);text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.35px;padding:11px 12px;white-space:nowrap}.txn-table td{border-top:1px solid var(--softline);padding:11px 12px;vertical-align:middle;font-size:11px}.txn-id{font-family:Consolas,monospace;color:var(--deep);font-weight:700}.sub{color:var(--muted);display:block;font-size:10px;margin-top:3px}.purpose{max-width:195px;color:var(--ink)}.badge{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;font-weight:700;font-size:10px}.pending,.acknowledged{background:#fef3c7;color:#a16207}.for-approval{background:#fef3c7;color:#a16207}.approved{background:#d1fae5;color:#059669}.released{background:#dbeafe;color:#2563eb}.returned{background:#e2e8f0;color:var(--muted)}.rejected{background:#fee2e2;color:#dc2626}.cancelled{background:var(--softline);color:var(--muted)}.overdue{background:#fee2e2;color:#dc2626}.for-resolution,.replacement{background:#fef2f2;color:#b91c1c}.resolved{background:#ede9fe;color:#7c3aed}.completed{background:#d1fae5;color:#059669}.type{background:#ede9fe;color:#7c3aed}
+    .resolution-record{border:1px solid #fecaca;background:#fff7f7;border-radius:9px;padding:12px;margin-bottom:10px}.resolution-record h5{margin:0 0 8px;font-size:11px;color:#b91c1c}.resolution-field{margin-bottom:8px}.resolution-field label{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-bottom:4px}.resolution-field input{width:100%;font-size:11px;padding:6px 8px;border:1px solid var(--line);border-radius:6px}.resolution-status-pill{display:inline-block;border-radius:999px;padding:3px 8px;font-size:9px;font-weight:700;margin-bottom:8px}.resolution-actions{display:flex;gap:6px;margin-top:8px}
+    .item-condition{display:flex;gap:6px;margin-top:6px}.item-condition button{padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--page);font-size:9px;font-weight:700}.item-condition button.on{border-color:var(--green);background:#ecfdf5;color:var(--deep)}.item-condition button.on.bad{border-color:#dc2626;background:#fef2f2;color:#dc2626}
+    .activity-log-row{border-bottom:1px solid var(--softline);padding:10px 0;font-size:11px}.activity-log-row:last-child{border:0}.activity-log-row .arrow{color:var(--muted);margin:0 4px}.activity-log-row time{display:block;color:var(--muted);font-size:10px;margin-top:2px}.actions{display:flex;gap:5px}.link-btn{border:1px solid var(--line);border-radius:6px;background:var(--page);color:var(--muted);padding:5px 7px;font-size:10px;font-weight:600}.link-btn.primary{border-color:var(--green);background:#ecfdf5;color:var(--deep)}.pagination{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:12px}.pagination button{border:1px solid var(--line);background:var(--page);border-radius:5px;padding:5px 9px;font-size:11px;color:var(--muted)}
+    /* Right-side Figma detail drawer and dialogs */
+    .overlay{position:fixed;inset:0;background:rgba(15,23,42,.30);z-index:55;display:none}.overlay.show{display:block}.drawer{position:absolute;right:0;top:0;width:min(630px,100%);height:100%;background:var(--softline);box-shadow:-18px 0 45px rgba(15,23,42,.18);overflow:auto}.drawer-head{background:var(--page);border-bottom:1px solid var(--line);padding:15px 19px}.drawer-title{display:flex;justify-content:space-between;gap:10px}.drawer-title h2{font:700 15px 'Plus Jakarta Sans',Inter,sans-serif;margin:5px 0}.drawer-title p{font-size:11px;color:var(--muted);margin:0}.close{border:0;background:transparent;font-size:23px;color:var(--muted);line-height:20px}.drawer-actions{display:flex;gap:8px;margin-top:12px}.drawer .btn{border:1px solid var(--line);background:var(--page);border-radius:7px;padding:8px 12px;font-size:11px;font-weight:700;color:var(--muted)}.drawer .btn.green{background:#009966;color:#fff;border-color:#009966}.drawer .btn.dark{background:#475569;border-color:var(--ink);color:#fff}.drawer .btn.red{background:var(--page);color:#dc2626;border-color:#fecaca}.tabs{height:43px;background:var(--page);border-bottom:1px solid var(--line);display:flex;gap:18px;padding-left:19px}.tab{border:0;border-bottom:2px solid transparent;background:var(--page);color:var(--muted);font-weight:700;font-size:11px;padding:0 4px}.tab.active{border-color:var(--green);color:var(--green)}.panel{display:none;padding:18px}.panel.active{display:block}.section{background:var(--page);border:1px solid var(--line);border-radius:11px;margin-bottom:14px;overflow:hidden}.section-title{display:flex;align-items:center;gap:7px;background:var(--softline);border-bottom:1px solid var(--line);padding:12px 15px;text-transform:uppercase;font-weight:800;font-size:11px;letter-spacing:.3px}.section-body{padding:15px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px 22px}.info label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);margin-bottom:4px}.info div{font-size:11px;color:var(--ink)}.timeline{padding:2px 0}.event{display:grid;grid-template-columns:28px 1fr;gap:12px;min-height:64px}.dotline{display:flex;flex-direction:column;align-items:center}.dot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#fff;font-size:12px;font-weight:800;z-index:1}.dot.gray{background:#e2e8f0;color:var(--muted)}.line{width:2px;flex:1;background:#009966;margin:3px 0}.event:last-child .line{visibility:hidden}.event b{font-size:12px}.event p{font-size:10px;color:var(--muted);margin:4px 0}.event small{color:var(--muted)}.equipment-row{display:flex;align-items:center;gap:9px;padding:10px 0;border-bottom:1px solid var(--softline)}.equipment-row:last-child{border:0}.qr{width:28px;height:28px;border:1px dashed #94a3b8;display:grid;place-items:center;font-size:9px;color:var(--muted)}.equipment-row .grow{flex:1}.equipment-row b{font-size:11px}.scan{font-size:10px;border:1px solid #a7f3d0;color:var(--deep);background:#ecfdf5;border-radius:5px;padding:5px 7px}.ack{background:#ecfdf5;border:1px solid #a7f3d0;border-radius:7px;padding:10px;font-size:10px;color:#166534}.activity{padding:12px 0;border-bottom:1px solid var(--softline)}.activity:last-child{border:0}.activity b{font-size:11px}.activity p{color:var(--muted);margin:4px 0 0;font-size:10px}.activity time{color:var(--muted);font-size:10px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.field label{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-bottom:5px}.field input,.field select{width:100%;font-size:11px}.condition{display:flex;gap:8px;margin:10px 0}.condition button{padding:7px 10px;border-radius:6px;border:1px solid var(--line);background:var(--page);font-size:10px;font-weight:700}.condition button.on{border-color:var(--green);background:#ecfdf5;color:var(--deep)}.damage-box{display:none;margin-top:10px;padding:10px;border:1px solid #fecaca;background:#fff7f7;color:#b91c1c;border-radius:7px;font-size:10px}.damage-box.show{display:block}.toast{position:fixed;z-index:60;bottom:20px;right:20px;background:#0f172a;color:#fff;border-radius:8px;padding:11px 14px;font-size:12px;opacity:0;transform:translateY(12px);pointer-events:none;transition:.2s}.toast.show{opacity:1;transform:none}
+    /* QR camera scanner */
+    .scan.scanned{border-color:#6ee7b7;background:#d1fae5;color:#166534}
+    .scan-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:70;display:none;align-items:center;justify-content:center}
+    .scan-overlay.show{display:flex}
+    .scan-box{background:#0f172a;border-radius:14px;width:min(380px,92vw);overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+    .scan-head{display:flex;justify-content:space-between;align-items:center;padding:12px 15px;color:#fff}
+    .scan-head b{font-size:12px}
+    .scan-head .close{color:#fff}
+    .scan-camera-row{padding:0 15px 10px}
+    .scan-camera-select{width:100%;height:32px;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#fff;font-size:11px;padding:0 8px}
+    .scan-camera-row[hidden]{display:none}
+    .scan-video-wrap{position:relative;background:#000;aspect-ratio:1/1}
+    .scan-video-wrap video{width:100%;height:100%;object-fit:cover;display:block}
+    .scan-reticle{position:absolute;inset:14%;border:2px solid rgba(255,255,255,.65);border-radius:12px;pointer-events:none}
+    .scan-status{margin:0;padding:12px 15px 15px;font-size:11px;color:#cbd5e1;text-align:center;min-height:15px}
+    .scan-status.ok{color:#6ee7b7;font-weight:700}
+    .scan-status.err{color:#fca5a5;font-weight:700}
+    /* New Transaction modal */
+    .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:65;display:none;align-items:center;justify-content:center;padding:20px}
+    .modal-overlay.show{display:flex}
+    .modal-box{background:var(--page);border-radius:14px;width:min(480px,100%);max-height:88vh;overflow:auto;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+    .modal-head{display:flex;justify-content:space-between;align-items:center;padding:15px 19px;border-bottom:1px solid var(--line)}
+    .modal-head b{font-size:13px}
+    .modal-body{padding:16px 19px}
+    .modal-body label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin:12px 0 5px}
+    .modal-body label:first-child{margin-top:0}
+    .modal-body select,.modal-body input,.modal-body textarea{width:100%;font-size:12px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-family:inherit}
+    .item-list{max-height:180px;overflow:auto;border:1px solid var(--line);border-radius:7px;padding:6px}
+    .item-check{display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12px}
+    .item-check .sub{margin-left:auto;color:var(--muted);font-size:10px}
+    .modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 19px;border-top:1px solid var(--line)}
+    .form-error{color:#dc2626;font-size:11px;min-height:14px;margin-top:8px}
+    @media(max-width:820px){.content{padding:18px 15px}.heading-row{display:block}.counts{margin-top:14px}.drawer{width:100%}}
+    @media(max-width:520px){.filters{padding:10px}.search{flex-basis:100%}.drawer-actions{flex-wrap:wrap}.info-grid,.form-grid{grid-template-columns:1fr}.tabs{gap:9px;padding-left:10px}.tab{font-size:10px}}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-page="transactions" data-title="Transaction Management" data-subtitle="Review, approve, release, and monitor equipment borrowing transactions">
+    <div class="heading-row"><button class="new-txn-btn" type="button" onclick="openNewTxnModal()">+ New Transaction</button><div class="counts"><div class="count pending"><b id="countPending">0</b>Pending Requests</div><div class="count"><b id="countOverdue">0</b>Overdue Due Today</div><div class="count"><b id="countReleased">0</b>Released Equipment</div><div class="count"><b id="countApprovedToday">0</b>Approved Today</div></div></div>
+    <div class="filters"><input id="search" class="search" placeholder="Search by name, ID, college, purpose..." aria-label="Search transactions"><select id="statusFilter"><option value="">All Statuses</option><option>Acknowledged</option><option>For Approval</option><option>Approved</option><option>Released</option><option>Overdue</option><option>For Resolution</option><option>Replacement</option><option>Resolved</option><option>Completed</option><option>Rejected</option><option>Cancelled</option></select><select id="borrowerTypeFilter"><option value="">All Borrower Types</option><option>Student</option><option>Faculty</option><option>Staff</option><option>Employee</option><option>External</option></select><select id="categoryFilter"><option value="">All Categories</option><option>Basketball</option><option>Badminton</option><option>Futsal</option><option>Football</option></select><button class="filter-button" id="overdueOnlyBtn" type="button" aria-pressed="false">☷ Overdue Only</button></div>
+    <section class="table-card"><div class="table-note">Showing <b id="shown">10</b> transactions</div><div class="scroll"><table class="txn-table"><thead><tr><th>Transaction No.</th><th>Request Date</th><th>Borrower</th><th>Type</th><th>College / Unit</th><th>Purpose</th><th>Equip.</th><th>Expected Return</th><th>Status</th><th>Reviewed By</th><th>Approved By</th><th>Actions</th></tr></thead><tbody id="transactions"></tbody></table></div><div class="pagination"><button>Prev</button><button>1</button><button>Next</button></div></section>
+  </div>
+  <div id="overlay" class="overlay" aria-hidden="true"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Transaction details"><div class="drawer-head"><div class="drawer-title"><div><div id="drawerBadges"></div><h2 id="drawerName"></h2><p id="drawerCollege"></p></div><button class="close" onclick="closeDrawer()" aria-label="Close">×</button></div><div class="drawer-actions" id="drawerActions"></div></div><div class="tabs"><button class="tab active" data-tab="overview">Overview</button><button class="tab" data-tab="workflow">Workflow &amp; QR</button><button class="tab" data-tab="activity">Activity &amp; Notifications</button></div><div id="overview" class="panel active"></div><div id="workflow" class="panel"></div><div id="activity" class="panel"></div></aside></div><div id="toast" class="toast"></div>
+  <div id="scanOverlay" class="scan-overlay" aria-hidden="true">
+    <div class="scan-box" role="dialog" aria-modal="true" aria-label="Scan equipment QR code">
+      <div class="scan-head"><b id="scanTitle">Scan Equipment QR</b><button class="close" onclick="closeScanner()" aria-label="Close">×</button></div>
+      <div class="scan-camera-row" hidden><select id="scanCameraSelect" class="scan-camera-select" aria-label="Camera"></select></div>
+      <div class="scan-video-wrap"><video id="scanVideo" playsinline muted></video><div class="scan-reticle"></div></div>
+      <p id="scanStatus" class="scan-status">Requesting camera access…</p>
+    </div>
+  </div>
+  <div id="docViewerOverlay" class="scan-overlay" aria-hidden="true">
+    <div class="scan-box" role="dialog" aria-modal="true" aria-label="Submitted document" style="width:min(560px,92vw)">
+      <div class="scan-head"><b id="docViewerTitle">Document</b><button class="close" onclick="closeDocViewer()" aria-label="Close">×</button></div>
+      <div id="docViewerBody" style="max-height:70vh;overflow:auto;background:#111;display:flex;align-items:center;justify-content:center;min-height:200px"></div>
+      <p id="docViewerStatus" class="scan-status"></p>
+    </div>
+  </div>
+  <div id="newTxnOverlay" class="modal-overlay" aria-hidden="true">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-label="New transaction">
+      <div class="modal-head"><b>New Transaction</b><button class="close" onclick="closeNewTxnModal()" aria-label="Close">×</button></div>
+      <div class="modal-body">
+        <label>Borrower</label>
+        <select id="newTxnBorrower"><option value="">Loading…</option></select>
+        <label>Equipment Items (Available only)</label>
+        <div class="item-list" id="newTxnItems"><p class="sub">Loading…</p></div>
+        <label>Purpose</label>
+        <textarea id="newTxnPurpose" rows="2" placeholder="e.g. Intramurals basketball match"></textarea>
+        <label>Expected Return</label>
+        <input id="newTxnDue" type="datetime-local">
+        <p class="form-error" id="newTxnError"></p>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeNewTxnModal()">Cancel</button><button class="btn green" onclick="submitNewTxn()">Create Transaction</button></div>
+    </div>
+  </div>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script src="../../js/shared/api.js"></script>
+  <script src="../../js/vendor/jsQR.js"></script>
+  <script>
+    // This page needs a logged-in staff/admin/director user (approve/release/return
+    // all record who performed them), so bounce to login if there's no session.
+    if (!localStorage.getItem('rsuSdpoToken')) { location.href = '../auth/admin-login.html'; }
+
+    let txns=[];
+    const cls=s=>s.toLowerCase().replace(/\s+/g,'-'); let current=null;
+    const myRole=()=>{try{return(currentUser()||{}).userRole}catch(e){return null}};
+    const isDirector=()=>['Admin','Director'].includes(myRole());
+
+    async function loadTransactions(){
+      try{
+        txns=await apiFetch('/api/borrow');
+        document.getElementById('countPending').textContent=txns.filter(t=>['Pending','Acknowledged'].includes(t.status)).length;
+        document.getElementById('countReleased').textContent=txns.filter(t=>t.status==='Released').length;
+        applyFilters();
+        // Deep link from the Transaction Log Report calendar: ?open=<dbId>
+        const openId=Number(new URLSearchParams(location.search).get('open'));
+        if(openId)openDrawer(openId);
+      }catch(e){
+        toast('Could not load transactions: '+e.message);
+      }
+    }
+
+    const ACTION_LABEL={Pending:'Review',Acknowledged:'Review','For Approval':isDirector()?'Approve':'',Approved:'Release',Released:'Return',Overdue:'Return','For Resolution':'Resolve',Replacement:'Resolve',Resolved:'Complete'};
+    function render(rows=txns){document.getElementById('shown').textContent=rows.length;document.getElementById('transactions').innerHTML=rows.map(t=>{const label=ACTION_LABEL[t.status];return `<tr><td><span class="txn-id">${t.id}</span></td><td>${t.date}<span class="sub">${t.time}</span></td><td><b>${t.name}</b><span class="sub">${t.bsf}</span></td><td><span class="badge type">${t.type}</span></td><td>${t.college}</td><td class="purpose">${t.purpose}</td><td>${t.items.length}</td><td>${t.due}</td><td><span class="badge ${cls(t.status)}">${t.status}</span></td><td>${t.review}</td><td>${t.approve}</td><td><div class="actions"><button class="link-btn" onclick="openDrawer(${t.dbId})">View</button>${label?`<button class="link-btn primary" onclick="openDrawer(${t.dbId})">${label}</button>`:''}</div></td></tr>`}).join('')};
+    function section(title,body){return `<section class="section"><div class="section-title">${title}</div><div class="section-body">${body}</div></section>`}
+    function event(title,detail,done=true){return `<div class="event"><div class="dotline"><div class="dot ${done?'':'gray'}">${done?'✓':'•'}</div><div class="line"></div></div><div><b>${title}</b><p>${detail}</p></div></div>`}
+    // itemConditions holds the per-item Good/Damaged/Lost pick during a return
+    // — reset each time the drawer opens on a Released/Overdue transaction.
+    let itemConditions={};
+    function chooseItemCondition(btn,code,type){
+      itemConditions[code]=type;
+      btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on','bad'));
+      btn.classList.add('on');if(type!=='Good')btn.classList.add('bad');
+    }
+    function equipment(t,returning=false){return t.items.map(it=>`<div class="equipment-row"><div class="qr">QR</div><div class="grow"><b>${it.name}</b><span class="sub">${it.code} · ${returning?'Released':'Available'}</span>${returning?`<div class="item-condition"><button class="on" onclick="chooseItemCondition(this,'${it.code}','Good')">Good</button><button onclick="chooseItemCondition(this,'${it.code}','Damaged')">Damaged</button><button onclick="chooseItemCondition(this,'${it.code}','Lost')">Lost</button></div>`:''}</div><button class="scan" data-code="${it.code}" data-name="${it.name.replace(/"/g,'&quot;')}" onclick="scanItem(this)">Scan QR</button></div>`).join('')}
+    // Read-only listing for the Overview tab — just what was requested, no
+    // scan control (scanning only happens during the actual Workflow step).
+    function equipmentDetails(t){return t.items.map(it=>`<div class="equipment-row"><div class="grow"><b>${it.name}</b><span class="sub">${it.code}</span></div></div>`).join('')}
+
+    // --- Submitted documents (Valid ID / Authorization Document) — viewable once approved ---
+    const APPROVED_ONWARD=['Approved','Released','Returned','Overdue','For Resolution','Replacement','Resolved','Completed'];
+    function documentsSection(t){
+      if(!APPROVED_ONWARD.includes(t.status)){
+        return section('Submitted Documents','<div class="ack">Documents become viewable once the request is approved.</div>');
+      }
+      const nameEsc=t.name.replace(/"/g,'&quot;');
+      const row=(type,label)=>`<div class="equipment-row" id="docRow-${type}"><div class="grow"><b>${label}</b><span class="sub" id="docStatus-${type}">Checking…</span></div><button class="scan" id="docBtn-${type}" onclick="viewDocument(${t.borrowerId},'${type}','${label} — ${nameEsc}')">View Document</button></div>`;
+      return section('Submitted Documents',row('valid-id','Valid ID')+row('authorization-document','Authorization Document'));
+    }
+    function loadDocumentStatus(t){
+      if(!APPROVED_ONWARD.includes(t.status)||!t.borrowerId)return;
+      apiFetch(`/api/borrowers/${t.borrowerId}/documents`).then(status=>{
+        updateDocRow('valid-id',status.validIdUploaded);
+        updateDocRow('authorization-document',status.authorizationDocumentUploaded);
+      }).catch(()=>{});
+    }
+    function updateDocRow(type,uploaded){
+      const btn=document.getElementById('docBtn-'+type),statusEl=document.getElementById('docStatus-'+type);
+      if(!btn||!statusEl)return;
+      if(uploaded){statusEl.textContent='Submitted';}
+      else{statusEl.textContent='Not submitted';btn.disabled=true;btn.style.opacity=.5;btn.style.cursor='not-allowed';btn.removeAttribute('onclick');}
+    }
+    async function viewDocument(borrowerId,type,label){
+      const overlay=document.getElementById('docViewerOverlay'),body=document.getElementById('docViewerBody'),status=document.getElementById('docViewerStatus');
+      document.getElementById('docViewerTitle').textContent=label;
+      body.innerHTML='';status.className='scan-status';status.textContent='Loading document…';
+      overlay.classList.add('show');overlay.setAttribute('aria-hidden','false');
+      try{
+        const token=localStorage.getItem('rsuSdpoToken');
+        const res=await fetch(`/api/borrowers/${borrowerId}/documents/${type}`,{headers:{Authorization:'Bearer '+token}});
+        if(!res.ok){
+          const errBody=await res.json().catch(()=>null);
+          throw new Error((errBody&&errBody.message)||`Could not load document (${res.status})`);
+        }
+        const blob=await res.blob();
+        const url=URL.createObjectURL(blob);
+        body.innerHTML=blob.type==='application/pdf'
+          ?`<iframe src="${url}" style="width:100%;height:70vh;border:0;background:#fff"></iframe>`
+          :`<img src="${url}" alt="${label}" style="max-width:100%;max-height:70vh;display:block;margin:auto">`;
+        status.textContent='';
+      }catch(e){
+        status.className='scan-status err';status.textContent=e.message;
+      }
+    }
+    function closeDocViewer(){
+      document.getElementById('docViewerOverlay').classList.remove('show');
+      document.getElementById('docViewerOverlay').setAttribute('aria-hidden','true');
+      document.getElementById('docViewerBody').innerHTML='';
+    }
+    // Looked up by real dbId (not row position) so drawer actions always target the
+    // transaction that was actually clicked, even when the table is filtered/sorted.
+    function drawerActionsHtml(t){
+      if(['Pending','Acknowledged'].includes(t.status)){
+        return '<button class="btn green" onclick="reviewTxn(\'accept\')">Accept for Approval</button><button class="btn dark" onclick="reviewTxn(\'correction\')">Return for Correction</button><button class="btn red" onclick="reviewTxn(\'reject\')">Reject</button>';
+      }
+      if(t.status==='For Approval'){
+        return isDirector()?'<button class="btn green" onclick="approveTxn()">Approve</button><button class="btn red" onclick="rejectTxn()">Reject</button>':'<span class="sub">Only a Director can approve this request.</span>';
+      }
+      if(t.status==='Approved')return '<button class="btn dark" onclick="showTab(\'workflow\')">Release Equipment</button>';
+      if(['Released','Overdue'].includes(t.status))return '<button class="btn dark" onclick="showTab(\'workflow\')">Return Equipment</button>';
+      if(['For Resolution','Replacement'].includes(t.status))return '<button class="btn dark" onclick="showTab(\'workflow\')">Manage Resolution</button>';
+      if(t.status==='Resolved')return '<button class="btn green" onclick="completeTxn()">Mark Complete</button>';
+      return '';
+    }
+    function workflowTimelineHtml(t){
+      const reviewed=!['Pending','Acknowledged'].includes(t.status);
+      const approved=!['Pending','Acknowledged','For Review','For Approval'].includes(t.status)&&t.status!=='Rejected';
+      const releasedOnward=['Released','Overdue','For Resolution','Replacement','Resolved','Completed'].includes(t.status);
+      const returnedOnward=['For Resolution','Replacement','Resolved','Completed'].includes(t.status)||t.status==='Completed';
+      return `<div class="timeline">${event('Request Submitted',t.date+' · '+t.time)}${event('Reviewed',t.status==='Rejected'&&!approved?'Rejected':t.review!=='—'?'Reviewed by '+t.review:'Awaiting review',reviewed)}${event('Approved',t.status==='Rejected'?'Rejected':approved?'Approved by '+t.approve:'Awaiting approval',approved)}${event('Released',releasedOnward?'Equipment released':'',releasedOnward)}${event('Returned',returnedOnward?'Equipment returned':'',returnedOnward)}</div>`;
+    }
+    function openDrawer(dbId){current=txns.find(t=>t.dbId===dbId);if(!current)return;const t=current;document.getElementById('drawerBadges').innerHTML=`<span class="badge ${cls(t.status)}">${t.id}</span> <span class="badge ${cls(t.status)}">${t.status}</span> <span class="badge type">${t.type}</span>`;document.getElementById('drawerName').textContent=t.name;document.getElementById('drawerCollege').textContent=`${t.college} · ${t.bsf}`;document.getElementById('drawerActions').innerHTML=drawerActionsHtml(t);
+      document.getElementById('overview').innerHTML=section('Borrower Information',`<div class="info-grid"><div class="info"><label>Transaction No.</label><div>${t.id}</div></div><div class="info"><label>BSF Number</label><div>${t.bsf}</div></div><div class="info"><label>Borrower Name</label><div>${t.name}</div></div><div class="info"><label>Borrower Type</label><div>${t.type}</div></div><div class="info"><label>College / Unit</label><div>${t.college}</div></div><div class="info"><label>Email</label><div>${t.email}</div></div></div>`)+section('Request Details',`<div class="info-grid"><div class="info"><label>Request Date</label><div>${t.date} ${t.time}</div></div><div class="info"><label>Expected Return</label><div>${t.due}</div></div><div class="info" style="grid-column:1/-1"><label>Purpose</label><div>${t.purpose}</div></div></div>`)+section(`Equipment Requested · ${t.items.length} items`,equipmentDetails(t))+documentsSection(t);
+      loadDocumentStatus(t);
+      let workflowBody;
+      if(t.status==='Approved'){
+        workflowBody=section('QR-Based Release Section',`<h4>Equipment Scan Checklist</h4>${equipment(t)}<div style="text-align:right;margin-top:12px"><button class="btn green" onclick="confirmRelease()">Confirm Release</button></div>`);
+      }else if(['Released','Overdue'].includes(t.status)){
+        itemConditions={};
+        workflowBody=section('QR-Based Return Section',`<p class="sub" style="margin:0 0 10px">Scan each item, then set its returned condition. Any Damaged/Lost item automatically creates a Damage/Loss Record and restricts the borrower until a verified replacement is resolved.</p>${equipment(t,true)}<div style="text-align:right;margin-top:12px"><button class="btn green" onclick="confirmReturn()">Confirm Return</button></div>`);
+      }else if(['For Resolution','Replacement','Resolved'].includes(t.status)){
+        workflowBody=section('Damage / Loss Resolution','<div id="resolutionRecords" class="ack">Loading…</div>');
+      }else{
+        workflowBody=section('Workflow Status','<div class="ack">The request is awaiting the next step.</div>');
+      }
+      document.getElementById('workflow').innerHTML=section('Approval Workflow Timeline',workflowTimelineHtml(t))+workflowBody;
+      if(['For Resolution','Replacement','Resolved'].includes(t.status))loadResolutionRecords(t);
+      document.getElementById('activity').innerHTML=section('Activity Log / Audit Trail','<div id="activityLogBody" class="ack">Loading…</div>');
+      loadActivityLog(t);
+      showTab('overview');document.getElementById('overlay').classList.add('show');document.getElementById('overlay').setAttribute('aria-hidden','false')}
+    function closeDrawer(){document.getElementById('overlay').classList.remove('show');document.getElementById('overlay').setAttribute('aria-hidden','true')}
+    function showTab(id){document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===id));document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id===id))}
+    document.querySelectorAll('.tab').forEach(x=>x.addEventListener('click',()=>showTab(x.dataset.tab)));document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeDrawer()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
+
+    async function reviewTxn(action){
+      const labels={accept:'Accept for Approval',correction:'Return for Correction',reject:'Reject'};
+      const remarks=action!=='accept'?(prompt('Remarks (optional):')||''):'';
+      if(!confirm(`${labels[action]} — transaction ${current.id}?`))return;
+      try{
+        await apiFetch(`/api/borrow/${current.dbId}/review`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,remarks})});
+        closeDrawer();await loadTransactions();toast('Review recorded: '+labels[action])
+      }catch(e){alert(e.message)}
+    }
+    async function approveTxn(){
+      if(!confirm(`Approve transaction ${current.id}?`))return;
+      try{await apiFetch(`/api/borrow/${current.dbId}/approve`,{method:'PATCH'});closeDrawer();await loadTransactions();toast('Transaction approved')}
+      catch(e){alert(e.message)}
+    }
+    async function rejectTxn(){
+      if(!confirm(`Reject transaction ${current.id}?`))return;
+      try{await apiFetch(`/api/borrow/${current.dbId}/reject`,{method:'PATCH'});closeDrawer();await loadTransactions();toast('Transaction rejected')}
+      catch(e){alert(e.message)}
+    }
+    async function confirmRelease(){
+      if(document.querySelectorAll('#workflow .scan:not(.scanned)').length>0){toast('Scan every item before confirming release');return}
+      try{
+        await apiFetch(`/api/borrow/${current.dbId}/release`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemCodes:current.items.map(i=>i.code)})});
+        closeDrawer();await loadTransactions();toast('Equipment released')
+      }catch(e){alert(e.message)}
+    }
+    async function confirmReturn(){
+      if(document.querySelectorAll('#workflow .scan:not(.scanned)').length>0){toast('Scan every item before confirming return');return}
+      const items=current.items.map(i=>({itemCode:i.code,condition:itemConditions[i.code]||'Good'}));
+      try{
+        await apiFetch(`/api/return/${current.dbId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+        closeDrawer();await loadTransactions();toast('Equipment returned')
+      }catch(e){alert(e.message)}
+    }
+    async function completeTxn(){
+      if(!confirm(`Mark transaction ${current.id} as Completed?`))return;
+      try{await apiFetch(`/api/borrow/${current.dbId}/complete`,{method:'PATCH'});closeDrawer();await loadTransactions();toast('Transaction completed')}
+      catch(e){alert(e.message)}
+    }
+
+    // --- Damage/Loss resolution panel (For Resolution / Replacement / Resolved) ---
+    function resolutionPillClass(status){
+      return status==='Resolved'?'resolved':status==='Replacement Verified'?'approved':status==='Replacement Submitted'?'for-approval':'rejected';
+    }
+    function resolutionRecordHtml(r){
+      let actionHtml;
+      if(r.resolutionStatus==='Pending Replacement'){
+        actionHtml=`<div class="resolution-field"><label>Replacement Equipment</label><input id="replEquip-${r.id}" placeholder="e.g. New Molten basketball, same spec"></div><div class="resolution-field"><label>Replacement Date</label><input id="replDate-${r.id}" type="date"></div><div class="resolution-actions"><button class="btn dark" onclick="submitReplacementFor(${r.id})">Submit Replacement</button></div>`;
+      }else if(r.resolutionStatus==='Replacement Submitted'){
+        actionHtml=`<div class="sub">Submitted: ${r.replacementEquipment} (${r.replacementDate})</div><div class="resolution-actions"><button class="btn green" onclick="verifyReplacementFor(${r.id})">Verify Replacement</button></div>`;
+      }else if(r.resolutionStatus==='Replacement Verified'){
+        actionHtml=`<div class="sub">Verified by ${r.replacementVerifiedBy||'—'}</div><div class="resolution-actions"><button class="btn green" onclick="resolveRecordFor(${r.id})">Mark Resolved</button></div>`;
+      }else{
+        actionHtml=`<div class="sub">Resolved ${r.resolutionDate||''}</div>`;
+      }
+      return `<div class="resolution-record"><h5>${r.incidentType} — ${r.equipmentName} (${r.itemCode})</h5><span class="badge ${resolutionPillClass(r.resolutionStatus)} resolution-status-pill">${r.resolutionStatus}</span><div class="sub">${r.conditionDetails||''}</div><div class="sub">Recorded by ${r.recordedBy} on ${r.dateReported}</div>${actionHtml}</div>`;
+    }
+    async function loadResolutionRecords(t){
+      const el=document.getElementById('resolutionRecords');
+      if(!el)return;
+      try{
+        const all=await apiFetch('/api/damage-loss');
+        const records=all.filter(r=>r.transactionId===t.dbId);
+        el.innerHTML=records.length?records.map(resolutionRecordHtml).join(''):'<div class="ack">No damage/loss records for this transaction.</div>';
+      }catch(e){el.textContent='Could not load records: '+e.message}
+    }
+    async function submitReplacementFor(id){
+      const equip=document.getElementById('replEquip-'+id).value.trim();
+      const date=document.getElementById('replDate-'+id).value;
+      if(!equip||!date){toast('Enter both replacement equipment and date');return}
+      try{
+        await apiFetch(`/api/damage-loss/${id}/replacement`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({replacementEquipment:equip,replacementDate:date})});
+        await loadResolutionRecords(current);await loadTransactions();toast('Replacement submitted')
+      }catch(e){alert(e.message)}
+    }
+    async function verifyReplacementFor(id){
+      if(!confirm('Verify this replacement is equivalent to the original equipment?'))return;
+      try{await apiFetch(`/api/damage-loss/${id}/verify`,{method:'PATCH'});await loadResolutionRecords(current);toast('Replacement verified')}
+      catch(e){alert(e.message)}
+    }
+    async function resolveRecordFor(id){
+      if(!confirm('Mark this damage/loss record as resolved? This requires the replacement to already be verified.'))return;
+      try{await apiFetch(`/api/damage-loss/${id}/resolve`,{method:'PATCH'});await loadResolutionRecords(current);await loadTransactions();toast('Record resolved')}
+      catch(e){alert(e.message)}
+    }
+
+    // --- Activity tab: real per-transaction audit trail ---
+    async function loadActivityLog(t){
+      const el=document.getElementById('activityLogBody');
+      if(!el)return;
+      try{
+        const rows=await apiFetch(`/api/audit-logs?transactionId=${t.dbId}`);
+        el.innerHTML=rows.length?rows.map(r=>`<div class="activity-log-row"><b>${r.oldStatus}</b><span class="arrow">→</span><b>${r.newStatus}</b><span class="sub"> · by ${r.changedBy}</span>${r.remarks?`<div class="sub">${r.remarks}</div>`:''}<time>${new Date(r.changeDatetime).toLocaleString()}</time></div>`).join(''):'<div class="ack">No status changes recorded yet.</div>';
+      }catch(e){el.textContent='Could not load activity: '+e.message}
+    }
+
+    // --- New Transaction modal ---
+    async function openNewTxnModal(){
+      document.getElementById('newTxnOverlay').classList.add('show');document.getElementById('newTxnOverlay').setAttribute('aria-hidden','false');
+      document.getElementById('newTxnError').textContent='';
+      document.getElementById('newTxnBorrower').innerHTML='<option value="">Loading…</option>';
+      document.getElementById('newTxnItems').innerHTML='<p class="sub">Loading…</p>';
+      try{
+        const [borrowers,items]=await Promise.all([apiFetch('/api/borrowers'),apiFetch('/api/qr/items')]);
+        const available=items.filter(i=>i.status==='Available');
+        document.getElementById('newTxnBorrower').innerHTML='<option value="">Select borrower…</option>'+borrowers.map(b=>`<option value="${b.id}">${b.firstName} ${b.lastName} — ${b.collegeOrUnit}</option>`).join('');
+        document.getElementById('newTxnItems').innerHTML=available.length?available.map(i=>`<label class="item-check"><input type="checkbox" value="${i.id}"> ${i.equipmentName} <span class="sub">${i.code}</span></label>`).join(''):'<p class="sub">No available items right now.</p>';
+      }catch(e){
+        document.getElementById('newTxnError').textContent=e.message;
+      }
+    }
+    function closeNewTxnModal(){document.getElementById('newTxnOverlay').classList.remove('show');document.getElementById('newTxnOverlay').setAttribute('aria-hidden','true')}
+    async function submitNewTxn(){
+      const borrowerId=Number(document.getElementById('newTxnBorrower').value);
+      const itemIds=[...document.querySelectorAll('#newTxnItems input:checked')].map(el=>Number(el.value));
+      const purpose=document.getElementById('newTxnPurpose').value.trim();
+      const due=document.getElementById('newTxnDue').value;
+      const errEl=document.getElementById('newTxnError');
+      if(!borrowerId){errEl.textContent='Select a borrower.';return}
+      if(itemIds.length===0){errEl.textContent='Select at least one item.';return}
+      try{
+        await apiFetch('/api/borrow',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({borrowerId,itemIds,purpose,expectedReturnDatetime:due||null})});
+        closeNewTxnModal();await loadTransactions();toast('Transaction created')
+      }catch(e){errEl.textContent=e.message}
+    }
+    // --- QR camera scanner: verifies the physically scanned item against the row it was opened from ---
+const scanOverlay=document.getElementById('scanOverlay'),scanVideo=document.getElementById('scanVideo'),scanStatus=document.getElementById('scanStatus'),scanTitle=document.getElementById('scanTitle'),scanCameraSelect=document.getElementById('scanCameraSelect'),scanCameraRow=document.querySelector('.scan-camera-row');
+const scanCanvas=document.createElement('canvas');const scanCtx=scanCanvas.getContext('2d',{willReadFrequently:true});
+let scanStream=null,scanRAF=null,scanTargetBtn=null,scanExpectedCode=null,scanLocked=false;
+const SCAN_CAMERA_KEY='rsuSdpoScanCameraId';
+
+function extractScanCode(text){
+  try{const u=new URL(text);const c=u.searchParams.get('code');if(c)return c}catch(e){/* not a URL — treat as a raw code */}
+  return text.trim();
+}
+
+// Starts (or restarts) the video stream on a specific camera. Falls back to
+// the browser's default pick when no deviceId is known yet or the requested
+// device is no longer available (e.g. the webcam was unplugged).
+async function startScanStream(deviceId){
+  if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}
+  const constraints=deviceId?{video:{deviceId:{exact:deviceId}}}:{video:{facingMode:'environment'}};
+  try{
+    scanStream=await navigator.mediaDevices.getUserMedia(constraints);
+  }catch(e){
+    if(deviceId){scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})}
+    else throw e;
+  }
+  scanVideo.srcObject=scanStream;
+  await scanVideo.play();
+}
+
+// Device labels are blank until permission has been granted at least once,
+// so this always runs after startScanStream() has already opened a stream.
+async function populateScanCameras(){
+  let cams=[];
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    cams=devices.filter(d=>d.kind==='videoinput');
+  }catch(e){ /* enumeration unsupported — keep the picker hidden */ }
+  scanCameraRow.hidden=cams.length<2;
+  scanCameraSelect.innerHTML=cams.map((d,i)=>`<option value="${d.deviceId}">${d.label||('Camera '+(i+1))}</option>`).join('');
+  const activeId=scanStream&&scanStream.getVideoTracks()[0]&&scanStream.getVideoTracks()[0].getSettings().deviceId;
+  if(activeId&&cams.some(d=>d.deviceId===activeId))scanCameraSelect.value=activeId;
+}
+
+async function scanItem(btn){
+  if(btn.classList.contains('scanned'))return;
+  scanTargetBtn=btn;scanExpectedCode=btn.dataset.code;scanLocked=false;
+  scanTitle.textContent=`Scan: ${btn.dataset.name} (${scanExpectedCode})`;
+  scanStatus.className='scan-status';scanStatus.textContent='Requesting camera access…';
+  scanOverlay.classList.add('show');scanOverlay.setAttribute('aria-hidden','false');
+  try{
+    await startScanStream(localStorage.getItem(SCAN_CAMERA_KEY));
+    await populateScanCameras();
+  }catch(e){
+    scanStatus.className='scan-status err';
+    scanStatus.textContent=e.name==='NotAllowedError'?'Camera access was denied. Allow camera permission and try again.':`Could not access camera: ${e.message}`;
+    return;
+  }
+  scanStatus.textContent='Point the camera at the item’s QR code…';
+  scanRAF=requestAnimationFrame(scanTick);
+}
+
+scanCameraSelect.addEventListener('change',async()=>{
+  const deviceId=scanCameraSelect.value;
+  if(!deviceId)return;
+  localStorage.setItem(SCAN_CAMERA_KEY,deviceId);
+  scanLocked=false;
+  scanStatus.className='scan-status';scanStatus.textContent='Switching camera…';
+  try{
+    await startScanStream(deviceId);
+    scanStatus.textContent='Point the camera at the item’s QR code…';
+  }catch(e){
+    scanStatus.className='scan-status err';
+    scanStatus.textContent=`Could not switch camera: ${e.message}`;
+  }
+});
+
+function scanTick(){
+  if(!scanStream)return;
+  if(scanVideo.readyState===scanVideo.HAVE_ENOUGH_DATA&&!scanLocked){
+    scanCanvas.width=scanVideo.videoWidth;scanCanvas.height=scanVideo.videoHeight;
+    scanCtx.drawImage(scanVideo,0,0,scanCanvas.width,scanCanvas.height);
+    const frame=scanCtx.getImageData(0,0,scanCanvas.width,scanCanvas.height);
+    const result=jsQR(frame.data,frame.width,frame.height,{inversionAttempts:'dontInvert'});
+    if(result&&result.data)handleScanResult(result.data);
+  }
+  scanRAF=requestAnimationFrame(scanTick);
+}
+
+function handleScanResult(rawText){
+  const scanned=extractScanCode(rawText);
+  if(scanned===scanExpectedCode){
+    scanLocked=true;
+    scanStatus.className='scan-status ok';
+    scanStatus.textContent=`✓ Match confirmed — ${scanned}`;
+    scanTargetBtn.textContent='✓ Scanned';
+    scanTargetBtn.classList.add('scanned');
+    setTimeout(closeScanner,700);
+  }else{
+    scanStatus.className='scan-status err';
+    scanStatus.textContent=`✗ Wrong item — expected ${scanExpectedCode}, scanned ${scanned}`;
+  }
+}
+
+function closeScanner(){
+  if(scanRAF)cancelAnimationFrame(scanRAF);
+  scanRAF=null;
+  if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}
+  scanVideo.srcObject=null;
+  scanOverlay.classList.remove('show');scanOverlay.setAttribute('aria-hidden','true');
+}
+scanOverlay.addEventListener('click',e=>{if(e.target===scanOverlay)closeScanner()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&scanOverlay.classList.contains('show'))closeScanner()});
+document.getElementById('docViewerOverlay').addEventListener('click',e=>{if(e.target.id==='docViewerOverlay')closeDocViewer()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('docViewerOverlay').classList.contains('show'))closeDocViewer()});
+let toastTimer;function toast(msg){let el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2400)}
+
+    // --- Filters: search + status + borrower type + category + overdue-only ---
+    let overdueOnly=false;
+    const searchInput=document.getElementById('search'),statusFilter=document.getElementById('statusFilter'),borrowerTypeFilter=document.getElementById('borrowerTypeFilter'),categoryFilter=document.getElementById('categoryFilter'),overdueBtn=document.getElementById('overdueOnlyBtn');
+    function applyFilters(){
+      const q=searchInput.value.toLowerCase();
+      const rows=txns.filter(t=>
+        (!q||(Object.values(t).filter(v=>typeof v!=='object').join(' ')+' '+t.items.map(it=>it.code+' '+it.name).join(' ')).toLowerCase().includes(q))&&
+        (!statusFilter.value||t.status===statusFilter.value)&&
+        (!borrowerTypeFilter.value||t.type===borrowerTypeFilter.value)&&
+        (!categoryFilter.value||t.category===categoryFilter.value)&&
+        (!overdueOnly||t.status==='Released')
+      );
+      render(rows);
+    }
+    [searchInput].forEach(el=>el.addEventListener('input',applyFilters));
+    [statusFilter,borrowerTypeFilter,categoryFilter].forEach(el=>el.addEventListener('change',applyFilters));
+    overdueBtn.addEventListener('click',()=>{overdueOnly=!overdueOnly;overdueBtn.classList.toggle('active',overdueOnly);overdueBtn.setAttribute('aria-pressed',String(overdueOnly));applyFilters()});
+    loadTransactions();
+  </script>
+</body>
+</html>

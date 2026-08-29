@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Requests | RSU-SDPO</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <link rel="stylesheet" href="../../css/main.css">
+  <style>
+    .content{max-width:1086px;margin:auto}
+
+    /* ---------- Filter pills + search ---------- */
+    .tools{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+    .filters{display:flex;gap:6px;flex-wrap:wrap}
+    .filter-pill{border:1px solid var(--color-border);border-radius:999px;background:var(--color-surface);color:var(--color-text-500);padding:6px 12px;font-size:12px;line-height:20px}
+    .filter-pill .count{display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:999px;background:var(--color-surface-muted);color:var(--color-text-600);margin-left:5px;font-size:10px}
+    .filter-pill.active{background:var(--color-accent-green-dark);color:#fff;border-color:var(--color-accent-green-dark)}
+    .filter-pill.active .count{background:rgba(255,255,255,.2);color:#fff}
+    .tools .search-field{max-width:260px;flex:none}
+
+    /* ---------- Request cards ---------- */
+    .cards{display:grid;gap:12px}
+    .request-card{overflow:hidden;background:var(--color-surface);border:0.8px solid var(--color-border-soft);border-radius:var(--radius-xl);box-shadow:var(--shadow-card)}
+    .request-card__head{display:flex;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:0.8px solid var(--color-border-soft)}
+    .request-id{font-size:15px;font-weight:600;color:var(--color-text-900)}
+    .requested-on{margin-top:2px;color:var(--color-text-500);font-size:12px}
+    .badge{align-self:start;display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+    .badge.pending{color:#a16207;background:#fef3c7}
+    .badge.approved{color:#059669;background:#d1fae5}
+    .badge.rejected{color:#dc2626;background:#fee2e2}
+    .badge.cancelled{color:var(--color-text-500);background:var(--color-surface-muted)}
+    .badge.completed{color:#2563eb;background:#dbeafe}
+    .request-card__body{padding:12px 20px;border-bottom:0.8px solid var(--color-border-soft)}
+    .field-label{font-size:11px;color:var(--color-text-500);letter-spacing:.4px;text-transform:uppercase;font-weight:600}
+    .items{display:flex;flex-wrap:wrap;gap:6px 16px;padding-top:8px;font-size:13px;color:var(--color-text-900)}
+    .items b{font-weight:600}
+    .total-line{padding-top:6px;color:var(--color-text-500);font-size:12px}
+    .total-line b{color:var(--color-text-900)}
+    .request-card__foot{padding:14px 20px 16px}
+    .return-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;color:var(--color-text-500);font-size:12px}
+    .return-row b{color:var(--color-text-900)}
+    .notice-reject{color:#b91c1c;font-size:12px}
+    .actions{display:flex;gap:10px;padding-top:12px}
+
+    /* ---------- Details modal ---------- */
+    .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .detail-field small{display:block;margin-bottom:4px;color:var(--color-text-500);font-size:11px;letter-spacing:.3px;text-transform:uppercase}
+    .detail-field b{font-size:13px;font-weight:600;color:var(--color-text-900)}
+    .modal__body h3{font-size:12px;letter-spacing:.3px;text-transform:uppercase;color:var(--color-text-500);margin:0}
+    .detail-items{margin:0;padding:0;list-style:none;border:0.8px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden}
+    .detail-items li{display:flex;justify-content:space-between;padding:11px 13px;border-bottom:0.8px solid var(--color-border-soft);font-size:13px;color:var(--color-text-900)}
+    .detail-items li:last-child{border:0}
+    .modal-note{border-radius:var(--radius-md);padding:12px 14px;background:var(--color-surface-soft);color:var(--color-text-600);font-size:13px}
+    .modal-note.reject{background:#fef2f2;color:#991b1b}
+
+    @media(max-width:650px){.tools{flex-direction:column;align-items:stretch}.tools .search-field{max-width:none}.detail-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-role="user" data-page="my-requests" data-title="My Requests" data-subtitle="Track your equipment borrowing requests and their status.">
+    <div class="tools">
+      <div class="filters" id="filters"></div>
+      <div class="search-field">
+        <img src="../../assets/icons/icon-search.svg" alt="">
+        <input type="text" id="searchInput" placeholder="Search requests..." aria-label="Search requests">
+      </div>
+    </div>
+    <section class="cards" id="cards" aria-live="polite"></section>
+  </div>
+
+  <div class="modal-overlay" id="detailModalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detailModalTitle">
+      <div class="modal__header">
+        <div><p class="modal__title" id="detailModalTitle" style="font-size:18px">Request details</p><p class="modal__subtitle" id="detailModalSub"></p></div>
+        <button type="button" class="modal__close" data-close-modal="detailModalOverlay" aria-label="Close"><img src="../../assets/icons/icon-close.svg" alt=""></button>
+      </div>
+      <div class="modal__body" id="detailModalBody"></div>
+      <div class="modal__footer" id="detailModalFoot"></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="../../js/shared/api.js"></script>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script>
+    // Only the request/approval phase lives here — once equipment is Released
+    // it moves to My Borrowings, and closed-out transactions move to History.
+    const REQUEST_STATUSES=['Pending','Approved','Rejected','Cancelled'];
+    const NOTE_BY_STATUS={
+      Pending:'Your request is awaiting staff review.',
+      Approved:'Please present your student ID when claiming the equipment.',
+      Cancelled:'This request was cancelled.'
+    };
+
+    function groupItems(items){
+      const counts=new Map();
+      items.forEach(i=>counts.set(i.name,(counts.get(i.name)||0)+1));
+      return Array.from(counts.entries());
+    }
+
+    function mapTransaction(t){
+      return {
+        dbId:t.dbId,
+        id:t.id,
+        date:t.date,
+        status:t.status,
+        items:groupItems(t.items),
+        total:t.items.length,
+        returnDate:t.due,
+        purpose:t.purpose,
+        note:NOTE_BY_STATUS[t.status]
+      };
+    }
+
+    let requests=[];
+    function loadRequests(){
+      return apiFetch('/api/borrow/mine').then(rows=>{
+        requests=rows.filter(t=>REQUEST_STATUSES.includes(t.status)).map(mapTransaction);
+      });
+    }
+
+    const filterList=['All','Pending','Approved','Rejected','Cancelled'];
+    let active='All',term='';
+    const icon={Pending:'◷',Approved:'✓',Rejected:'⊗',Cancelled:'⊘',Completed:'✓'};
+    const classFor=s=>s.toLowerCase();
+    const countFor=s=>s==='All'?requests.length:requests.filter(r=>r.status===s).length;
+
+    const $=id=>document.getElementById(id);
+    const filtersEl=$('filters'),cards=$('cards'),searchInput=$('searchInput');
+    const detailModalOverlay=$('detailModalOverlay'),detailModalTitle=$('detailModalTitle'),detailModalSub=$('detailModalSub'),detailModalBody=$('detailModalBody'),detailModalFoot=$('detailModalFoot');
+
+    function renderFilters(){
+      filtersEl.innerHTML=filterList.map(s=>`<button type="button" class="filter-pill ${s===active?'active':''}" data-filter="${s}">${s}<span class="count">${countFor(s)}</span></button>`).join('');
+    }
+
+    function renderCards(){
+      const rows=requests.filter(r=>(active==='All'||r.status===active)&&`${r.id} ${r.status} ${r.items.map(x=>x[0]).join(' ')}`.toLowerCase().includes(term));
+      cards.innerHTML=rows.length?rows.map(r=>`<article class="request-card">
+        <div class="request-card__head">
+          <div><div class="request-id">Request #${r.id}</div><div class="requested-on">Requested: ${r.date}</div></div>
+          <span class="badge ${classFor(r.status)}">${icon[r.status]} ${r.status}</span>
+        </div>
+        <div class="request-card__body">
+          <div class="field-label">Equipment Requested</div>
+          <div class="items">${r.items.map(([n,q])=>`<span>${n} — <b>${q} ${q===1?'unit':'units'}</b></span>`).join('')}</div>
+          <div class="total-line">Total: <b>${r.total} units</b></div>
+        </div>
+        <div class="request-card__foot">
+          <div class="return-row">
+            <span>Expected Return: <b>${r.returnDate}</b></span>
+            ${r.reason?`<span class="notice-reject">⊗ Reason: ${r.reason}</span>`:r.cancelled?`<span>Cancelled on: ${r.cancelled}</span>`:''}
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-secondary detail-btn" data-id="${r.id}">View Details</button>
+            ${r.status==='Pending'?`<button type="button" class="btn btn-outline-danger cancel-btn" data-id="${r.id}">Cancel Request</button>`:''}
+          </div>
+        </div>
+      </article>`).join(''):'<div class="empty-state"><p class="empty-state__title">No requests found</p><p>Try adjusting your filter or search term.</p></div>';
+    }
+
+    function openDetails(id){
+      const r=requests.find(x=>x.id===id);
+      detailModalTitle.textContent=`Request #${r.id}`;
+      detailModalSub.textContent=`Requested: ${r.date}`;
+      detailModalBody.innerHTML=`<div class="detail-grid">
+        <div class="detail-field"><small>Status</small><span class="badge ${classFor(r.status)}">${icon[r.status]} ${r.status}</span></div>
+        <div class="detail-field"><small>Expected return</small><b>${r.returnDate}</b></div>
+        <div class="detail-field"><small>Purpose</small><b>${r.purpose}</b></div>
+        <div class="detail-field"><small>Total requested</small><b>${r.total} units</b></div>
+      </div>
+      <h3>Equipment requested</h3>
+      <ul class="detail-items">${r.items.map(([n,q])=>`<li><span>${n}</span><b>${q} ${q===1?'unit':'units'}</b></li>`).join('')}</ul>
+      <div class="modal-note ${r.reason?'reject':''}">${r.reason?'Reason for rejection: '+r.reason:(r.note||'')}</div>`;
+      detailModalFoot.innerHTML=`<button type="button" class="btn btn-secondary" id="modalCloseBtn">Close</button>${r.status==='Pending'?'<button type="button" class="btn btn-outline-danger" id="modalCancelBtn">Cancel Request</button>':''}`;
+      detailModalOverlay.hidden=false;
+      $('modalCloseBtn').addEventListener('click',closeDetails);
+      const cancelBtn=$('modalCancelBtn');
+      if(cancelBtn)cancelBtn.addEventListener('click',()=>cancelRequest(r.id));
+    }
+    function closeDetails(){detailModalOverlay.hidden=true;}
+    function cancelRequest(id){
+      const r=requests.find(x=>x.id===id);
+      apiFetch('/api/borrow/'+r.dbId+'/cancel',{method:'PATCH'})
+        .then(()=>loadRequests())
+        .then(()=>{
+          closeDetails();renderFilters();renderCards();
+          showToast('Request '+r.id+' has been cancelled.','danger');
+        })
+        .catch(err=>showToast(err.message,'danger'));
+    }
+
+    function showToast(message,type){
+      const toast=document.createElement('div');
+      toast.className='toast toast--'+(type==='danger'?'danger':'success');
+      toast.innerHTML=`<span class="toast__dot"></span><span>${message}</span>`;
+      $('toastStack').appendChild(toast);
+      setTimeout(()=>toast.remove(),3200);
+    }
+
+    filtersEl.addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;active=b.dataset.filter;renderFilters();renderCards();});
+    searchInput.addEventListener('input',e=>{term=e.target.value.trim().toLowerCase();renderCards();});
+    cards.addEventListener('click',e=>{
+      const b=e.target.closest('[data-id]');
+      if(!b)return;
+      b.classList.contains('cancel-btn')?cancelRequest(b.dataset.id):openDetails(b.dataset.id);
+    });
+    document.querySelectorAll('[data-close-modal]').forEach(btn=>btn.addEventListener('click',closeDetails));
+    detailModalOverlay.addEventListener('click',e=>{if(e.target===detailModalOverlay)closeDetails();});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDetails();});
+
+    loadRequests().then(()=>{
+      renderFilters();
+      renderCards();
+    }).catch(err=>showToast('Could not load your requests: '+err.message,'danger'));
+  </script>
+</body>
+</html>

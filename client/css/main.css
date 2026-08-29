@@ -1,0 +1,205 @@
+@import url("base/reset.css");
+@import url("base/variables.css");
+@import url("base/typography.css");
+@import url("components/cards.css");
+@import url("components/forms.css");
+@import url("components/modals.css");
+
+body {
+  background: var(--color-surface);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.page-header p {
+  margin-top: 4px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--color-surface);
+  border: 0.8px solid var(--color-border-soft);
+  border-radius: var(--radius-xl);
+  padding: 16.8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.toolbar__count {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-900);
+}
+
+/* ---------- Category dropdown ---------- */
+.category-select {
+  position: relative;
+  width: 200px;
+}
+
+.category-select__trigger {
+  width: 100%;
+  height: 41.775px;
+  border: 0.8px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 14px;
+  color: var(--color-text-placeholder);
+}
+
+.category-select__trigger img {
+  width: 14px;
+  height: 14px;
+}
+
+.category-select__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 207px;
+  background: var(--color-surface);
+  border: 0.8px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
+  overflow: hidden;
+  z-index: 20;
+}
+
+.category-select__panel[hidden] {
+  display: none;
+}
+
+.category-select__option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8.6px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-900);
+}
+
+.category-select__option:hover {
+  background: var(--color-surface-soft);
+}
+
+.category-select__option--active {
+  background: var(--color-accent-green-bg);
+  color: var(--color-accent-green);
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.btn img {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  box-shadow: var(--shadow-button);
+}
+
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  height: 36px;
+  border: 0.8px solid var(--color-border);
+  color: var(--color-text-600);
+  background: var(--color-surface);
+}
+
+.btn-secondary:hover {
+  background: var(--color-surface-soft);
+}
+
+.btn-outline-danger {
+  height: 36px;
+  border: 0.889px solid var(--color-danger-border);
+  color: var(--color-danger-strong);
+  padding: 0 14px;
+}
+
+.btn-outline-danger:hover {
+  background: var(--color-danger-bg);
+}
+
+.btn-outline-danger img {
+  width: 16px;
+  height: 16px;
+}
+
+.btn-danger {
+  height: 36px;
+  background: var(--color-danger-strong);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #b40006;
+}
+
+.btn-success {
+  background: var(--color-accent-green);
+  color: #fff;
+}
+
+.btn-success:hover {
+  background: var(--color-accent-green-dark);
+}
+
+.modal__footer .btn-primary,
+.modal__footer .btn-secondary {
+  height: 36px;
+}
+
+.modal--details .modal__footer .btn {
+  height: 48px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- Utilities ---------- */
+.icon-rotate-neg90 {
+  transform: rotate(-90deg);
+}
+
+.modal__footer--split {
+  justify-content: space-between;
+}
+
+.modal__footer-group {
+  display: flex;
+  gap: 12px;
+}
+
+/* Sidebar/topbar responsive behavior now lives in app-shell.css. */

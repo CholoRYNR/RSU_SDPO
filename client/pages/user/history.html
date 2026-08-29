@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>History | RSU-SDPO</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <link rel="stylesheet" href="../../css/main.css">
+  <style>
+    .content{max-width:1086px;margin:auto}
+    .hidden{display:none!important}
+
+    /* ---------- On-time rate card ---------- */
+    .rate-card{background:var(--color-surface);border:0.8px solid var(--color-border-soft);border-radius:var(--radius-xl);box-shadow:var(--shadow-card);padding:18px 22px;display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px}
+    .rate-card .muted{color:var(--color-text-500);font-size:12px}
+    .rate-card b{display:block;font-size:32px;color:var(--color-accent-green-dark);margin:2px 0}
+    .rate-card .late{color:var(--color-warn-text);font-size:12px;margin-top:4px}
+    .ring{width:72px;height:72px;flex-shrink:0;border:5px solid #cceee2;border-top-color:var(--color-accent-green-dark);border-right-color:var(--color-accent-green-dark);border-radius:50%;display:grid;place-items:center;color:var(--color-accent-green-dark);font-weight:700;font-size:13px}
+
+    /* ---------- Filter tabs + search ---------- */
+    .controls{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;margin-bottom:16px}
+    .tabs{display:flex;gap:6px;flex-wrap:wrap}
+    .tab-pill{border:0;border-radius:999px;padding:8px 13px;background:transparent;color:var(--color-text-500);font-size:12px}
+    .tab-pill em{font-style:normal;background:var(--color-surface-muted);border-radius:9px;padding:1px 6px;margin-left:4px;font-size:10px}
+    .tab-pill.active{background:var(--color-accent-green-dark);color:#fff}
+    .tab-pill.active em{background:rgba(255,255,255,.2);color:#fff}
+    .controls .search-field{max-width:260px;flex:none}
+
+    /* ---------- Transaction list ---------- */
+    .list{display:grid;gap:14px}
+    .trans-card{overflow:hidden;background:var(--color-surface);border:0.8px solid var(--color-border-soft);border-radius:var(--radius-xl);box-shadow:var(--shadow-card)}
+    .trans-card header{padding:18px 20px;border-bottom:0.8px solid var(--color-border-soft);display:flex;justify-content:space-between;gap:12px}
+    .trans-title{font-weight:600;font-size:15px;color:var(--color-text-900)}
+    .trans-date{color:var(--color-text-500);font-size:12px;margin-top:2px}
+    .badge{font-size:12px;padding:4px 10px;border-radius:999px;font-weight:600;height:fit-content;white-space:nowrap}
+    .badge.completed{color:var(--color-accent-green-dark);background:#d1fae5}
+    .badge.cancelled{color:var(--color-text-500);background:var(--color-surface-muted)}
+    .badge.rejected{color:#dc2626;background:#fee2e2}
+    .trans-body{padding:12px 20px;border-bottom:0.8px solid var(--color-border-soft)}
+    .field-label{font-size:11px;color:var(--color-text-500);letter-spacing:.4px;text-transform:uppercase;font-weight:600}
+    .trans-items{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:8px;color:var(--color-text-900);font-size:13px}
+    .trans-total{margin-top:6px;color:var(--color-text-500);font-size:12px}
+    .trans-return-row{padding:12px 20px;border-bottom:0.8px solid var(--color-border-soft);color:var(--color-text-500);font-size:12px}
+    .trans-foot{padding:14px 20px 16px}
+
+    /* ---------- Detail view ---------- */
+    .back-btn{background:transparent;border:0;color:var(--color-text-600);padding:6px 0;font-size:13px;font-weight:500;margin-bottom:12px}
+    .detail{display:grid;gap:14px}
+    .detail-card{background:var(--color-surface);border:0.8px solid var(--color-border-soft);border-radius:var(--radius-xl);box-shadow:var(--shadow-card)}
+    .detail-card h2{padding:16px 20px;border-bottom:0.8px solid var(--color-border-soft);margin:0;font-size:14px;color:var(--color-text-900)}
+    .detail-rows{padding:14px 20px}
+    .detail-row{min-height:40px;border-bottom:0.8px solid var(--color-border-soft);display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0}
+    .detail-row:last-child{border:0}
+    .detail-row label{color:var(--color-text-500);font-size:13px}
+    .detail-row strong{font-size:13px;color:var(--color-text-900);font-weight:600}
+
+    /* ---------- Timeline ---------- */
+    .timeline{display:flex;align-items:flex-start;overflow-x:auto;padding:20px}
+    .step{min-width:78px;text-align:center;color:var(--color-accent-green-dark);font-size:11px}
+    .step .dot{margin:0 auto 7px;width:26px;height:26px;background:var(--color-accent-green-dark);color:#fff;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700}
+    .join{width:40px;min-width:40px;height:2px;background:var(--color-accent-green-dark);margin-top:12px}
+
+    @media(max-width:650px){.controls{flex-direction:column;align-items:stretch}.controls .search-field{max-width:none}}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-role="user" data-page="history" data-title="History" data-subtitle="View your previous equipment borrowing transactions.">
+    <section id="historyView">
+      <article class="rate-card">
+        <div>
+          <span class="muted">On-Time Return Rate</span>
+          <b>92%</b>
+          <span class="muted">You returned 11 of 12 completed borrowings on time</span>
+          <p class="late">◉ 1 late return</p>
+        </div>
+        <div class="ring">92%</div>
+      </article>
+      <div class="controls">
+        <div class="tabs" id="tabs"></div>
+        <div class="search-field">
+          <img src="../../assets/icons/icon-search.svg" alt="">
+          <input type="text" id="searchInput" placeholder="Search history..." aria-label="Search history">
+        </div>
+      </div>
+      <div class="list" id="list"></div>
+    </section>
+
+    <section id="detailsView" class="hidden">
+      <button type="button" class="back-btn" id="backBtn">‹ &nbsp;Back to History</button>
+      <div class="detail">
+        <article class="detail-card"><h2>Transaction Information</h2><div class="detail-rows">
+          <div class="detail-row"><label>Transaction Number</label><strong id="detailNumber"></strong></div>
+          <div class="detail-row"><label>Date Requested</label><strong id="detailRequested"></strong></div>
+          <div class="detail-row"><label>Status</label><span class="badge completed">◉ Completed</span></div>
+        </div></article>
+        <article class="detail-card"><h2>Equipment</h2><div class="detail-rows" id="detailItems"></div></article>
+        <article class="detail-card"><h2>Activity Information</h2><div class="detail-rows" id="activityRows"></div></article>
+        <article class="detail-card" id="returnCard"><h2>Return Information</h2><div class="detail-rows" id="returnRows"></div></article>
+        <article class="detail-card"><h2>Transaction Timeline</h2><div class="timeline" id="timeline"></div></article>
+      </div>
+    </section>
+  </div>
+
+  <script src="../../js/shared/api.js"></script>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script>
+    // 'Returned' is a legacy status kept in the ENUM for old data but no
+    // longer produced by new returns — those land directly on Completed or
+    // (if damaged/lost) stay active under For Resolution/Replacement/Resolved
+    // until closed, so they're deliberately excluded from History.
+    const HISTORY_STATUSES=['Returned','Completed','Cancelled','Rejected'];
+    const STATUS_BUCKET={Returned:'completed',Completed:'completed',Cancelled:'cancelled',Rejected:'rejected'};
+    const badgeIcon={completed:'✓',cancelled:'⊘',rejected:'⊗'};
+
+    function groupItems(items){
+      const counts=new Map();
+      items.forEach(i=>counts.set(i.name,(counts.get(i.name)||0)+1));
+      return Array.from(counts.entries()).map(([name,qty])=>`${name} — ${qty} unit${qty===1?'':'s'}`);
+    }
+
+    function mapTransaction(t){
+      return {
+        dbId:t.dbId,
+        id:t.id,
+        date:t.date,
+        items:groupItems(t.items),
+        rawItems:t.items,
+        fees:t.fees||[],
+        returned:t.returned,
+        due:t.due,
+        purpose:t.purpose,
+        status:STATUS_BUCKET[t.status]
+      };
+    }
+
+    let data=[];
+    function loadHistory(){
+      return apiFetch('/api/borrow/mine').then(rows=>{
+        data=rows.filter(t=>HISTORY_STATUSES.includes(t.status)).map(mapTransaction);
+      });
+    }
+
+    let filter='all';
+    const $=id=>document.getElementById(id);
+    const list=$('list'),searchInput=$('searchInput'),tabsEl=$('tabs');
+    const historyView=$('historyView'),detailsView=$('detailsView');
+
+    function onTimeRate(){
+      const completed=data.filter(r=>r.status==='completed');
+      if(!completed.length)return{pct:100,total:0,onTime:0};
+      const onTime=completed.filter(r=>!r.returned||!r.due||new Date(r.returned)<=new Date(r.due)).length;
+      return{pct:Math.round((onTime/completed.length)*100),total:completed.length,onTime};
+    }
+
+    function renderRateCard(){
+      const {pct,total,onTime}=onTimeRate();
+      const late=total-onTime;
+      document.querySelector('.rate-card b').textContent=pct+'%';
+      document.querySelector('.rate-card .muted:last-of-type').textContent=`You returned ${onTime} of ${total} completed borrowings on time`;
+      document.querySelector('.ring').textContent=pct+'%';
+      const lateEl=document.querySelector('.rate-card .late');
+      lateEl.style.display=late>0?'':'none';
+      lateEl.textContent='◉ '+late+' late return'+(late===1?'':'s');
+    }
+
+    function renderTabs(){
+      const tabDefs=[['all','All',data.length],['completed','Completed',data.filter(r=>r.status==='completed').length],['cancelled','Cancelled',data.filter(r=>r.status==='cancelled').length],['rejected','Rejected',data.filter(r=>r.status==='rejected').length]];
+      tabsEl.innerHTML=tabDefs.map(([key,label,count])=>`<button type="button" class="tab-pill ${key===filter?'active':''}" data-filter="${key}">${label} <em>${count}</em></button>`).join('');
+    }
+    const totalUnits=items=>items.reduce((n,x)=>n+Number((x.match(/(\d+) units?/)||[,1])[1]),0);
+
+    function render(){
+      const rows=data.filter(r=>(filter==='all'||filter===r.status)&&(r.id+r.date+r.items).toLowerCase().includes(searchInput.value.toLowerCase()));
+      list.innerHTML=rows.length?rows.map(r=>`<article class="trans-card" data-id="${r.id}"><header><div><div class="trans-title">Transaction #${r.id}</div><div class="trans-date">Requested: ${r.date}</div></div><span class="badge ${r.status}">${badgeIcon[r.status]} ${r.status[0].toUpperCase()+r.status.slice(1)}</span></header><div class="trans-body"><div class="field-label">Equipment</div><div class="trans-items">${r.items.map(i=>`<span>${i}</span>`).join('')}</div><div class="trans-total">Total: <b>${totalUnits(r.items)} units</b></div></div><div class="trans-return-row">${r.status==='completed'?'Returned: <b>'+(r.returned||'—')+'</b>':r.status==='cancelled'?'Cancelled request':'Rejected request'}</div><div class="trans-foot"><button type="button" class="btn btn-secondary">View Details</button></div></article>`).join(''):'<div class="empty-state"><p class="empty-state__title">No history found</p><p>Try adjusting your filter or search term.</p></div>';
+    }
+
+    function showDetails(r){
+      historyView.classList.add('hidden');
+      detailsView.classList.remove('hidden');
+      $('detailNumber').textContent='#'+r.id;
+      $('detailRequested').textContent=r.date;
+      $('detailReturned').textContent=r.returned||'—';
+      $('detailItems').innerHTML=r.items.map(i=>{
+        const p=i.split(' — ');
+        return `<div class="detail-row"><label>${p[0]}</label><strong>${p[1]}</strong></div>`;
+      }).join('')+`<div class="detail-row"><label>Total</label><strong>${totalUnits(r.items)} units</strong></div>`;
+
+      $('activityRows').innerHTML=`
+        <div class="detail-row"><label>Purpose / Use</label><strong>${r.purpose&&r.purpose!=='—'?r.purpose:'Not specified'}</strong></div>
+        <div class="detail-row"><label>Expected Return Date</label><strong>${r.due||'—'}</strong></div>`;
+
+      const returnCard=$('returnCard');
+      if(r.status==='completed'){
+        returnCard.classList.remove('hidden');
+        const items=r.rawItems||[];
+        const worst=items.some(i=>i.returnedCondition==='Lost')?'Lost':items.some(i=>i.returnedCondition==='Damaged')?'Damaged':'Good';
+        const onTime=!r.returned||!r.due||new Date(r.returned)<=new Date(r.due);
+        const conditionColor=worst==='Good'?'var(--color-accent-green-dark)':'#dc2626';
+        const feesHtml=r.fees.length
+          ?`<div class="detail-row"><label>Outstanding Fees</label><strong style="color:#dc2626">${r.fees.map(f=>`₱${Number(f.feeAmount).toFixed(2)} (${f.feeType}, ${f.feeStatus})`).join(', ')}</strong></div>`
+          :'';
+        $('returnRows').innerHTML=`
+          <div class="detail-row"><label>Actual Return Date</label><strong>${r.returned||'—'}</strong></div>
+          <div class="detail-row"><label>Returned Condition</label><strong style="color:${conditionColor}">${worst}</strong></div>
+          <div class="detail-row"><label>Return Status</label><strong style="color:${onTime?'var(--color-accent-green-dark)':'#dc2626'}">◉ Returned ${onTime?'On Time':'Late'}</strong></div>
+          ${feesHtml}`;
+      }else{
+        returnCard.classList.add('hidden');
+      }
+
+      const stepsByStatus={completed:['Acknowledged','Submitted','Approved','Released','Returned','Completed'],cancelled:['Submitted','Cancelled'],rejected:['Submitted','Rejected']};
+      $('timeline').innerHTML=(stepsByStatus[r.status]||['Submitted']).map((s,i,arr)=>`<div class="step"><div class="dot">✓</div>${s}</div>${i<arr.length-1?'<i class="join"></i>':''}`).join('');
+      scrollTo(0,0);
+    }
+
+    tabsEl.addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;filter=b.dataset.filter;renderTabs();render();});
+    searchInput.addEventListener('input',render);
+    list.addEventListener('click',e=>{const c=e.target.closest('.trans-card');if(c)showDetails(data.find(r=>r.id===c.dataset.id));});
+    $('backBtn').addEventListener('click',()=>{detailsView.classList.add('hidden');historyView.classList.remove('hidden');scrollTo(0,0);});
+
+    loadHistory().then(()=>{
+      renderRateCard();
+      renderTabs();
+      render();
+    }).catch(err=>console.error('Could not load history:',err.message));
+  </script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+/* Shared admin app shell: sidebar, topbar, clock, notification bell/panel.
+   Injected around every admin-flow page by client/js/shared/app-shell.js.
+   Single source of truth — do not duplicate these rules inline in page files. */
+
+:root{
+  --green:#009966;--deep:#006045;--amber:#d97706;
+  --ink:#1d293d;--muted:#62748e;--line:#e2e8f0;--softline:#f1f5f9;--page:#fff;--canvas:#f8fafc;
+  --nav-text:#45556c;--nav-title:#90a1b9;--online-bg:#ecfdf5;--online-border:#d0fae5;--online-text:#007a55;
+  --unread-bg:#f8fffc;
+}
+:root[data-theme="dark"]{
+  --deep:#00c98a;
+  --ink:#e6edf7;--muted:#94a6c2;--line:#28374f;--softline:#19233a;--page:#101a2c;--canvas:#0a1220;
+  --nav-text:#aebbd3;--nav-title:#6d7fa3;--online-bg:#0d2a22;--online-border:#0f3d30;--online-text:#4ade80;
+  --unread-bg:#0d1f2e;
+}
+
+html,body{height:100%}
+*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:Inter,Arial,sans-serif;font-size:13px;transition:background .15s ease,color .15s ease}
+button,input,select{font:inherit}
+button{cursor:pointer}
+
+.app{display:flex;height:100vh;background:var(--page)}
+
+/* ---------- Sidebar ---------- */
+.sidebar{width:224px;flex:0 0 224px;background:var(--page);border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto}
+.sidebar .brand{height:64px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--softline);gap:8px;flex-shrink:0}
+.sidebar .brand-logo{height:32px;width:32px;border-radius:10px;object-fit:cover}
+.sidebar .brand strong{font-size:15px}
+.sidebar .brand strong span{color:var(--amber)}
+.sidebar .brand small{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+.sidebar .nav{padding-top:18px;flex:1}
+.sidebar .nav-section{margin-bottom:17px}
+.sidebar .nav-title{color:var(--nav-title);font-size:10px;font-weight:700;letter-spacing:.6px;padding:0 16px 8px;text-transform:uppercase}
+.sidebar .nav a{height:35.5px;display:flex;align-items:center;gap:9px;color:var(--nav-text);text-decoration:none;font-weight:500;padding:0 16px;border-left:3px solid transparent;cursor:pointer}
+.sidebar .nav a:hover{background:var(--softline)}
+.sidebar .nav a.active{background:var(--online-bg);border-left-color:var(--green);color:var(--online-text)}
+.sidebar .nav img{width:18px;height:18px;object-fit:contain}
+.sidebar .user-area{border-top:1px solid var(--softline);padding:12px;flex-shrink:0}
+.sidebar .user-card{height:51px;border:1px solid var(--softline);background:var(--softline);border-radius:10px;padding:8px;display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;cursor:pointer;transition:border-color .15s ease,background .15s ease}
+.sidebar .user-card:hover{border-color:var(--green);background:var(--online-bg)}
+.sidebar .avatar{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#d0fae5;color:#007a55;font-size:11px;font-weight:700;flex-shrink:0}
+.sidebar .user-card b{font-size:12px;display:block}
+.sidebar .user-card span{display:block;color:var(--muted);font-size:10px;margin-top:2px}
+.sidebar .utility{margin-top:7px}
+.sidebar .utility button,.sidebar .utility a{border:0;background:transparent;color:var(--muted);font:500 11px Inter,sans-serif;padding:7px 8px;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;text-decoration:none}
+.sidebar .utility button:hover,.sidebar .utility a:hover{color:var(--ink)}
+.sidebar .utility img{width:12px;height:12px;flex-shrink:0}
+
+/* ---------- Main / content scroll region ---------- */
+main{flex:1;min-width:0;background:var(--page);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.topbar{flex-shrink:0;height:65px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:var(--page)}
+.topbar h1{font-size:18px;line-height:23px;margin:0;font-weight:700}
+.topbar p{font-size:12px;line-height:18px;margin:0;color:var(--muted)}
+.header-right{display:flex;align-items:center;gap:12px}
+.online{border:1px solid var(--online-border);background:var(--online-bg);color:var(--online-text);border-radius:999px;height:28px;padding:0 13px;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
+.online i{width:6px;height:6px;border-radius:50%;background:#00bc7d}
+.clock{border-left:1px solid var(--line);padding-left:12px;text-align:right;font-size:12px;font-weight:600}
+.clock small{display:block;color:var(--muted);font-size:10px;font-weight:400;margin-top:2px}
+.content{flex:1;overflow-y:auto;padding:16px}
+
+/* ---------- Notification bell + panel ---------- */
+.bell-wrap{position:relative}
+.bell{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--page);display:grid;place-items:center;position:relative;padding:0}
+.bell:hover{background:var(--softline)}
+.bell img{width:17px;height:17px;object-fit:contain}
+.bell .bell-dot{position:absolute;top:6px;right:7px;width:8px;height:8px;border-radius:50%;background:#fb2c36;border:2px solid var(--page);display:none}
+.bell.has-unread .bell-dot{display:block}
+
+.notif-panel{position:absolute;top:calc(100% + 10px);right:0;width:360px;max-width:calc(100vw - 32px);background:var(--page);border:1px solid var(--softline);border-radius:14px;box-shadow:0 20px 40px rgba(15,23,42,.14);z-index:50;opacity:0;visibility:hidden;transform:translateY(-6px);transition:opacity .15s ease,transform .15s ease,visibility .15s}
+.notif-panel.open{opacity:1;visibility:visible;transform:translateY(0)}
+.notif-panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--softline)}
+.notif-panel-head h3{margin:0;font-size:14px}
+.notif-panel-head span{color:var(--muted);font-size:11px;font-weight:500}
+.notif-mark-read{border:0;background:transparent;color:var(--green);font-size:11px;font-weight:600;padding:0;cursor:pointer}
+.notif-list{max-height:340px;overflow-y:auto}
+.notif-item{display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--softline);cursor:pointer}
+.notif-item:hover{background:var(--softline)}
+.notif-item:last-child{border-bottom:0}
+.notif-item-unread{background:var(--unread-bg)}
+.notif-dot-type{width:8px;height:8px;min-width:8px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.notif-type-info{background:#155dfc}
+.notif-type-warn{background:var(--amber)}
+.notif-type-good{background:var(--green)}
+.notif-item-body p{margin:0;font-size:12px;line-height:17px;color:var(--ink);font-weight:500}
+.notif-item-body span{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
+.notif-empty{padding:28px 16px;text-align:center;color:var(--muted);font-size:12px}
+
+/* Notification detail — shell-owned so it renders correctly on pages that
+   don't load main.css's generic .modal component (most admin pages). */
+.shell-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:200}
+.shell-modal-overlay[hidden]{display:none}
+.shell-modal{width:min(420px,calc(100vw - 32px));background:var(--page);border-radius:14px;box-shadow:0 20px 50px rgba(15,23,42,.25);overflow:hidden}
+.shell-modal__header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--softline)}
+.shell-modal__header p{margin:0;font-size:16px;font-weight:600;color:var(--ink)}
+.shell-modal__close{border:0;background:transparent;cursor:pointer;padding:4px;line-height:0}
+.shell-modal__close img{width:14px;height:14px}
+.shell-modal__body{padding:16px 18px}
+.shell-modal__meta{margin:0 0 10px;color:var(--muted);font-size:12px}
+.shell-modal__message{margin:0;font-size:14px;line-height:1.6;color:var(--ink)}
+
+/* Outline icons are flat SVGs with a baked-in stroke color, so they need an
+   explicit recolor in dark mode (the brand logo is a photo/seal and is
+   deliberately excluded). */
+:root[data-theme="dark"] .sidebar .nav img,
+:root[data-theme="dark"] .sidebar .utility img,
+:root[data-theme="dark"] .bell img,
+:root[data-theme="dark"] .hamburger span,
+:root[data-theme="dark"] .mobile-menu a.nav-link img,
+:root[data-theme="dark"] .mobile-menu .menu-utility img{filter:brightness(0) invert(1) opacity(.8)}
+
+/* ---------- Mobile hamburger menu ---------- */
+/* Hidden by default (desktop/tablet use the sidebar); shown under the
+   650px breakpoint below, where the sidebar itself is hidden instead. */
+.menu-wrap{position:relative;display:none}
+.hamburger{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--page);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:0}
+.hamburger:hover{background:var(--softline)}
+.hamburger span{display:block;width:16px;height:2px;background:var(--nav-text);border-radius:2px}
+
+.mobile-menu{position:absolute;top:calc(100% + 10px);right:0;width:240px;max-width:calc(100vw - 24px);background:var(--page);border:1px solid var(--softline);border-radius:14px;box-shadow:0 20px 40px rgba(15,23,42,.14);z-index:60;opacity:0;visibility:hidden;transform:translateY(-6px);transition:opacity .15s ease,transform .15s ease,visibility .15s;padding:8px;max-height:calc(100vh - 90px);overflow-y:auto}
+.mobile-menu.open{opacity:1;visibility:visible;transform:translateY(0)}
+.mobile-menu .nav-section{margin-bottom:4px}
+.mobile-menu .nav-title{color:var(--nav-title);font-size:10px;font-weight:700;letter-spacing:.6px;padding:8px 10px 6px;text-transform:uppercase}
+.mobile-menu a.nav-link{height:36px;display:flex;align-items:center;gap:9px;color:var(--nav-text);text-decoration:none;font-weight:500;padding:0 10px;border-radius:8px}
+.mobile-menu a.nav-link:hover{background:var(--softline)}
+.mobile-menu a.nav-link.active{background:var(--online-bg);color:var(--online-text)}
+.mobile-menu a.nav-link img{width:16px;height:16px;object-fit:contain;flex-shrink:0}
+.mobile-menu .menu-divider{height:1px;background:var(--softline);margin:8px 4px}
+.mobile-menu .menu-utility button,.mobile-menu .menu-utility a{border:0;background:transparent;color:var(--muted);font:500 12px Inter,sans-serif;padding:9px 10px;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;text-decoration:none;border-radius:8px}
+.mobile-menu .menu-utility button:hover,.mobile-menu .menu-utility a:hover{background:var(--softline);color:var(--ink)}
+.mobile-menu .menu-utility img{width:13px;height:13px;flex-shrink:0}
+
+/* ---------- Responsive ---------- */
+@media(max-width:900px){
+  .sidebar{width:194px;flex-basis:194px}
+}
+@media(max-width:650px){
+  .app{display:block;height:auto}
+  .sidebar{display:none}
+  main{height:auto;overflow:visible}
+  .topbar{padding:10px 16px;height:auto;flex-wrap:wrap;gap:8px}
+  /* When header-right wraps to its own row, space-between leaves a lone
+     flex item flush-left — pin it to the top-right instead. */
+  .header-right{gap:8px;width:100%;justify-content:flex-end}
+  .online{display:none}
+  .clock{display:none}
+  .content{padding:12px;overflow:visible}
+  .notif-panel{width:calc(100vw - 24px);right:-8px}
+  .menu-wrap{display:block}
+}

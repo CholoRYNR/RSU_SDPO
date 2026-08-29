@@ -1,0 +1,145 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field__label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-900);
+}
+
+.field__label .required {
+  color: var(--color-danger-dot);
+  margin-left: 2px;
+}
+
+.field__control {
+  height: 44px;
+  border: 0.8px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0 12.8px;
+  font-size: 14px;
+  color: var(--color-text-900);
+  background: var(--color-surface);
+  width: 100%;
+}
+
+.field__control::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.field__control:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.select {
+  position: relative;
+}
+
+.select select {
+  appearance: none;
+  cursor: pointer;
+}
+
+.select .select__chevron {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+
+.search-field {
+  position: relative;
+  flex: 1;
+  max-width: 448px;
+}
+
+.search-field img {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+}
+
+.search-field input {
+  width: 100%;
+  height: 44px;
+  border: 0.8px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding-left: 36.8px;
+  padding-right: 12.8px;
+  font-size: 14px;
+}
+
+.search-field input::placeholder {
+  color: var(--color-text-placeholder);
+}
+
+.image-upload {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.image-upload__preview {
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.image-upload__preview img {
+  width: 32px;
+  height: 32px;
+}
+
+.image-upload__preview--filled {
+  overflow: hidden;
+}
+
+.image-upload__preview--filled img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+}
+
+.image-upload__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.btn-choose-image {
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text-600);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 var(--space-4);
+  text-align: left;
+}
+
+.image-upload__hint {
+  font-size: 12px;
+  color: var(--color-text-500);
+}

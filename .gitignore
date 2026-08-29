@@ -1,0 +1,11 @@
+node_modules/
+.env
+server/logs/*.log
+server/uploads/*/*
+!server/uploads/*/.gitkeep
+server/reports/generated/*
+!server/reports/generated/.gitkeep
+.DS_Store
+npm-debug.log*
+dist/
+build/

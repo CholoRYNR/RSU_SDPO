@@ -1,0 +1,59 @@
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--color-text-900);
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 700;
+  color: var(--color-text-900);
+}
+
+h1 {
+  font-size: 24px;
+  line-height: 32px;
+}
+
+h2 {
+  font-size: 20px;
+  line-height: 28px;
+}
+
+h3 {
+  font-size: 16px;
+  line-height: 22px;
+}
+
+p {
+  color: var(--color-text-500);
+}
+
+.text-xs {
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.text-sm {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.text-base {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.font-medium {
+  font-weight: 500;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+.font-bold {
+  font-weight: 700;
+}

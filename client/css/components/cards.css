@@ -1,0 +1,208 @@
+.equipment-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-6);
+}
+
+@media (max-width: 900px) {
+  .equipment-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .equipment-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.equipment-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 0.8px solid var(--color-border-soft);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.equipment-card__media {
+  position: relative;
+  height: 160px;
+  background: var(--color-surface-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.equipment-card__media img {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+}
+
+.equipment-card__badge {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  padding: 4.8px 12.8px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  border: 0.8px solid transparent;
+}
+
+.equipment-card__badge--available {
+  background: var(--color-accent-green-bg-strong);
+  border-color: var(--color-accent-green-border);
+  color: var(--color-accent-green-dark);
+}
+
+.equipment-card__badge--borrowed {
+  background: var(--color-warn-bg);
+  border-color: var(--color-warn-border);
+  color: var(--color-warn-text);
+}
+
+/* Stock-level warning tiers — thresholds scale per equipment's own total
+   quantity (see stockLevel() in equipment.js / equipment-showroom-figma.html)
+   instead of a single fixed number, so a 10-unit item and a 3-unit item both
+   turn amber/red at the right point relative to their own stock. */
+.equipment-card__badge--limited {
+  background: var(--color-warn-bg);
+  border-color: var(--color-warn-border);
+  color: var(--color-warn-text);
+}
+
+.equipment-card__badge--low {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger-text);
+}
+
+.equipment-card__id-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 48px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 var(--space-3) var(--space-2);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+}
+
+.equipment-card__id {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 12px;
+  border-radius: var(--radius-xs);
+  padding: 4px 8px;
+}
+
+.equipment-card__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.equipment-card__tags {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chip {
+  border-radius: var(--radius-xs);
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.chip--neutral {
+  background: var(--color-surface-muted);
+  color: var(--color-text-600);
+  text-transform: capitalize;
+}
+
+.chip--good {
+  background: var(--color-accent-green-bg);
+  color: var(--color-accent-green);
+  font-weight: 500;
+}
+
+.chip--damaged {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  font-weight: 500;
+}
+
+.equipment-card__stock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.equipment-card__stock-row span:first-child {
+  color: var(--color-text-500);
+}
+
+.equipment-card__stock-row span:last-child {
+  font-weight: 600;
+}
+
+.equipment-card__stock-row--limited span:last-child {
+  color: var(--color-warn-text);
+}
+
+.equipment-card__stock-row--low span:last-child {
+  color: var(--color-danger-text);
+}
+
+.equipment-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-500);
+  font-size: 12px;
+}
+
+.equipment-card__meta img {
+  width: 12px;
+  height: 12px;
+}
+
+.equipment-card__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-1);
+}
+
+.btn-details {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-green-bg);
+  color: var(--color-accent-green-dark);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.btn-icon-outline {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.8px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.btn-icon-outline img {
+  width: 16px;
+  height: 16px;
+}

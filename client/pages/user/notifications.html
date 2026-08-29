@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notifications | RSU-SDPO</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <link rel="stylesheet" href="../../css/main.css">
+  <style>
+    .content{max-width:760px;margin:auto}
+
+    .panel{background:var(--color-surface);border:0.8px solid var(--color-border-soft);border-radius:var(--radius-xl);box-shadow:var(--shadow-card);overflow:hidden}
+    .panel-head{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:0.8px solid var(--color-border-soft)}
+    .panel-head h2{margin:0;font-size:15px;color:var(--color-text-900)}
+    .unread-count{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;background:var(--color-danger-strong);color:#fff;font-size:11px;line-height:15px;vertical-align:2px}
+    .mark-read{border:0;background:transparent;color:var(--color-accent-green-dark);font-size:12px;font-weight:600;padding:0}
+
+    .tabs{padding:12px 16px;display:flex;gap:6px;border-bottom:0.8px solid var(--color-border-soft)}
+    .tab-pill{display:inline-flex;align-items:center;gap:5px;height:30px;padding:5px 12px;border:0.8px solid var(--color-border);border-radius:999px;background:var(--color-surface);color:var(--color-text-500);font-size:12px;font-weight:500}
+    .tab-pill em{padding:1px 5px;border-radius:999px;background:var(--color-surface-muted);color:var(--color-text-600);font-size:10px;font-style:normal}
+    .tab-pill.active{border-color:var(--color-accent-green-dark);background:var(--color-accent-green-dark);color:#fff}
+    .tab-pill.active em{background:rgba(255,255,255,.22);color:#fff}
+
+    .list{display:flex;flex-direction:column}
+    .note{position:relative;display:flex;gap:12px;padding:16px 20px;border-bottom:0.8px solid var(--color-border-soft)}
+    .note:last-child{border-bottom:0}
+    .note.unread:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:0 999px 999px 0;background:var(--color-accent-green-dark)}
+    .note-icon{width:36px;height:36px;flex:0 0 36px;display:grid;place-items:center;border-radius:50%;font-size:16px}
+    .note-icon.mint{background:#d0fae5;color:#00865d}
+    .note-icon.yellow{background:var(--color-warn-bg);color:var(--color-warn-text)}
+    .note-icon.blue{background:#e0f2fe;color:#0369a1}
+    .note-icon.pale{background:#dbeafe;color:#2563eb}
+    .note-icon.red{background:var(--color-danger-bg);color:var(--color-danger-strong)}
+    .note-content{min-width:0;flex:1}
+    .note-top{display:flex;justify-content:space-between;gap:8px}
+    .note-title{font-size:13px;font-weight:600;color:var(--color-text-900)}
+    .note-time{display:flex;align-items:center;gap:6px;color:var(--color-text-500);font-size:11px;white-space:nowrap}
+    .note-time .dot{width:6px;height:6px;border-radius:50%;background:var(--color-accent-green-dark)}
+    .note-desc{margin:3px 0 0;color:var(--color-text-500);font-size:12px;line-height:18px}
+    .note-detail{margin:4px 0 0;color:var(--color-text-900);font-size:11px;font-weight:500}
+    .note-detail.warn{color:var(--color-warn-text)}
+    .note-detail.danger{color:var(--color-danger-text)}
+    .note-view{display:inline-flex;align-items:center;gap:4px;margin-top:8px;padding:0;border:0;background:transparent;color:var(--color-accent-green-dark);font-size:11px;font-weight:600}
+
+    .empty-state{margin-top:16px}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-role="user" data-page="notifications" data-title="Notifications" data-subtitle="Stay up to date on your requests, borrowings, and returns.">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>All Notifications<span class="unread-count" id="unreadHead">0</span></h2>
+        <button type="button" class="mark-read" id="markRead">Mark all as read</button>
+      </div>
+      <div class="tabs">
+        <button type="button" class="tab-pill active" data-filter="all">All <em id="countAll">0</em></button>
+        <button type="button" class="tab-pill" data-filter="unread">Unread <em id="countUnread">0</em></button>
+      </div>
+      <div class="list" id="list"></div>
+    </section>
+  </div>
+
+  <script src="../../js/shared/api.js"></script>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script>
+    const ICON_BY_TYPE={Approval:['mint','✓'],Release:['blue','▤'],Rejection:['red','⊗'],'Request Submitted':['pale','▤']};
+    function iconFor(type){return ICON_BY_TYPE[type]||['pale','•'];}
+    function timeAgo(iso){
+      const diffMs=Date.now()-new Date(iso).getTime();
+      const mins=Math.round(diffMs/60000);
+      if(mins<1)return'Just now';
+      if(mins<60)return mins+' minute'+(mins===1?'':'s')+' ago';
+      const hours=Math.round(mins/60);
+      if(hours<24)return hours+' hour'+(hours===1?'':'s')+' ago';
+      const days=Math.round(hours/24);
+      if(days===1)return'Yesterday';
+      if(days<7)return days+' days ago';
+      return new Date(iso).toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'});
+    }
+
+    let notices=[];
+    let filter='all';
+    const $=id=>document.getElementById(id);
+    const list=$('list');
+
+    function counts(){
+      const unread=notices.filter(n=>n.unread).length;
+      $('unreadHead').textContent=unread;
+      $('countAll').textContent=notices.length;
+      $('countUnread').textContent=unread;
+    }
+
+    function render(){
+      const rows=notices.filter(n=>filter==='all'||n.unread);
+      list.innerHTML=rows.length?rows.map(n=>{
+        const [icon,glyph]=iconFor(n.type);
+        return `<article class="note ${n.unread?'unread':''}" data-id="${n.dbId}">
+        <div class="note-icon ${icon}">${glyph}</div>
+        <div class="note-content">
+          <div class="note-top"><span class="note-title">${n.type}</span><span class="note-time">${timeAgo(n.sentAt)}${n.unread?'<i class="dot"></i>':''}</span></div>
+          <p class="note-desc">${n.message}</p>
+        </div>
+      </article>`;
+      }).join(''):'<div class="empty-state"><p class="empty-state__title">You\'re all caught up</p><p>No unread notifications right now.</p></div>';
+    }
+
+    function loadNotifications(){
+      apiFetch('/api/notifications').then(rows=>{
+        notices=rows.map(r=>({dbId:r.id,type:r.type,message:r.message,sentAt:r.sentAt,unread:!r.isRead}));
+        counts();
+        render();
+      }).catch(err=>console.error('Could not load notifications:',err.message));
+    }
+
+    document.querySelector('.tabs').addEventListener('click',e=>{
+      const b=e.target.closest('[data-filter]');
+      if(!b)return;
+      filter=b.dataset.filter;
+      document.querySelectorAll('.tab-pill').forEach(x=>x.classList.toggle('active',x===b));
+      render();
+    });
+    $('markRead').addEventListener('click',()=>{
+      notices.forEach(n=>n.unread=false);
+      counts();render();
+      apiFetch('/api/notifications/read-all',{method:'PATCH'}).catch(()=>{});
+    });
+    list.addEventListener('click',e=>{
+      const note=e.target.closest('.note');
+      if(!note||!note.classList.contains('unread'))return;
+      const n=notices.find(x=>x.dbId===Number(note.dataset.id));
+      if(!n)return;
+      n.unread=false;
+      counts();render();
+      apiFetch('/api/notifications/'+n.dbId+'/read',{method:'PATCH'}).catch(()=>{});
+    });
+
+    loadNotifications();
+  </script>
+</body>
+</html>

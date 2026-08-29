@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Equipment Showroom - RSU-SDPO</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css" />
+  <link rel="stylesheet" href="../../css/main.css" />
+</head>
+<body>
+  <div id="app-root" data-page="equipment" data-title="Equipment Showroom" data-subtitle="Manage and track all sports equipment inventory">
+    <div class="page-header">
+      <p id="pageSubtitle">Total: 0 items</p>
+      <button type="button" class="btn btn-primary" id="openAddBtn">
+        <img src="../../assets/icons/icon-plus.svg" alt="" />
+        Add Equipment
+      </button>
+    </div>
+        <div class="toolbar">
+          <div class="search-field">
+            <img src="../../assets/icons/icon-search.svg" alt="" />
+            <input type="text" id="searchInput" placeholder="Search equipment name or ID..." autocomplete="off" />
+          </div>
+
+          <div class="category-select" id="categorySelect">
+            <button type="button" class="category-select__trigger" id="categoryTrigger" aria-haspopup="listbox" aria-expanded="false">
+              <span id="categoryTriggerLabel">All Categories</span>
+              <img src="../../assets/icons/icon-chevron-down.svg" alt="" />
+            </button>
+            <div class="category-select__panel" id="categoryPanel" role="listbox" hidden></div>
+          </div>
+
+          <span class="toolbar__count" id="toolbarCount">Showing 0 of 0 items</span>
+        </div>
+
+        <div class="equipment-grid" id="equipmentGrid"></div>
+  </div>
+
+  <!-- ---------- Equipment Details modal ---------- -->
+  <div class="modal-overlay" id="detailsModalOverlay" hidden>
+    <div class="modal modal--details" role="dialog" aria-modal="true" aria-labelledby="detailsModalTitle">
+      <div class="modal__header">
+        <p class="modal__title" id="detailsModalTitle">Equipment Details</p>
+        <button type="button" class="modal__close" data-close-modal="detailsModalOverlay" aria-label="Close">
+          <img src="../../assets/icons/icon-close.svg" alt="" />
+        </button>
+      </div>
+
+      <div class="details-hero">
+        <img id="detailsHeroImg" src="" alt="" />
+        <div class="details-hero__id-strip">
+          <span class="details-hero__id" id="detailsHeroId"></span>
+        </div>
+      </div>
+
+      <div class="details-title">
+        <h2 id="detailsName"></h2>
+      </div>
+
+      <div class="stock-overview">
+        <div class="stock-overview__header">
+          <span class="stock-overview__title">
+            <img src="../../assets/icons/icon-stock.svg" alt="" />
+            Stock Overview
+          </span>
+          <span class="stock-overview__total" id="detailsStockTotal">0 total</span>
+          <span class="stock-pill" id="detailsStockPill"></span>
+        </div>
+        <div class="stock-overview__bar">
+          <div class="stock-overview__bar-fill" id="detailsStockBar"></div>
+        </div>
+        <div class="stock-overview__stats">
+          <div class="stock-stat">
+            <div class="stock-stat__value" id="detailsStatTotal">0</div>
+            <div class="stock-stat__label">Total</div>
+          </div>
+          <div class="stock-stat stock-stat--available">
+            <div class="stock-stat__value" id="detailsStatAvailable">0</div>
+            <div class="stock-stat__label">Available</div>
+          </div>
+          <div class="stock-stat stock-stat--borrowed">
+            <div class="stock-stat__value" id="detailsStatBorrowed">0</div>
+            <div class="stock-stat__label">Borrowed</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="details-info-grid">
+        <div class="info-row">
+          <span class="info-row__label">Category</span>
+          <span class="info-row__value" id="detailsCategoryWrap"></span>
+        </div>
+        <div class="info-row">
+          <span class="info-row__label">Description</span>
+          <span class="info-row__value" id="detailsDescriptionWrap">—</span>
+        </div>
+        <div class="info-row" style="grid-column:1/-1">
+          <span class="info-row__label">QR Codes Generated</span>
+          <span class="info-row__value" id="detailsQrWrap">—</span>
+        </div>
+      </div>
+
+      <div class="modal__footer">
+        <button type="button" class="btn btn-secondary" id="detailsEditBtn">Edit</button>
+        <button type="button" class="btn btn-outline-danger" id="detailsDeleteBtn">
+          <img src="../../assets/icons/icon-trash.svg" alt="" />
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Add / Edit Equipment modal ---------- -->
+  <div class="modal-overlay" id="formModalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="formModalTitle">
+      <div class="modal__header">
+        <div>
+          <p class="modal__title" id="formModalTitle">Add Equipment</p>
+          <p class="modal__subtitle" id="formModalSubtitle">ID will be assigned: EQ-2026-001</p>
+        </div>
+        <button type="button" class="modal__close" data-close-modal="formModalOverlay" aria-label="Close">
+          <img src="../../assets/icons/icon-close.svg" alt="" />
+        </button>
+      </div>
+
+      <div class="modal__body">
+        <form id="equipmentForm" novalidate>
+          <div class="field-row">
+            <div class="field">
+              <label class="field__label" for="fieldName">Equipment Name<span class="required">*</span></label>
+              <input class="field__control" type="text" id="fieldName" placeholder="e.g. Molten BG4500 Basketball" />
+              <p class="field__error" id="fieldNameError">Equipment name is required.</p>
+            </div>
+            <div class="field">
+              <label class="field__label" for="fieldCategory">Category<span class="required">*</span></label>
+              <div class="select">
+                <select class="field__control" id="fieldCategory">
+                  <option value="">Select category</option>
+                </select>
+                <img class="select__chevron" src="../../assets/icons/icon-chevron-down.svg" alt="" />
+              </div>
+              <p class="field__error" id="fieldCategoryError">Please select a category.</p>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="field__label" for="fieldQuantity">Total Quantity<span class="required">*</span></label>
+              <input class="field__control" type="number" min="1" step="1" id="fieldQuantity" value="1" />
+              <p class="field__error" id="fieldQuantityError">Enter a valid quantity (at least 1).</p>
+            </div>
+            <div class="field">
+              <label class="field__label" for="fieldDescription">Description</label>
+              <textarea class="field__control" id="fieldDescription" rows="2" placeholder="Optional notes"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal__footer">
+        <button type="button" class="btn btn-secondary" id="formCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-success" id="formSubmitBtn">
+          <img src="../../assets/icons/icon-plus.svg" alt="" id="formSubmitIcon" />
+          <span id="formSubmitLabel">Add Equipment</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Yes/No confirmation dialog (Add / Save / Delete) ---------- -->
+  <div class="modal-overlay" id="confirmModalOverlay" hidden>
+    <div class="modal modal--confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="confirm-body">
+        <div class="confirm-icon" id="confirmIcon">!</div>
+        <p class="confirm-title" id="confirmTitle">Are you sure?</p>
+        <p class="confirm-message" id="confirmMessage"></p>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn-secondary" id="confirmNoBtn">No</button>
+        <button type="button" class="btn btn-primary" id="confirmYesBtn">Yes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Toasts ---------- -->
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="../../js/shared/app-shell.js"></script>
+  <script src="../../js/shared/api.js"></script>
+  <script src="../../js/equipment/equipment.js"></script>
+</body>
+</html>

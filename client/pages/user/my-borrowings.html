@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Borrowings | RSU-SDPO</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <link rel="stylesheet" href="../../css/main.css">
+  <style>
+    .content{max-width:1086px;margin:auto}
+
+    /* ---------- Summary chips ---------- */
+    .summary{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+    .summary-chip{display:flex;align-items:center;gap:8px;padding:8px 14px;border:0.8px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text-500);font-size:12px}
+    .summary-chip b{color:var(--color-text-900);font-weight:600}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--color-accent-green-dark)}
+    .dot.amber{background:#d97706}
+    .dot.red{background:#dc2626}
+
+    /* ---------- Borrowing cards ---------- */
+    .cards{display:grid;gap:12px}
+    .borrowing-card{overflow:hidden;background:var(--color-surface);border:0.8px solid var(--color-border-soft);border-radius:var(--radius-xl);box-shadow:var(--shadow-card)}
+    .borrowing-card.overdue,.borrowing-card.resolution{border-color:var(--color-danger-border)}
+    .attention{display:flex;align-items:center;gap:8px;padding:8px 18px;background:var(--color-danger-bg);color:var(--color-danger-text);font-size:12px;font-weight:500}
+    .card-head{padding:18px 20px 14px;display:flex;justify-content:space-between;gap:14px;border-bottom:0.8px solid var(--color-border-soft)}
+    .borrowing-id{font-weight:600;font-size:15px;color:var(--color-text-900)}
+    .issued{margin-top:2px;color:var(--color-text-500);font-size:12px}
+    .status-pill-lg{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;white-space:nowrap;height:fit-content}
+    .status-pill-lg.active{background:#d0fae5;color:var(--color-accent-green-dark)}
+    .status-pill-lg.due{background:var(--color-warn-bg);color:var(--color-warn-text)}
+    .status-pill-lg.overdue,.status-pill-lg.resolution{background:var(--color-danger-bg);color:var(--color-danger-text)}
+    .equipment{padding:12px 20px;border-bottom:0.8px solid var(--color-border-soft)}
+    .field-label{color:var(--color-text-500);font-size:11px;letter-spacing:.4px;text-transform:uppercase;font-weight:600}
+    .items{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--color-text-900)}
+    .items b{font-weight:600}
+    .total-line{margin-top:6px;color:var(--color-text-500);font-size:12px}
+    .total-line b{color:var(--color-text-900)}
+    .return-row{padding:12px 20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:0.8px solid var(--color-border-soft);font-size:12px;color:var(--color-text-500)}
+    .return-row b{color:var(--color-text-900)}
+    .return-message{color:var(--color-warn-text);white-space:nowrap}
+    .overdue .return-row,.overdue .return-row b{color:var(--color-danger-text)}
+    .card-foot{padding:14px 20px 16px}
+
+    /* ---------- Details modal ---------- */
+    .detail-block{border:0.8px solid var(--color-border);border-radius:var(--radius-lg);padding:15px}
+    .detail-block h3{font-size:12px;letter-spacing:.3px;text-transform:uppercase;color:var(--color-text-500);margin:0 0 10px}
+    .detail-line{display:flex;justify-content:space-between;gap:18px;padding:7px 0;border-bottom:0.8px solid var(--color-border-soft);font-size:13px;color:var(--color-text-900)}
+    .detail-line:last-child{border:0}
+    .detail-line span:last-child{font-weight:600;text-align:right}
+
+    @media(max-width:650px){.summary{overflow-x:auto;flex-wrap:nowrap}}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-role="user" data-page="my-borrowings" data-title="My Borrowings" data-subtitle="View the equipment you currently have and your return schedule.">
+    <div class="summary" aria-label="Borrowing summary">
+      <div class="summary-chip"><i class="dot"></i>Currently Borrowed: <b>0</b></div>
+      <div class="summary-chip"><i class="dot amber"></i>Due Soon: <b>0</b></div>
+      <div class="summary-chip"><i class="dot red"></i>Overdue: <b>0</b></div>
+    </div>
+    <div class="cards" id="borrowingCards"></div>
+  </div>
+
+  <div class="modal-overlay" id="detailModalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detailModalTitle">
+      <div class="modal__header">
+        <div><p class="modal__title" id="detailModalTitle" style="font-size:18px">Borrowing details</p><p class="modal__subtitle" id="detailModalSub"></p></div>
+        <button type="button" class="modal__close" data-close-modal="detailModalOverlay" aria-label="Close"><img src="../../assets/icons/icon-close.svg" alt=""></button>
+      </div>
+      <div class="modal__body" id="detailModalBody"></div>
+      <div class="modal__footer"><button type="button" class="btn btn-secondary" id="modalCloseBtn">Done</button></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="../../js/shared/api.js"></script>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script>
+    const statusIcon={active:'◉',due:'◷',overdue:'⊗',resolution:'⚠'};
+    const statusLabel={active:'Active',due:'Due Soon',overdue:'Overdue',resolution:'Replacement Required'};
+
+    function groupItems(items){
+      const counts=new Map();
+      items.forEach(i=>counts.set(i.name,(counts.get(i.name)||0)+1));
+      return Array.from(counts.entries()).map(([name,qty])=>[name,qty+' unit'+(qty===1?'':'s')]);
+    }
+
+    // Released transactions are "currently borrowed" and get a due/overdue
+    // split computed client-side (the backend only exposes a formatted
+    // display date, not a raw timestamp, on this endpoint). For Resolution /
+    // Replacement transactions are also still "with the borrower" in effect
+    // — the equipment was returned Damaged/Lost and a verified replacement
+    // is required before the transaction can close.
+    function statusFor(t){
+      if(['For Resolution','Replacement'].includes(t.status))return'resolution';
+      const now=new Date();
+      const due=new Date(t.due);
+      const daysLeft=(due-now)/86400000;
+      if(daysLeft<0)return'overdue';
+      if(daysLeft<=2)return'due';
+      return'active';
+    }
+
+    function mapBorrowing(t){
+      const status=statusFor(t);
+      const totalQty=t.items.length;
+      const b={
+        dbId:t.dbId,
+        id:t.id,
+        issued:t.date,
+        status,
+        label:statusLabel[status],
+        items:groupItems(t.items),
+        total:totalQty+' unit'+(totalQty===1?'':'s'),
+        returnDate:t.due
+      };
+      if(status==='due')b.message='Return by '+t.due;
+      if(status==='overdue')b.attention='Action Required — Please return the overdue equipment to the SDPO office.';
+      if(status==='resolution')b.attention='Action Required — A replacement is required for damaged/lost equipment. Please visit the SDPO office.';
+      return b;
+    }
+
+    let borrowings=[];
+    function loadBorrowings(){
+      return apiFetch('/api/borrow/mine').then(rows=>{
+        borrowings=rows.filter(t=>['Released','Overdue','For Resolution','Replacement'].includes(t.status)).map(mapBorrowing);
+      });
+    }
+
+    function renderSummary(){
+      document.querySelector('.summary').innerHTML=`
+        <div class="summary-chip"><i class="dot"></i>Currently Borrowed: <b>${borrowings.length}</b></div>
+        <div class="summary-chip"><i class="dot amber"></i>Due Soon: <b>${borrowings.filter(b=>b.status==='due').length}</b></div>
+        <div class="summary-chip"><i class="dot red"></i>Overdue: <b>${borrowings.filter(b=>b.status==='overdue').length}</b></div>`;
+    }
+
+    function card(b){
+      return `<article class="borrowing-card ${['overdue','resolution'].includes(b.status)?'overdue':''}">
+        ${b.attention?`<div class="attention"><span>⊙</span>${b.attention}</div>`:''}
+        <div class="card-head">
+          <div><div class="borrowing-id">Borrowing #${b.id}</div><div class="issued">Issued: ${b.issued}</div></div>
+          <div class="status-pill-lg ${b.status}"><span>${statusIcon[b.status]}</span>${b.label}</div>
+        </div>
+        <div class="equipment">
+          <div class="field-label">Equipment Borrowed</div>
+          <div class="items">${b.items.map(([name,qty])=>`<span>${name} — <b>${qty}</b></span>`).join('')}</div>
+          <div class="total-line">Total: <b>${b.total}</b></div>
+        </div>
+        <div class="return-row">
+          <span>${b.status==='overdue'?'Return was due on:':b.status==='resolution'?'Expected Return was:':'Expected Return:'} <b>${b.returnDate}</b></span>
+          ${b.message?`<span class="return-message">${b.message}</span>`:''}
+        </div>
+        <div class="card-foot"><button type="button" class="btn btn-secondary" data-detail="${b.id}">View Details</button></div>
+      </article>`;
+    }
+    function renderCards(){
+      document.getElementById('borrowingCards').innerHTML=borrowings.length
+        ?borrowings.map(card).join('')
+        :'<div class="empty-state"><p class="empty-state__title">Nothing currently borrowed</p><p>Equipment you pick up will show up here.</p></div>';
+    }
+
+    const $=id=>document.getElementById(id);
+    const modal=$('detailModalOverlay'),title=$('detailModalTitle'),subtitle=$('detailModalSub'),body=$('detailModalBody');
+
+    function openDetails(id){
+      const b=borrowings.find(x=>x.id===id);
+      title.textContent='Borrowing #'+b.id;
+      subtitle.textContent='Issued: '+b.issued;
+      body.innerHTML=`<section class="detail-block"><h3>Borrowed equipment</h3>${b.items.map(([n,q])=>`<div class="detail-line"><span>${n}</span><span>${q}</span></div>`).join('')}<div class="detail-line"><span>Total</span><span>${b.total}</span></div></section>
+      <section class="detail-block"><h3>Return schedule</h3><div class="detail-line"><span>Current status</span><span>${b.label}</span></div><div class="detail-line"><span>${b.status==='overdue'?'Due date':'Expected return'}</span><span>${b.returnDate}</span></div></section>`;
+      modal.hidden=false;
+    }
+    function closeDetails(){modal.hidden=true;}
+
+    document.addEventListener('click',e=>{
+      const btn=e.target.closest('[data-detail]');
+      if(btn)openDetails(btn.dataset.detail);
+      if(e.target===modal||e.target.closest('[data-close-modal]')||e.target.id==='modalCloseBtn')closeDetails();
+    });
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDetails();});
+
+    function showToast(message,type){
+      const toast=document.createElement('div');
+      toast.className='toast toast--'+(type==='danger'?'danger':'success');
+      toast.innerHTML=`<span class="toast__dot"></span><span>${message}</span>`;
+      $('toastStack').appendChild(toast);
+      setTimeout(()=>toast.remove(),3200);
+    }
+
+    loadBorrowings().then(()=>{
+      renderSummary();
+      renderCards();
+    }).catch(err=>showToast('Could not load your borrowings: '+err.message,'danger'));
+  </script>
+</body>
+</html>

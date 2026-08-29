@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -oE '\\\\$\\\\\\(\"[A-Za-z0-9]+\"\\\\\\)' client/js/equipment/equipment.js)"
+    ]
+  }
+}

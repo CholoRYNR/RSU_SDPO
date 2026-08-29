@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RSU-SDPO | Edit Profile</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <style>
+    .content{max-width:720px;margin:auto}
+    .profile-card{background:var(--page);border:1px solid var(--softline);border-radius:14px;overflow:hidden}
+    .profile-card form{padding:28px}
+    .avatar-block{display:flex;flex-direction:column;align-items:center;margin-bottom:28px}
+    .avatar-photo{position:relative;width:96px;height:96px}
+    .avatar-photo .avatar-circle{width:96px;height:96px;border-radius:50%;background:#d0fae5;color:#007a55;display:grid;place-items:center;font-size:28px;font-weight:700;overflow:hidden}
+    .avatar-photo .avatar-circle img{width:100%;height:100%;object-fit:cover}
+    .avatar-upload-btn{position:absolute;right:-2px;bottom:-2px;width:32px;height:32px;border-radius:50%;background:var(--deep);border:3px solid #fff;display:grid;place-items:center;padding:0}
+    .avatar-upload-btn img{width:14px;height:14px;filter:brightness(0) invert(1)}
+    .avatar-caption{margin-top:12px;font-size:12px;color:var(--muted)}
+    .avatar-help{margin-top:2px;font-size:11px;color:#90a1b9}
+    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    .field-grid.full{grid-template-columns:1fr;margin-top:18px}
+    .field{display:grid;gap:6px}
+    .field label{font-size:11px;font-weight:700;color:#334155;display:flex;align-items:center;gap:6px}
+    .field input{height:40px;border:1px solid var(--line);border-radius:9px;background:var(--softline);padding:0 12px;font-size:13px;color:var(--ink);outline-color:var(--green)}
+    .field input:disabled{color:var(--muted);background:var(--softline);cursor:not-allowed}
+    .field input.invalid{border-color:#fda29b;background:#fef3f2}
+    .field-error{font-size:11px;color:#d92d20;min-height:14px}
+    .form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:26px}
+    .btn-outline{height:38px;padding:0 18px;border-radius:9px;border:1px solid var(--line);background:var(--page);color:var(--ink);font-size:12px;font-weight:600}
+    .btn-solid{height:38px;padding:0 18px;border-radius:9px;border:0;background:var(--deep);color:#fff;font-size:12px;font-weight:600}
+    .save-toast{margin-top:0;max-height:0;overflow:hidden;transition:max-height .25s ease}
+    .save-toast.show{max-height:60px}
+    .save-toast p{margin:16px 0 0;padding:10px 14px;border-radius:9px;background:#ecfdf5;border:1px solid #d0fae5;color:#007a55;font-size:12px;font-weight:600}
+    @media(max-width:600px){.field-grid{grid-template-columns:1fr}.profile-card form{padding:20px}.form-actions{flex-wrap:wrap}.form-actions button{flex:1}}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-page="" data-title="Edit Profile" data-subtitle="Manage your administrator account information">
+    <div class="profile-card">
+      <form id="profileForm" novalidate>
+        <div class="avatar-block">
+          <div class="avatar-photo">
+            <div class="avatar-circle" id="avatarCircle">SD</div>
+            <button type="button" class="avatar-upload-btn" id="avatarUploadBtn" aria-label="Upload profile picture"><img src="../../assets/icons/icon-upload.svg" alt=""></button>
+            <input type="file" id="avatarFile" accept="image/png,image/jpeg" hidden>
+          </div>
+          <p class="avatar-caption">Upload profile picture</p>
+          <p class="avatar-help">JPG or PNG, max 2MB</p>
+          <p class="field-error" id="avatarError"></p>
+        </div>
+
+        <div class="field-grid">
+          <div class="field"><label for="firstName">First Name</label><input id="firstName" required><span class="field-error" id="firstNameError"></span></div>
+          <div class="field"><label for="lastName">Last Name</label><input id="lastName" required><span class="field-error" id="lastNameError"></span></div>
+        </div>
+        <div class="field-grid" style="margin-top:18px">
+          <div class="field"><label for="department">Department</label><input id="department" value="Sports Development Program Office" disabled></div>
+          <div class="field"><label for="role">Role</label><input id="role" value="Administrator" disabled></div>
+        </div>
+        <div class="field-grid full">
+          <div class="field"><label for="email">✉ Email Address</label><input id="email" type="email" required><span class="field-error" id="emailError"></span></div>
+        </div>
+        <div class="field-grid full">
+          <div class="field"><label for="phone">☎ Phone Number</label><input id="phone" type="tel" placeholder="+63 912 345 6789" required><span class="field-error" id="phoneError"></span></div>
+        </div>
+
+        <div class="save-toast" id="saveToast"><p>✓ Profile updated</p></div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-outline" id="cancelBtn">Cancel</button>
+          <button type="submit" class="btn-solid">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script>
+    const STORAGE_KEY = 'rsuSdpoAdminProfile';
+    const $ = (id) => document.getElementById(id);
+    const defaults = { firstName: 'SDPO', lastName: 'Staff', email: 'sdpo.staff@rsu.edu.ph', phone: '+63 912 345 6789', avatar: '' };
+
+    function loadProfile() {
+      try { return { ...defaults, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; }
+      catch (e) { return { ...defaults }; }
+    }
+
+    function applyAvatar(data) {
+      const circle = $('avatarCircle');
+      if (data.avatar) {
+        circle.innerHTML = '<img src="' + data.avatar + '" alt="Profile photo">';
+      } else {
+        const isDefaultIdentity = data.firstName === defaults.firstName && data.lastName === defaults.lastName;
+        const initials = isDefaultIdentity ? 'SD' : ((data.firstName[0] || '') + (data.lastName[0] || '')).toUpperCase() || 'SD';
+        circle.textContent = initials;
+      }
+    }
+
+    let currentAvatar = '';
+    function fillForm(data) {
+      $('firstName').value = data.firstName;
+      $('lastName').value = data.lastName;
+      $('email').value = data.email;
+      $('phone').value = data.phone;
+      currentAvatar = data.avatar || '';
+      applyAvatar(data);
+    }
+
+    fillForm(loadProfile());
+
+    $('avatarUploadBtn').addEventListener('click', () => $('avatarFile').click());
+    $('avatarFile').addEventListener('change', () => {
+      const file = $('avatarFile').files[0];
+      $('avatarError').textContent = '';
+      if (!file) return;
+      if (!/^image\/(png|jpeg)$/.test(file.type)) { $('avatarError').textContent = 'Please choose a JPG or PNG image.'; return; }
+      if (file.size > 2 * 1024 * 1024) { $('avatarError').textContent = 'Image must be 2MB or smaller.'; return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        currentAvatar = reader.result;
+        $('avatarCircle').innerHTML = '<img src="' + currentAvatar + '" alt="Profile photo">';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const PHONE_RE = /^(\+?63|0)?[\s-]?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$/;
+
+    function setError(fieldId, errorId, message) {
+      $(fieldId).classList.toggle('invalid', !!message);
+      $(errorId).textContent = message || '';
+      return !message;
+    }
+
+    function validate() {
+      let ok = true;
+      ok = setError('firstName', 'firstNameError', $('firstName').value.trim() ? '' : 'First name is required.') && ok;
+      ok = setError('lastName', 'lastNameError', $('lastName').value.trim() ? '' : 'Last name is required.') && ok;
+      const email = $('email').value.trim();
+      ok = setError('email', 'emailError', EMAIL_RE.test(email) ? '' : 'Enter a valid email address.') && ok;
+      const phone = $('phone').value.trim();
+      ok = setError('phone', 'phoneError', PHONE_RE.test(phone) ? '' : 'Enter a valid PH mobile number.') && ok;
+      return ok;
+    }
+
+    $('profileForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!validate()) return;
+      const data = {
+        firstName: $('firstName').value.trim(),
+        lastName: $('lastName').value.trim(),
+        email: $('email').value.trim(),
+        phone: $('phone').value.trim(),
+        avatar: currentAvatar
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      applyAvatar(data);
+      const toast = $('saveToast');
+      toast.classList.add('show');
+      clearTimeout(window.__profileToastTimer);
+      window.__profileToastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+    });
+
+    $('cancelBtn').addEventListener('click', () => { fillForm(loadProfile()); });
+  </script>
+</body>
+</html>

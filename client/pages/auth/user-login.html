@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>User Login | RSU-SDPO</title>
+  <style>
+    :root{color-scheme:light;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%}
+    body{background:#02180f}
+    button,input{font:inherit}
+    button{cursor:pointer}
+
+    .page{position:relative;min-height:100vh;display:grid;place-items:center;padding:32px 16px;background-image:linear-gradient(180deg,rgba(2,112,79,.4) 0%,rgba(0,0,0,.28) 100%),linear-gradient(162.93deg,rgba(2,112,79,.45) 7.95%,rgba(96,115,47,.4) 50%,rgba(152,117,28,.375) 71.03%,rgba(217,119,6,.35) 92.05%),url("../../assets/images/auth-hero-background.png");background-size:cover;background-position:center;background-repeat:no-repeat;background-color:#02180f;overflow-y:auto}
+    .back-link{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px;color:rgba(255,255,255,.85);text-decoration:none;font-size:.85rem;font-weight:600;margin:0 auto 16px;grid-row:1}
+    .back-link:hover{color:#fff}
+
+    .screen{display:none;width:100%;place-items:center}
+    .screen.active{display:grid}
+    .card{width:min(100%,400px);background:#fff;border-radius:14px;box-shadow:0 25px 25px rgba(0,0,0,.25);padding:24px;margin:auto}
+    .card-brand{display:flex;flex-direction:column;align-items:center;text-align:center;margin-bottom:20px}
+    .card-badge{width:48px;height:48px;border-radius:50%;background:#e2e8f0;display:grid;place-items:center;overflow:hidden;flex-shrink:0}
+    .card-badge img{width:100%;height:100%;object-fit:cover}
+    .card-brand h2{margin:10px 0 0;font-size:20px;font-weight:600;color:#02704f}
+    .card-brand h2 span{color:#d97706}
+    .card-brand p{margin:2px 0 0;color:#6a7282;font-size:12px}
+    .role-tag{display:inline-block;margin-top:8px;padding:4px 12px;border-radius:999px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:#ecfdf5;color:#02704f}
+    .signup-title,.screen-title{margin:8px 0 0;font-size:.95rem;font-weight:600;color:#334155}
+
+    .form-card{display:grid;gap:12px}
+    label{display:grid;gap:4px;font-size:.8rem;color:#475569}
+    label>span:first-child{font-size:10px;font-weight:500;letter-spacing:.25px;text-transform:uppercase;color:#4a5565}
+    .field-group{display:flex;align-items:center;gap:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px}
+    .field-group input,.field-group select{flex:1;min-width:0;border:0;background:transparent;outline:none;color:#0f172a;font-size:14px}
+    .field-group input::placeholder{color:#717182}
+    .field-group.invalid{border-color:#fda29b;background:#fef3f2}
+    .field-icon{display:flex;flex-shrink:0;color:#99a1af}
+    .toggle-pw{flex-shrink:0;border:0;background:transparent;padding:0;display:flex;color:#99a1af;cursor:pointer}
+    .toggle-pw:hover{color:#475569}
+    .toggle-pw svg{width:14px;height:14px}
+    .toggle-pw .icon-eye-off{display:none}
+    .toggle-pw.showing .icon-eye{display:none}
+    .toggle-pw.showing .icon-eye-off{display:block}
+    .field-error{color:#d92d20;font-size:.75rem;margin-top:-2px;min-height:14px}
+    .field-note{display:block;color:#6b7280;font-size:.72rem;margin-top:4px;line-height:1.4}
+    .form-meta{display:flex;align-items:center;justify-content:space-between;gap:16px}
+    .checkbox-label{display:inline-flex;align-items:center;gap:6px;color:#4a5565;font-size:12px}
+    .checkbox-label input{width:14px;height:14px}
+    .text-link{border:none;background:none;color:#d97706;font-size:12px;padding:0;text-decoration:underline}
+    .primary-button{width:100%;height:36px;padding:0;border:none;border-radius:10px;background:#d97706;color:#fff;font-size:14px;font-weight:500;box-shadow:0 4px 3px rgba(0,0,0,.1),0 2px 2px rgba(0,0,0,.1);display:inline-flex;align-items:center;justify-content:center;transition:background .2s ease}
+    .primary-button:hover{background:#c2660a}
+    .primary-button:disabled{opacity:.7;cursor:default}
+    .social-actions{display:flex;gap:8px;margin:0}
+    .social-button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;height:30px;padding:0 8px;border:1px solid #e5e7eb;border-radius:10px;background:#f8fafb;color:#0f172a;font-weight:600;font-size:12px}
+    .social-button img{width:16px;height:16px}
+    .divider{position:relative;display:flex;align-items:center;justify-content:center;margin:4px 0;height:15px}
+    .divider::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px solid #e5e7eb}
+    .divider span{position:relative;background:#fff;padding:0 8px;font-size:10px;letter-spacing:.25px;text-transform:uppercase;color:#6a7282}
+    .screen-subtitle{margin:0;color:#475569;font-size:.95rem}
+    .screen-note{margin:0 0 20px;color:#475569;line-height:1.7;font-size:.9rem}
+    .screen-note.small{font-size:.8rem;opacity:.85}
+    .form-note{border-radius:10px;padding:10px 14px;font-size:.85rem;margin-bottom:16px}
+    .form-note.success{background:#ecfdf5;color:#02704f;border:1px solid #d0fae5}
+    .form-note.error{background:#fef2f2;color:#b42318;border:1px solid #fecaca}
+    .card-foot{text-align:center;font-size:12px;color:#6a7282;margin:14px 0 0}
+    .card-foot .text-link{margin-left:4px}
+
+    .verify-card{display:grid;gap:16px}
+    .code-inputs{display:grid;grid-template-columns:repeat(6,minmax(36px,1fr));gap:8px}
+    .code-digit{width:100%;min-height:44px;padding:0;text-align:center;border:1px solid #d1d5db;border-radius:10px;font-size:1.1rem;font-weight:700;color:#0f172a;background:#f9fafb}
+    .code-digit.invalid{border-color:#fda29b;background:#fef3f2}
+
+    .google-badge{background:#fff}
+    .google-account-list{display:grid;gap:10px;margin:16px 0}
+    .google-account{width:100%;display:grid;grid-template-columns:auto 1fr;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;color:#111827;text-align:left}
+    .google-account--selected{border-color:#d97706;box-shadow:0 12px 24px rgba(217,119,6,.08)}
+    .google-account--ghost{color:#6b7280}
+    .google-account__avatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#f3f4f6;color:#111827;font-weight:700;font-size:.85rem}
+    .google-account__avatar--alt{background:#e2e8f0}
+    .google-account__meta{display:grid;gap:2px}
+    .google-account__name{font-size:.9rem;font-weight:600}
+    .google-account__email{font-size:.78rem;color:#6b7280}
+    .google-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .google-actions .primary-button{width:auto;padding:0 24px}
+
+    @media(max-width:640px){
+      .page{padding:16px}
+      .card{width:100%;padding:20px}
+    }
+  </style>
+</head>
+<body>
+  <div class="page" id="pageRoot">
+    <a class="back-link" href="rsu-sdpo-auth-flow.html">&larr; Back to Welcome</a>
+
+    <section class="screen active" id="loginScreen">
+      <div class="card">
+        <div class="card-brand">
+          <div class="card-badge"><img src="../../assets/images/rsu-sdpo-logo.png" alt="RSU SDPO"></div>
+          <div><h2>RSU-<span>SDPO</span></h2><p>Sports Equipment &amp; Transaction Monitoring System</p><span class="role-tag">User Login</span></div>
+        </div>
+        <div class="form-note success" id="loginNote" hidden></div>
+        <form id="signInForm" class="form-card" novalidate>
+          <label>
+            <span>Email or Username</span>
+            <div class="field-group" id="loginEmailGroup"><svg class="field-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg><input id="loginEmail" type="text" placeholder="e.g. rsu2026@gmail.com" autocomplete="username"></div>
+            <span class="field-error" id="loginEmailError"></span>
+          </label>
+          <label>
+            <span>Password</span>
+            <div class="field-group" id="loginPasswordGroup"><svg class="field-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><input id="loginPassword" type="password" placeholder="••••••••" autocomplete="current-password"><button type="button" class="toggle-pw" data-target="loginPassword" aria-label="Show password" aria-pressed="false"><svg class="icon-eye" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="icon-eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg></button></div>
+            <span class="field-error" id="loginPasswordError"></span>
+          </label>
+          <div class="form-meta">
+            <label class="checkbox-label"><input type="checkbox"> Remember me</label>
+            <button class="text-link" id="forgotPasswordButton" type="button">Forgot password?</button>
+          </div>
+          <button class="primary-button" type="submit">Sign In</button>
+        </form>
+        <p class="card-foot">Don't have an account? <button class="text-link" id="openSignupButton" type="button">Sign Up</button></p>
+        <div class="divider"><span>Or continue with</span></div>
+        <div class="social-actions">
+          <button class="social-button" id="openGoogleButton" type="button"><img src="../../assets/icons/icon-google.svg" alt="">Google</button>
+          <button class="social-button" id="openFacebookButton" type="button"><img src="../../assets/icons/icon-facebook.svg" alt="">Facebook</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="signupScreen">
+      <div class="card">
+        <div class="card-brand">
+          <div class="card-badge"><img src="../../assets/images/rsu-sdpo-logo.png" alt="RSU SDPO"></div>
+          <div><h2>RSU-<span>SDPO</span></h2><p>Sports Equipment &amp; Transaction Monitoring System</p><p class="signup-title">Create Account</p></div>
+        </div>
+        <form id="signUpForm" class="form-card" novalidate>
+          <label>
+            <span>Full Name</span>
+            <div class="field-group" id="signupNameGroup"><input id="signupName" type="text" placeholder="Enter your full name" autocomplete="name"></div>
+            <span class="field-error" id="signupNameError"></span>
+          </label>
+          <label>
+            <span>Email Address</span>
+            <div class="field-group" id="signupEmailGroup"><input id="signupEmail" type="email" placeholder="your.email@rsu.edu.ph" autocomplete="email"></div>
+            <span class="field-error" id="signupEmailError"></span>
+          </label>
+          <label>
+            <span>College / Unit</span>
+            <div class="field-group" id="signupCollegeGroup"><input id="signupCollege" type="text" placeholder="e.g. College of Engineering" autocomplete="organization"></div>
+            <span class="field-error" id="signupCollegeError"></span>
+          </label>
+          <label>
+            <span>Borrower Type</span>
+            <div class="field-group" id="signupCategoryGroup">
+              <select id="signupCategory">
+                <option value="Student">Student</option>
+                <option value="Faculty">Faculty</option>
+                <option value="Staff">Staff (non-teaching university staff)</option>
+                <option value="Employee">Employee</option>
+                <option value="External">External</option>
+              </select>
+            </div>
+            <span class="field-note">This just describes who you are as a borrower — it does not grant SDPO admin/staff login access. Admin accounts are set up separately.</span>
+          </label>
+          <label>
+            <span>Password</span>
+            <div class="field-group" id="signupPasswordGroup"><input id="signupPassword" type="password" placeholder="Create a password" autocomplete="new-password"><button type="button" class="toggle-pw" data-target="signupPassword" aria-label="Show password" aria-pressed="false"><svg class="icon-eye" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="icon-eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg></button></div>
+            <span class="field-error" id="signupPasswordError"></span>
+          </label>
+          <label>
+            <span>Confirm Password</span>
+            <div class="field-group" id="signupConfirmGroup"><input id="signupConfirm" type="password" placeholder="Confirm your password" autocomplete="new-password"><button type="button" class="toggle-pw" data-target="signupConfirm" aria-label="Show password" aria-pressed="false"><svg class="icon-eye" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="icon-eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg></button></div>
+            <span class="field-error" id="signupConfirmError"></span>
+          </label>
+          <span class="field-error" id="signupFormError"></span>
+          <button class="primary-button" type="submit">Sign Up</button>
+        </form>
+        <div class="divider"><span>Or continue with</span></div>
+        <div class="social-actions">
+          <button class="social-button" id="openGoogleButtonSignup" type="button"><img src="../../assets/icons/icon-google.svg" alt="">Google</button>
+          <button class="social-button" id="openFacebookButtonSignup" type="button"><img src="../../assets/icons/icon-facebook.svg" alt="">Facebook</button>
+        </div>
+        <p class="card-foot">Already have an account? <button class="text-link" id="backToLoginButton" type="button">Sign In</button></p>
+      </div>
+    </section>
+
+    <section class="screen" id="forgotScreen">
+      <div class="card">
+        <div class="card-brand">
+          <div class="card-badge"><img src="../../assets/images/rsu-sdpo-logo.png" alt="RSU SDPO"></div>
+          <div><h2>RSU-<span>SDPO</span></h2><p>Sports Equipment &amp; Transaction Monitoring System</p><p class="screen-title">Forgot Password?</p></div>
+        </div>
+        <p class="screen-note">Enter your registered email and we&apos;ll send you a reset code.</p>
+        <form id="forgotForm" class="form-card" novalidate>
+          <label>
+            <span>Email Address</span>
+            <div class="field-group" id="forgotEmailGroup"><input id="forgotEmail" type="email" placeholder="your.email@rsu.edu.ph" autocomplete="email"></div>
+            <span class="field-error" id="forgotEmailError"></span>
+          </label>
+          <button class="primary-button" type="submit">Send Reset Code</button>
+        </form>
+        <p class="card-foot"><button class="text-link" id="backToLoginFromForgot" type="button">Back to Sign In</button></p>
+      </div>
+    </section>
+
+    <section class="screen" id="verifyScreen">
+      <div class="card">
+        <div class="card-brand">
+          <div class="card-badge"><img src="../../assets/images/rsu-sdpo-logo.png" alt="RSU SDPO"></div>
+          <div><h2>RSU-<span>SDPO</span></h2><p>Sports Equipment &amp; Transaction Monitoring System</p><p class="screen-title">Check Your Email</p></div>
+        </div>
+        <p class="screen-note">We sent a 6-digit code to <strong id="verifyEmailTarget">your registered email</strong></p>
+        <form id="verifyForm" class="verify-card" novalidate>
+          <div class="code-inputs" aria-label="Verification code">
+            <input type="text" inputmode="numeric" maxlength="1" class="code-digit">
+            <input type="text" inputmode="numeric" maxlength="1" class="code-digit">
+            <input type="text" inputmode="numeric" maxlength="1" class="code-digit">
+            <input type="text" inputmode="numeric" maxlength="1" class="code-digit">
+            <input type="text" inputmode="numeric" maxlength="1" class="code-digit">
+            <input type="text" inputmode="numeric" maxlength="1" class="code-digit">
+          </div>
+          <span class="field-error" id="verifyCodeError" style="text-align:center"></span>
+          <button class="primary-button" type="submit">Verify Code</button>
+        </form>
+        <p class="screen-note small">Please enter the complete 6-digit code.</p>
+        <p class="card-foot"><button class="text-link" id="backToLoginFromVerify" type="button">Back to Sign In</button></p>
+      </div>
+    </section>
+
+    <section class="screen" id="facebookScreen">
+      <div class="card">
+        <div class="card-brand">
+          <div class="card-badge"><img src="../../assets/images/rsu-sdpo-logo.png" alt="RSU SDPO"></div>
+          <div><h2>RSU-<span>SDPO</span></h2><p>Sports Equipment &amp; Transaction Monitoring System</p><p class="screen-title">Continue with Facebook</p></div>
+        </div>
+        <p class="screen-note">Use your Facebook profile to sign in quickly and securely.</p>
+        <button class="primary-button" id="facebookContinueButton" type="button">Continue with Facebook</button>
+        <p class="card-foot"><button class="text-link" id="backToLoginFromSocial" type="button">Use another sign in method</button></p>
+      </div>
+    </section>
+
+    <section class="screen" id="googleScreen">
+      <div class="card">
+        <div class="card-brand">
+          <div class="card-badge google-badge"><img src="../../assets/icons/icon-google.svg" alt="Google"></div>
+          <div><h2>accounts.google.com</h2><p class="screen-subtitle">Verify it&apos;s you to continue to RSU-SDPO</p></div>
+        </div>
+        <div class="google-account-list">
+          <button class="google-account google-account--selected" type="button">
+            <div class="google-account__avatar">JD</div>
+            <div class="google-account__meta"><span class="google-account__name">Juan dela Cruz</span><span class="google-account__email">juandelacruz@gmail.com</span></div>
+          </button>
+          <button class="google-account" type="button">
+            <div class="google-account__avatar google-account__avatar--alt">MS</div>
+            <div class="google-account__meta"><span class="google-account__name">Maria Santos</span><span class="google-account__email">mariasantos2024@gmail.com</span></div>
+          </button>
+          <button class="google-account google-account--ghost" type="button">
+            <div class="google-account__avatar">+</div>
+            <div class="google-account__meta"><span class="google-account__name">Use another account</span></div>
+          </button>
+        </div>
+        <div class="google-actions">
+          <button class="text-link" id="googleCancelButton" type="button">Cancel</button>
+          <button class="primary-button" id="googleAllowButton" type="button">Allow</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="../../js/shared/api.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const screens = ['loginScreen','signupScreen','forgotScreen','verifyScreen','facebookScreen','googleScreen'].map($);
+
+    function clearScreens() { screens.forEach((s) => s.classList.remove('active')); }
+    function showScreen(el) { clearScreens(); el.classList.add('active'); }
+    function showLogin(message, isError) {
+      const note = $('loginNote');
+      if (message) { note.textContent = message; note.hidden = false; note.classList.toggle('error', !!isError); note.classList.toggle('success', !isError); }
+      else { note.hidden = true; }
+      showScreen($('loginScreen'));
+    }
+    function showSignup() { showScreen($('signupScreen')); }
+    function showForgot() { showScreen($('forgotScreen')); }
+    function showVerify() { showScreen($('verifyScreen')); }
+    function showFacebook() { showScreen($('facebookScreen')); }
+    function showGoogle() { showScreen($('googleScreen')); }
+    function goToDashboard(user) {
+      const staffRoles = ['Admin', 'Director', 'Staff'];
+      window.location.href = staffRoles.includes(user.userRole) ? '../admin/dashboard.html' : '../user/equipment-showroom-figma.html';
+    }
+
+    $('openSignupButton').addEventListener('click', showSignup);
+    $('backToLoginButton').addEventListener('click', () => showLogin());
+    $('forgotPasswordButton').addEventListener('click', showForgot);
+    $('openGoogleButton').addEventListener('click', showGoogle);
+    $('openFacebookButton').addEventListener('click', showFacebook);
+    $('openGoogleButtonSignup').addEventListener('click', showGoogle);
+    $('openFacebookButtonSignup').addEventListener('click', showFacebook);
+    $('backToLoginFromForgot').addEventListener('click', () => showLogin());
+    $('backToLoginFromVerify').addEventListener('click', () => showLogin());
+    $('backToLoginFromSocial').addEventListener('click', () => showLogin());
+    $('googleCancelButton').addEventListener('click', () => showLogin());
+    // Google/Facebook sign-in are decorative mocks until OAuth credentials exist —
+    // there's no real user to redirect by role, so they just go to the admin dashboard.
+    $('googleAllowButton').addEventListener('click', () => { window.location.href = '../admin/dashboard.html'; });
+    $('facebookContinueButton').addEventListener('click', () => { window.location.href = '../admin/dashboard.html'; });
+
+    // --- Validation helpers ---
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    function setFieldError(groupId, errorId, message) {
+      const group = $(groupId);
+      if (group) group.classList.toggle('invalid', !!message);
+      $(errorId).textContent = message || '';
+      return !message;
+    }
+    function maskEmail(email) {
+      const [user, domain] = email.split('@');
+      if (!user || !domain) return email;
+      const visible = user.slice(0, 1);
+      return visible + '•'.repeat(Math.max(user.length - 1, 1)) + '@' + domain;
+    }
+
+    // --- Show/hide password toggles ---
+    document.querySelectorAll('.toggle-pw').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const input = $(btn.dataset.target);
+        const showing = input.type === 'password';
+        input.type = showing ? 'text' : 'password';
+        btn.classList.toggle('showing', showing);
+        btn.setAttribute('aria-pressed', String(showing));
+        btn.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+      });
+    });
+
+    // --- Sign In ---
+    $('signInForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = $('loginEmail').value.trim();
+      const password = $('loginPassword').value;
+      // Clear both fields immediately on every submit — success, server error,
+      // or validation error — so a failed attempt never leaves a stale password visible.
+      $('signInForm').reset();
+      let ok = true;
+      ok = setFieldError('loginEmailGroup', 'loginEmailError', username ? '' : 'Enter your email or username.') && ok;
+      ok = setFieldError('loginPasswordGroup', 'loginPasswordError', password ? '' : 'Enter your password.') && ok;
+      if (!ok) return;
+
+      const submitBtn = $('signInForm').querySelector('.primary-button');
+      submitBtn.disabled = true;
+      try {
+        const { user, token } = await apiFetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        localStorage.setItem('rsuSdpoToken', token);
+        localStorage.setItem('rsuSdpoUser', JSON.stringify(user));
+        goToDashboard(user);
+      } catch (err) {
+        showLogin(err.message, true);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    // --- Sign Up ---
+    $('signUpForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = $('signupName').value.trim();
+      const email = $('signupEmail').value.trim();
+      const college = $('signupCollege').value.trim();
+      const category = $('signupCategory').value;
+      const pw = $('signupPassword').value;
+      const confirm = $('signupConfirm').value;
+      let ok = true;
+      ok = setFieldError('signupNameGroup', 'signupNameError', name ? '' : 'Enter your full name.') && ok;
+      ok = setFieldError('signupEmailGroup', 'signupEmailError', EMAIL_RE.test(email) ? '' : 'Enter a valid email address.') && ok;
+      ok = setFieldError('signupCollegeGroup', 'signupCollegeError', college ? '' : 'Enter your college or unit.') && ok;
+      ok = setFieldError('signupPasswordGroup', 'signupPasswordError', pw.length >= 8 ? '' : 'Password must be at least 8 characters.') && ok;
+      ok = setFieldError('signupConfirmGroup', 'signupConfirmError', confirm && confirm === pw ? '' : 'Passwords do not match.') && ok;
+      if (!ok) return;
+
+      const [firstName, ...rest] = name.split(/\s+/);
+      const lastName = rest.length ? rest.join(' ') : firstName;
+      const submitBtn = $('signUpForm').querySelector('.primary-button');
+      submitBtn.disabled = true;
+      $('signupFormError').textContent = '';
+      try {
+        await apiFetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: email.split('@')[0],
+            emailAddress: email,
+            password: pw,
+            userRole: 'Borrower',
+            firstName,
+            lastName,
+            collegeOrUnit: college,
+            borrowerCategory: category
+          })
+        });
+        $('signUpForm').reset();
+        showLogin('Account created! Please sign in.');
+      } catch (err) {
+        $('signupFormError').textContent = err.message;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    // --- Forgot Password ---
+    $('forgotForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = $('forgotEmail').value.trim();
+      if (!setFieldError('forgotEmailGroup', 'forgotEmailError', EMAIL_RE.test(email) ? '' : 'Enter a valid email address.')) return;
+      $('verifyEmailTarget').textContent = maskEmail(email);
+      showVerify();
+    });
+
+    // --- Verify code ---
+    const codeDigits = Array.from(document.querySelectorAll('.code-digit'));
+    codeDigits.forEach((el, i) => {
+      el.addEventListener('input', () => {
+        el.value = el.value.replace(/[^0-9]/g, '').slice(0, 1);
+        if (el.value && codeDigits[i + 1]) codeDigits[i + 1].focus();
+      });
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !el.value && codeDigits[i - 1]) codeDigits[i - 1].focus();
+      });
+    });
+    $('verifyForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const complete = codeDigits.every((el) => el.value);
+      codeDigits.forEach((el) => el.classList.toggle('invalid', !complete));
+      $('verifyCodeError').textContent = complete ? '' : 'Please enter the complete 6-digit code.';
+      if (!complete) return;
+      codeDigits.forEach((el) => { el.value = ''; el.classList.remove('invalid'); });
+      showLogin('Password reset successfully. Please sign in with your new password.');
+    });
+  </script>
+</body>
+</html>
