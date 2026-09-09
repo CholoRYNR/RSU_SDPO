@@ -1,6 +1,6 @@
 'use strict';
 
-const { Equipment, Category, Transaction } = require('../models');
+const { Equipment, Category, Item, Transaction } = require('../models');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -26,13 +26,23 @@ function sameDay(a, b) {
 
 exports.summary = async (req, res) => {
   const [equipment, transactions] = await Promise.all([
-    Equipment.findAll({ include: [{ model: Category, as: 'category' }] }),
+    Equipment.findAll({ include: [{ model: Category, as: 'category' }, { model: Item, as: 'items' }] }),
     Transaction.findAll()
   ]);
 
   const totalEquipment = equipment.reduce((n, e) => n + e.totalQuantity, 0);
   const availableEquipment = equipment.reduce((n, e) => n + e.availableQuantity, 0);
-  const borrowedEquipment = Math.max(totalEquipment - availableEquipment, 0);
+  // Same bug as the Equipment Inventory Report's "Borrowed" column (Medium
+  // #8, 2026-09-08 system audit, fixed in report.controller.js#inventory):
+  // `totalQuantity - availableQuantity` also counts Reserved (pending, not
+  // yet released), Damaged, Under Repair, and Decommissioned items as
+  // "Borrowed." Count each item's own ground-truth availabilityStatus
+  // directly instead, same fix applied here since this dashboard card is
+  // the same underlying claim shown a different way.
+  const borrowedEquipment = equipment.reduce(
+    (n, e) => n + (e.items || []).filter((i) => i.availabilityStatus === 'Borrowed').length,
+    0
+  );
   const availablePercent = totalEquipment > 0 ? Math.round((availableEquipment / totalEquipment) * 100) : 0;
 
   const thirtyDaysAgo = new Date(Date.now() - 30 * DAY_MS);

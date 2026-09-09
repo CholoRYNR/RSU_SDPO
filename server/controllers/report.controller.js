@@ -42,15 +42,47 @@ function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 }
 
+// Philippine Time is a fixed UTC+8 offset (no DST), so "the start of Q1
+// 2026 in PHT" can be computed directly as a UTC instant without needing a
+// timezone database — Date.UTC(year, month, day, hour) with the hour
+// shifted back by 8 lands exactly on 00:00 PHT.
+const PHT_OFFSET_MINUTES = 8 * 60;
+function startOfPhtDate(year, monthIndex0, day) {
+  return new Date(Date.UTC(year, monthIndex0, day, 0, 0, 0) - PHT_OFFSET_MINUTES * 60 * 1000);
+}
+// "Right now, as a PHT wall-clock reading" — used only to pick the default
+// year/quarter when the caller doesn't specify one. Shifting the instant
+// forward by the PHT offset and then reading it with the UTC getters is the
+// standard fixed-offset-timezone trick; it keeps the *default quarter
+// selection* correct near a quarter boundary too, not just the range math
+// below (a request made at, say, 2:00 AM PHT on Jan 1 is 6:00 PM UTC Dec 31
+// on a UTC-configured server — without this it would default to Q4 of the
+// old year instead of Q1 of the new one).
+function nowInPht() {
+  return new Date(Date.now() + PHT_OFFSET_MINUTES * 60 * 1000);
+}
+
 // Every report is filtered to a quarter+year window over requestDatetime,
 // same convention as the existing transactionLog calendar report below.
+//
+// Medium #6 from the 2026-09-08 system audit: this used to build the range
+// with `new Date(year, startMonth, 1)`, which is always evaluated in the
+// server *process's* local timezone. If the server runs in UTC (typical on
+// Vercel/Railway — see the approved deployment stack), midnight PHT on the
+// first day of a quarter is actually 16:00 UTC the *previous* day, so any
+// transaction made in the first 8 hours of a new quarter (PHT) was still
+// being counted in the old quarter's report, and the last 8 hours of the
+// outgoing quarter were being cut off early. requestDatetime itself is
+// stored as a normal UTC instant either way (Sequelize/Postgres always
+// store DATE/TIMESTAMP in UTC) — only the *boundary* needs to be pinned to
+// PHT rather than whatever timezone the process happens to be running in.
 function quarterRange(req) {
-  const now = new Date();
-  const year = parseInt(req.query.year, 10) || now.getFullYear();
-  const quarter = parseInt(req.query.quarter, 10) || Math.floor(now.getMonth() / 3) + 1;
+  const phtNow = nowInPht();
+  const year = parseInt(req.query.year, 10) || phtNow.getUTCFullYear();
+  const quarter = parseInt(req.query.quarter, 10) || Math.floor(phtNow.getUTCMonth() / 3) + 1;
   const startMonth = (quarter - 1) * 3;
-  const start = new Date(year, startMonth, 1);
-  const end = new Date(year, startMonth + 3, 1);
+  const start = startOfPhtDate(year, startMonth, 1);
+  const end = startOfPhtDate(year, startMonth + 3, 1);
   return { year, quarter, start, end };
 }
 
@@ -66,6 +98,25 @@ const TXN_INCLUDE_FOR_REPORTS = [
 function txnCode(t) {
   return `TXN-${new Date(t.requestDatetime || t.createdAt).getFullYear()}-${String(t.id).padStart(4, '0')}`;
 }
+
+// Statuses a transaction only ever reaches once the Director has actually
+// approved it (transactionStatus is set to 'Approved' in exactly one place,
+// borrow.controller.js#approve) or moved on from there. Medium #7 from the
+// 2026-09-08 system audit: the Borrowing Report's "Approved Requests" stat
+// used to be `transactionStatus !== 'Pending'`, which also counted
+// Acknowledged/For Review/For Approval (not actually approved yet) and,
+// worse, Rejected and Cancelled (explicitly *not* approved) — inflating the
+// real approved count with everything that was ever submitted.
+const POST_APPROVAL_STATUSES = new Set([
+  'Approved',
+  'Released',
+  'Returned',
+  'Overdue',
+  'For Resolution',
+  'Replacement',
+  'Resolved',
+  'Completed'
+]);
 
 exports.borrowing = async (req, res) => {
   const { start, end } = quarterRange(req);
@@ -88,7 +139,7 @@ exports.borrowing = async (req, res) => {
     });
   });
 
-  const approved = txns.filter((t) => t.transactionStatus !== 'Pending').length;
+  const approved = txns.filter((t) => POST_APPROVAL_STATUSES.has(t.transactionStatus)).length;
   const completed = txns.filter((t) => ['Returned', 'Completed'].includes(t.transactionStatus)).length;
 
   const reportData = {
@@ -237,11 +288,18 @@ exports.inventory = async (req, res) => {
 
   let missingItems = 0;
   const data = equipment.map((e) => {
-    const registered = (e.items || []).length;
-    // Borrowed = registered items currently checked out, not totalQuantity
-    // minus available — that would count never-registered capacity as
-    // "borrowed" when it's really just missing QR items (see missingItems).
-    const borrowed = Math.max(registered - e.availableQuantity, 0);
+    const items = e.items || [];
+    const registered = items.length;
+    // Medium #8 from the 2026-09-08 system audit: `registered -
+    // availableQuantity` still over-counts "Borrowed" — a registered item
+    // that's Reserved (a pending, not-yet-released request), Damaged, Under
+    // Repair, Lost, or Decommissioned also isn't in availableQuantity, but
+    // none of those are actually borrowed either. Each Item already carries
+    // its own ground-truth availabilityStatus (set exclusively by the
+    // release/return workflow — see qr.controller.js's manual-status guard,
+    // which explicitly blocks hand-editing a Borrowed or Reserved item), so
+    // count that directly instead of deriving it arithmetically.
+    const borrowed = items.filter((i) => i.availabilityStatus === 'Borrowed').length;
     if (registered === 0 && e.totalQuantity > 0) missingItems += 1;
     return [
       e.equipmentName,
@@ -332,13 +390,23 @@ exports.condition = async (req, res) => {
 
 // Groups every transaction requested during the given month by the day of
 // month it was requested on, for the Transaction Log Report calendar.
+//
+// Same Medium #6 timezone issue as quarterRange() above applies to the
+// month *boundary* here, so it gets the same PHT-pinned fix. Note this
+// doesn't touch the day-bucketing below (`new Date(t.requestDatetime).
+// getDate()`), which still reads the day-of-month in the server process's
+// local timezone — a transaction made very late/early in the day PHT could
+// still land in the neighboring calendar cell if the server itself doesn't
+// run in PHT. That's a display-grouping nuance distinct from this range
+// possibly excluding/including the wrong transactions entirely, and is
+// left as-is here.
 exports.transactionLog = async (req, res) => {
-  const now = new Date();
-  const year = parseInt(req.query.year, 10) || now.getFullYear();
-  const month = parseInt(req.query.month, 10) || now.getMonth() + 1; // 1-12
+  const phtNow = nowInPht();
+  const year = parseInt(req.query.year, 10) || phtNow.getUTCFullYear();
+  const month = parseInt(req.query.month, 10) || phtNow.getUTCMonth() + 1; // 1-12
 
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 1); // exclusive
+  const start = startOfPhtDate(year, month - 1, 1);
+  const end = startOfPhtDate(year, month, 1); // exclusive
 
   const rows = await Transaction.findAll({
     where: { requestDatetime: { [Op.gte]: start, [Op.lt]: end } },
@@ -358,7 +426,13 @@ exports.transactionLog = async (req, res) => {
     // The calendar-by-day shape returned for the default JSON view doesn't
     // translate to a table, so flatten it into the same
     // { title, heads, data, stats } shape the other reports use.
-    const monthName = start.toLocaleDateString('en-US', { month: 'long' });
+    // Deriving this from `month` directly rather than formatting `start` —
+    // `start` is now a UTC instant pinned to PHT midnight (see above), so
+    // rendering it with toLocaleDateString() would use the server
+    // process's own local timezone and could show the wrong month on a
+    // UTC-configured server (that instant falls on the *previous* day in
+    // UTC for every month).
+    const monthName = new Date(2000, month - 1, 1).toLocaleDateString('en-US', { month: 'long' });
     const heads = ['Day', 'Transaction No.', 'Time', 'Borrower', 'College/Unit', 'Status'];
     const data = [];
     Object.keys(byDay)

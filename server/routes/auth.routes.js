@@ -15,6 +15,10 @@ const router = express.Router();
 
 router.post('/register', catchAsync(ctrl.register));
 router.post('/login', catchAsync(ctrl.login));
+router.post('/verify-registration', catchAsync(ctrl.verifyRegistration));
+router.post('/resend-verification', catchAsync(ctrl.resendVerification));
+router.post('/forgot-password', catchAsync(ctrl.forgotPassword));
+router.post('/reset-password', catchAsync(ctrl.resetPassword));
 router.get('/me', authMiddleware, catchAsync(ctrl.me));
 
 // Google OAuth 2.0. This app is stateless/JWT-based (no express-session

@@ -30,7 +30,17 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('Active', 'Blocked', 'Restricted'),
         allowNull: true,
         defaultValue: 'Active'
-      }
+      },
+      // Email verification and password reset are deliberately kept
+      // separate from accountStatus above (which is reserved for the
+      // damage/loss borrower-restriction system) — see migration 020.
+      emailVerified: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      verificationCodeHash: { type: DataTypes.STRING(255), allowNull: true },
+      verificationCodeExpiresAt: { type: DataTypes.DATE, allowNull: true },
+      verificationCodeAttempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+      resetCodeHash: { type: DataTypes.STRING(255), allowNull: true },
+      resetCodeExpiresAt: { type: DataTypes.DATE, allowNull: true },
+      resetCodeAttempts: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 }
     },
     {
       sequelize,

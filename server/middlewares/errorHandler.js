@@ -11,5 +11,11 @@ module.exports = (err, req, res, next) => {
   res.status(status).json({
     success: false,
     message: err.message || 'Internal Server Error',
+    // Only ever set by authMiddleware.js right now (AUTH_EXPIRED) — purely
+    // additive, existing consumers that only destructure {success,message,
+    // data} are unaffected. Lets the client tell a real expired/missing
+    // session apart from an ordinary business-logic 401 (wrong password,
+    // etc.) without guessing from message text.
+    ...(err.code ? { code: err.code } : {}),
   });
 };

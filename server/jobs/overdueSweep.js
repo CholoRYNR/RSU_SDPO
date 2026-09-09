@@ -18,23 +18,38 @@ async function runOverdueSweep() {
     include: [{ model: Borrower, as: 'borrower', include: [{ model: User, as: 'user' }] }]
   });
 
-  for (const txn of overdue) {
-    txn.transactionStatus = 'Overdue';
-    await txn.save();
-    await logStatusChange(txn.id, null, 'Released', 'Overdue', 'Automatically flagged overdue by system sweep');
+  let flaggedCount = 0;
 
-    if (txn.borrower && txn.borrower.user) {
-      await notifyBorrower(
-        txn.borrower.user.id,
-        `Your borrowed equipment (Transaction #${txn.id}) is now overdue. Please return it to the SDPO office as soon as possible.`,
-        'Overdue'
-      );
+  // Each transaction is isolated in its own try/catch — without this, one
+  // bad row (a save() constraint error, a notify() failure from a borrower
+  // with a malformed record) throws out of the loop and silently skips
+  // every remaining overdue transaction in the same batch. Since this sweep
+  // only runs hourly (see app.js), that means unrelated borrowers' items
+  // wouldn't get flagged, logged, or notified about for up to an hour — and
+  // if the failure is deterministic (e.g. that one row always errors), it
+  // would keep blocking the rest of the batch on every single run.
+  for (const txn of overdue) {
+    try {
+      txn.transactionStatus = 'Overdue';
+      await txn.save();
+      await logStatusChange(txn.id, null, 'Released', 'Overdue', 'Automatically flagged overdue by system sweep');
+
+      if (txn.borrower && txn.borrower.user) {
+        await notifyBorrower(
+          txn.borrower.user.id,
+          `Your borrowed equipment (Transaction #${txn.id}) is now overdue. Please return it to the SDPO office as soon as possible.`,
+          'Overdue'
+        );
+      }
+      await notifyStaff(`Transaction #${txn.id} is now overdue.`, 'Overdue');
+      flaggedCount += 1;
+    } catch (err) {
+      console.error(`Overdue sweep: failed to process transaction #${txn.id}:`, err.message);
     }
-    await notifyStaff(`Transaction #${txn.id} is now overdue.`, 'Overdue');
   }
 
-  if (overdue.length) {
-    console.log(`Overdue sweep: flagged ${overdue.length} transaction(s) as Overdue.`);
+  if (flaggedCount) {
+    console.log(`Overdue sweep: flagged ${flaggedCount} transaction(s) as Overdue.`);
   }
 }
 

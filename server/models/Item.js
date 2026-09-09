@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'Good'
       },
       availabilityStatus: {
-        type: DataTypes.ENUM('Available', 'Borrowed', 'Reserved'),
+        type: DataTypes.ENUM('Available', 'Borrowed', 'Reserved', 'Maintenance', 'Decommissioned'),
         allowNull: true,
         defaultValue: 'Available'
       },

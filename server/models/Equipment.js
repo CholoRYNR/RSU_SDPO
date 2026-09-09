@@ -16,7 +16,8 @@ module.exports = (sequelize, DataTypes) => {
       categoryId: { type: DataTypes.INTEGER, allowNull: false },
       totalQuantity: { type: DataTypes.INTEGER, allowNull: false },
       availableQuantity: { type: DataTypes.INTEGER, allowNull: false },
-      description: { type: DataTypes.TEXT, allowNull: true }
+      description: { type: DataTypes.TEXT, allowNull: true },
+      photoPath: { type: DataTypes.STRING(255), allowNull: true }
     },
     {
       sequelize,

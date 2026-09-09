@@ -23,11 +23,16 @@
     .hero-title-light{color:#fff}
     .hero-title-accent{color:#d97706}
     .hero-subtitle{margin:18px auto 0;max-width:500px;font-size:clamp(1rem,2vw,1.25rem);color:rgba(255,255,255,.95);line-height:1.6}
-    .hero-button{display:inline-flex;align-items:center;justify-content:center;padding:14px 36px;margin-top:24px;border:none;border-radius:999px;background:#fff;color:#02704f;font-weight:700;box-shadow:0 20px 40px rgba(0,0,0,.18);transition:transform .2s ease,box-shadow .2s ease}
+    .hero-button{display:inline-flex;align-items:center;justify-content:center;padding:14px 36px;border:none;border-radius:999px;background:#fff;color:#02704f;font-weight:700;box-shadow:0 20px 40px rgba(0,0,0,.18);transition:transform .2s ease,box-shadow .2s ease}
     .hero-button:hover{transform:translateY(-1px);box-shadow:0 24px 45px rgba(0,0,0,.22)}
-    .hero-description,.hero-hint{margin:16px auto 0;max-width:520px}
-    .hero-description{color:rgba(255,255,255,.9);font-size:1rem;line-height:1.6}
-    .hero-hint{color:rgba(255,255,255,.7);font-size:.95rem}
+    .hero-button-secondary{background:rgba(255,255,255,.12);color:#fff;border:2px solid rgba(255,255,255,.8);box-shadow:none}
+    .hero-button-secondary:hover{background:rgba(255,255,255,.2);box-shadow:0 20px 40px rgba(0,0,0,.15)}
+    .hero-actions{display:flex;flex-wrap:wrap;align-items:stretch;justify-content:center;gap:16px;margin-top:24px}
+    .hero-description{margin:16px auto 0;max-width:520px;color:rgba(255,255,255,.9);font-size:1rem;line-height:1.6}
+
+    @media(max-width:480px){
+      .hero-actions{flex-direction:column}
+    }
 
     @media(max-width:640px){
       .hero-content{padding:24px 12px}
@@ -46,18 +51,21 @@
       <div class="hero-copy">
         <h1><span class="hero-title-light">RSU-</span><span class="hero-title-accent">SDPO</span></h1>
         <p class="hero-subtitle">Sports Equipment &amp; Transaction Monitoring System</p>
-        <button class="hero-button" id="openLoginButton" type="button">Get Started</button>
+        <div class="hero-actions">
+          <button class="hero-button" id="openUserLoginButton" type="button">User / Borrower</button>
+          <button class="hero-button hero-button-secondary" id="openAdminLoginButton" type="button">Admin / Staff / Director</button>
+        </div>
         <p class="hero-description">Centralized Borrowing and Equipment Tracking</p>
-        <p class="hero-hint">or tap anywhere to continue</p>
       </div>
     </div>
   </main>
 
   <script>
-    function goToLogin() { window.location.href = 'user-login.html'; }
-    document.getElementById('openLoginButton').addEventListener('click', goToLogin);
-    document.getElementById('heroScreen').addEventListener('click', function (e) {
-      if (!e.target.closest('#openLoginButton')) goToLogin();
+    document.getElementById('openUserLoginButton').addEventListener('click', function () {
+      window.location.href = 'user-login.html';
+    });
+    document.getElementById('openAdminLoginButton').addEventListener('click', function () {
+      window.location.href = 'admin-login.html';
     });
   </script>
 </body>

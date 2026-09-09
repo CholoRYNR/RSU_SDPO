@@ -1,6 +1,27 @@
 'use strict';
 
+const path = require('path');
 const { Equipment, Category, Item } = require('../models');
+const { getClient } = require('../config/supabase');
+
+const PHOTOS_BUCKET = process.env.SUPABASE_EQUIPMENT_PHOTOS_BUCKET || 'equipment-photos';
+
+// Per-unit status breakdown (Available/Borrowed/Reserved/Maintenance/
+// Decommissioned) — added alongside the Maintenance/Decommissioned item
+// statuses (migration 021) so the admin Equipment views can actually show
+// what happened to the units missing from availableQuantity, instead of
+// only a single Total/Available/Borrowed picture that can't tell "out on
+// loan" apart from "pulled for repair" or "retired for good".
+const ITEM_STATUSES = ['Available', 'Borrowed', 'Reserved', 'Maintenance', 'Decommissioned'];
+function statusCounts(items) {
+  const counts = { Available: 0, Borrowed: 0, Reserved: 0, Maintenance: 0, Decommissioned: 0 };
+  (items || []).forEach((item) => {
+    if (Object.prototype.hasOwnProperty.call(counts, item.availabilityStatus)) {
+      counts[item.availabilityStatus] += 1;
+    }
+  });
+  return counts;
+}
 
 function serialize(equipment) {
   return {
@@ -10,20 +31,31 @@ function serialize(equipment) {
     category: equipment.category ? { id: equipment.category.id, categoryName: equipment.category.categoryName } : null,
     totalQuantity: equipment.totalQuantity,
     availableQuantity: equipment.availableQuantity,
-    description: equipment.description
+    description: equipment.description,
+    // The actual bytes live in Supabase Storage (private bucket, same
+    // pattern as borrower documents) and are streamed back through
+    // downloadPhoto below — this is just a pointer to that route, not a
+    // direct storage URL, so the client never needs its own credentials.
+    photoUrl: equipment.photoPath ? `/api/equipment/${equipment.id}/photo` : null,
+    // Present only when items were actually loaded (list/getOne below) —
+    // callers that don't need the breakdown (create/update responses)
+    // simply won't see this key rather than a misleadingly-all-zero one.
+    ...(equipment.items ? { statusCounts: statusCounts(equipment.items) } : {})
   };
 }
 
 exports.list = async (req, res) => {
   const rows = await Equipment.findAll({
-    include: [{ model: Category, as: 'category' }],
+    include: [{ model: Category, as: 'category' }, { model: Item, as: 'items', attributes: ['id', 'availabilityStatus'] }],
     order: [['equipmentName', 'ASC']]
   });
   res.json({ success: true, data: rows.map(serialize) });
 };
 
 exports.getOne = async (req, res) => {
-  const equipment = await Equipment.findByPk(req.params.id, { include: [{ model: Category, as: 'category' }] });
+  const equipment = await Equipment.findByPk(req.params.id, {
+    include: [{ model: Category, as: 'category' }, { model: Item, as: 'items', attributes: ['id', 'availabilityStatus'] }]
+  });
   if (!equipment) {
     const err = new Error('Equipment not found');
     err.statusCode = 404;
@@ -84,6 +116,59 @@ exports.update = async (req, res) => {
   await equipment.save();
   const withCategory = await Equipment.findByPk(equipment.id, { include: [{ model: Category, as: 'category' }] });
   res.json({ success: true, data: serialize(withCategory) });
+};
+
+// A real photo per equipment listing (type-level — the Showroom and admin
+// inventory view both group by Equipment, not by individual physical Item,
+// so one photo per listing is what "thumbnail previews" in the S7 backlog
+// meant in practice). Uploading a new photo overwrites the pointer; the old
+// storage object is left in place rather than deleted (same trade-off the
+// borrower-document uploads already make — storage cleanup isn't wired up
+// anywhere in this codebase yet).
+exports.uploadPhoto = async (req, res) => {
+  const equipment = await Equipment.findByPk(req.params.id);
+  if (!equipment) {
+    const err = new Error('Equipment not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+  const key = `equipment-${equipment.id}-${Date.now()}${ext}`;
+  const { error } = await getClient()
+    .storage.from(PHOTOS_BUCKET)
+    .upload(key, req.file.buffer, { contentType: req.file.mimetype, upsert: false });
+  if (error) {
+    const err = new Error(`Failed to upload photo: ${error.message}`);
+    err.statusCode = 502;
+    throw err;
+  }
+
+  equipment.photoPath = key;
+  await equipment.save();
+  const withCategory = await Equipment.findByPk(equipment.id, { include: [{ model: Category, as: 'category' }] });
+  res.json({ success: true, data: serialize(withCategory) });
+};
+
+exports.downloadPhoto = async (req, res) => {
+  const equipment = await Equipment.findByPk(req.params.id);
+  if (!equipment || !equipment.photoPath) {
+    const err = new Error('This equipment has no photo on file');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const { data, error } = await getClient().storage.from(PHOTOS_BUCKET).download(equipment.photoPath);
+  if (error || !data) {
+    return res.status(404).json({ success: false, message: 'Photo file is missing in storage' });
+  }
+  res.set('Content-Type', data.type || 'application/octet-stream');
+  // Photos are small and shown on every Showroom card load — safe to let
+  // the browser cache them for a while; a re-upload gets a brand-new
+  // storage key (see uploadPhoto above), so this can never serve stale
+  // bytes under the same URL.
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.send(Buffer.from(await data.arrayBuffer()));
 };
 
 exports.remove = async (req, res) => {

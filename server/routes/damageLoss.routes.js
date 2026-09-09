@@ -14,5 +14,6 @@ router.patch('/:id/verify', catchAsync(ctrl.verifyReplacement));
 router.patch('/:id/resolve', catchAsync(ctrl.resolve));
 router.patch('/:id/flag', catchAsync(ctrl.flag));
 router.patch('/:id/unflag', catchAsync(ctrl.unflag));
+router.patch('/fees/:feeId/status', catchAsync(ctrl.updateFeeStatus));
 
 module.exports = router;

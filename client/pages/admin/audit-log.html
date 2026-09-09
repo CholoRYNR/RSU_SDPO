@@ -48,7 +48,7 @@
         ?rows.map(row).join('')
         :'<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">No status changes recorded yet.</td></tr>';
     }).catch(err=>{
-      document.getElementById('records-body').innerHTML=`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">Could not load audit log: ${err.message}</td></tr>`;
+      document.getElementById('records-body').innerHTML=`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--muted)">Could not load audit log: ${esc(err.message)}</td></tr>`;
     });
   </script>
 </body>

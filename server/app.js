@@ -74,9 +74,39 @@ const authRateLimiter = rateLimit({
   message: { success: false, message: 'Too many attempts. Please try again later.' }
 });
 
+// Tighter limit for the email-verification/password-reset endpoints: each
+// guards a brute-forceable 6-digit code (the controller itself also caps
+// wrong guesses per code via MAX_CODE_ATTEMPTS, but this limiter caps how
+// often a client can even request a fresh code or attempt one at all), so
+// it errs stricter than authRateLimiter above.
+//
+// A factory, not a single shared instance: express-rate-limit's default
+// MemoryStore keys hits by req.ip alone, with no awareness of which route
+// path a request hit. Passing the SAME limiter instance to app.use() for
+// multiple different paths (as this used to do) makes them all draw down
+// one combined budget — e.g. two "Forgot password" clicks plus a couple of
+// "Resend" clicks could exhaust the whole 5-per-15-minutes allowance and
+// then block a legitimate resend with "Too many attempts", even though the
+// user never called any single endpoint more than twice. Each endpoint
+// below gets its own instance so a resend can't be blocked by an unrelated
+// forgot-password attempt (or vice versa).
+function makeCodeRateLimiter() {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Too many attempts. Please try again later.' }
+  });
+}
+
 // API routes
 app.use('/api/auth/login', authRateLimiter);
 app.use('/api/auth/register', authRateLimiter);
+app.use('/api/auth/verify-registration', makeCodeRateLimiter());
+app.use('/api/auth/resend-verification', makeCodeRateLimiter());
+app.use('/api/auth/forgot-password', makeCodeRateLimiter());
+app.use('/api/auth/reset-password', makeCodeRateLimiter());
 app.use('/api', routes);
 
 // Static client (optional, adjust if serving client separately)
@@ -92,21 +122,33 @@ app.listen(PORT, async () => {
     await sequelize.authenticate();
     console.log(`Database connected (${sequelize.getDialect()} @ ${sequelize.config.host || 'DATABASE_URL'})`);
 
-    // Notification Engine sweeps — each runs once at startup, then hourly.
-    // No new dependency: setInterval is enough at this project's scale and
-    // matches its plain-Node style elsewhere. All three sweeps are kicked
-    // off together on the same tick; each keeps its own try/catch so one
-    // sweep failing (e.g. a transient DB error) never prevents the other
-    // two from running.
-    function runNotificationSweeps() {
-      runOverdueSweep().catch((err) => console.error('Overdue sweep failed:', err.message));
-      runDueDateReminderSweep().catch((err) => console.error('Due date reminder sweep failed:', err.message));
-      runIncompleteRequirementsSweep().catch((err) =>
-        console.error('Incomplete requirements sweep failed:', err.message)
-      );
+    // Notification Engine sweeps. Locally (and on any normal always-on
+    // host), this process never exits, so running them once at startup and
+    // then every hour via setInterval is enough — no new dependency needed.
+    //
+    // On Vercel, this whole file is loaded fresh per cold start and the
+    // process is frozen/torn down between requests, so a setInterval timer
+    // here has no guarantee of ever firing again — it is not a real
+    // background scheduler on a serverless platform. There, the sweeps run
+    // instead via Vercel Cron Jobs hitting GET /api/cron/sweep once a day
+    // (see the `crons` entry in vercel.json and server/routes/cron.routes.js
+    // for the same three functions called the same way). `VERCEL` is a
+    // platform-provided env var set to '1' on every Vercel deployment, so
+    // this skips the interval there instead of running a timer that would
+    // silently do nothing.
+    if (process.env.VERCEL) {
+      console.log('Running on Vercel — notification sweeps run via Cron (GET /api/cron/sweep), not setInterval.');
+    } else {
+      function runNotificationSweeps() {
+        runOverdueSweep().catch((err) => console.error('Overdue sweep failed:', err.message));
+        runDueDateReminderSweep().catch((err) => console.error('Due date reminder sweep failed:', err.message));
+        runIncompleteRequirementsSweep().catch((err) =>
+          console.error('Incomplete requirements sweep failed:', err.message)
+        );
+      }
+      runNotificationSweeps();
+      setInterval(runNotificationSweeps, 60 * 60 * 1000);
     }
-    runNotificationSweeps();
-    setInterval(runNotificationSweeps, 60 * 60 * 1000);
   } catch (err) {
     console.error('Database connection failed:', err.message);
     console.error('Check DATABASE_URL in .env — it must be the Supabase session pooler connection string.');

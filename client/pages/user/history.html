@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="../../css/shared/app-shell.css">
   <link rel="stylesheet" href="../../css/main.css">
   <style>
-    .content{max-width:1086px;margin:auto}
+    .content{width:100%;max-width:1086px;margin:auto}
     .hidden{display:none!important}
 
     /* ---------- On-time rate card ---------- */
@@ -180,7 +180,11 @@
       detailsView.classList.remove('hidden');
       $('detailNumber').textContent='#'+r.id;
       $('detailRequested').textContent=r.date;
-      $('detailReturned').textContent=r.returned||'—';
+      // (No #detailReturned element exists in the Transaction Information
+      // card — the actual return date is already shown in the Return
+      // Information card below, via #returnRows. This used to reference a
+      // nonexistent element and throw here, aborting the rest of this
+      // function on every single "View Details" click.)
       $('detailItems').innerHTML=r.items.map(i=>{
         const p=i.split(' — ');
         return `<div class="detail-row"><label>${p[0]}</label><strong>${p[1]}</strong></div>`;
@@ -209,7 +213,7 @@
         returnCard.classList.add('hidden');
       }
 
-      const stepsByStatus={completed:['Acknowledged','Submitted','Approved','Released','Returned','Completed'],cancelled:['Submitted','Cancelled'],rejected:['Submitted','Rejected']};
+      const stepsByStatus={completed:['Submitted','Acknowledged','For Approval','Approved','Released','Returned','Completed'],cancelled:['Submitted','Cancelled'],rejected:['Submitted','Rejected']};
       $('timeline').innerHTML=(stepsByStatus[r.status]||['Submitted']).map((s,i,arr)=>`<div class="step"><div class="dot">✓</div>${s}</div>${i<arr.length-1?'<i class="join"></i>':''}`).join('');
       scrollTo(0,0);
     }

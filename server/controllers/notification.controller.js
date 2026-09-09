@@ -38,4 +38,20 @@ exports.markAllRead = async (req, res) => {
   res.json({ success: true, data: { message: 'All notifications marked as read.' } });
 };
 
+exports.remove = async (req, res) => {
+  const notif = await Notification.findOne({ where: { id: req.params.id, userId: req.user.id } });
+  if (!notif) {
+    const err = new Error('Notification not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  if (!notif.isRead) {
+    const err = new Error('Mark this notification as read before deleting it.');
+    err.statusCode = 400;
+    throw err;
+  }
+  await notif.destroy();
+  res.json({ success: true, data: { message: 'Notification deleted.' } });
+};
+
 exports.serialize = serialize;

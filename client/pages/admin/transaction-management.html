@@ -100,6 +100,7 @@
     if (!localStorage.getItem('rsuSdpoToken')) { location.href = '../auth/admin-login.html'; }
 
     let txns=[];
+    let currentDocUrl=null; // object URL backing the doc viewer's <img>/<iframe>; revoked in viewDocument/closeDocViewer
     const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const cls=s=>s.toLowerCase().replace(/\s+/g,'-'); let current=null;
     const myRole=()=>{try{return(currentUser()||{}).userRole}catch(e){return null}};
@@ -122,7 +123,11 @@
     const ACTION_LABEL={Pending:'Review',Acknowledged:'Review','For Approval':isDirector()?'Approve':'',Approved:'Release',Released:'Return',Overdue:'Return','For Resolution':'Resolve',Replacement:'Resolve',Resolved:'Complete'};
     function render(rows=txns){document.getElementById('shown').textContent=rows.length;document.getElementById('transactions').innerHTML=rows.map(t=>{const label=ACTION_LABEL[t.status];return `<tr><td><span class="txn-id">${esc(t.id)}</span></td><td>${esc(t.date)}<span class="sub">${esc(t.time)}</span></td><td><b>${esc(t.name)}</b><span class="sub">${esc(t.bsf)}</span></td><td><span class="badge type">${esc(t.type)}</span></td><td>${esc(t.college)}</td><td class="purpose">${esc(t.purpose)}</td><td>${t.items.length}</td><td>${esc(t.due)}</td><td><span class="badge ${cls(t.status)}">${esc(t.status)}</span></td><td>${esc(t.review)}</td><td>${esc(t.approve)}</td><td><div class="actions"><button class="link-btn" onclick="openDrawer(${t.dbId})">View</button>${label?`<button class="link-btn primary" onclick="openDrawer(${t.dbId})">${label}</button>`:''}</div></td></tr>`}).join('')};
     function section(title,body){return `<section class="section"><div class="section-title">${title}</div><div class="section-body">${body}</div></section>`}
-    function event(title,detail,done=true){return `<div class="event"><div class="dotline"><div class="dot ${done?'':'gray'}">${done?'✓':'•'}</div><div class="line"></div></div><div><b>${title}</b><p>${detail}</p></div></div>`}
+    // Named timelineEvent, not event — a top-level `function event(...)`
+    // silently shadows the global `window.event`, same landmine class as
+    // the already-fixed open()/window.open collision in qr-management.html
+    // (Low finding, 2026-09-08 system audit).
+    function timelineEvent(title,detail,done=true){return `<div class="event"><div class="dotline"><div class="dot ${done?'':'gray'}">${done?'✓':'•'}</div><div class="line"></div></div><div><b>${title}</b><p>${detail}</p></div></div>`}
     // itemConditions holds the per-item Good/Damaged/Lost pick during a return
     // — reset each time the drawer opens on a Released/Overdue transaction.
     let itemConditions={};
@@ -167,6 +172,9 @@
     }
     async function viewDocument(borrowerId,type,label){
       const overlay=document.getElementById('docViewerOverlay'),body=document.getElementById('docViewerBody'),status=document.getElementById('docViewerStatus');
+      // Opening a second document without closing the first would otherwise leak
+      // the previous blob URL, since only closeDocViewer used to revoke it.
+      if(currentDocUrl){URL.revokeObjectURL(currentDocUrl);currentDocUrl=null;}
       document.getElementById('docViewerTitle').textContent=label;
       body.innerHTML='';status.className='scan-status';status.textContent='Loading document…';
       overlay.classList.add('show');overlay.setAttribute('aria-hidden','false');
@@ -179,15 +187,24 @@
         }
         const blob=await res.blob();
         const url=URL.createObjectURL(blob);
+        currentDocUrl=url;
+        // PDFs render inline via an iframe, images via <img>. Anything else
+        // (e.g. a DOCX, allowed as a document upload since S7 Phase 2) has no
+        // in-browser preview — previously this fell into the <img> branch and
+        // silently showed a broken-image icon with no way to actually see the
+        // file. Give those a direct download link instead.
         body.innerHTML=blob.type==='application/pdf'
           ?`<iframe src="${url}" style="width:100%;height:70vh;border:0;background:#fff"></iframe>`
-          :`<img src="${url}" alt="${esc(label)}" style="max-width:100%;max-height:70vh;display:block;margin:auto">`;
+          :blob.type.startsWith('image/')
+          ?`<img src="${url}" alt="${esc(label)}" style="max-width:100%;max-height:70vh;display:block;margin:auto">`
+          :`<div style="padding:50px 20px;text-align:center;color:#94a3b8"><p style="margin:0 0 14px">Preview isn't available for this file type.</p><a href="${url}" download="${esc(label)}" style="display:inline-block;color:#6ee7b7;font-weight:700;border:1px solid #334155;border-radius:8px;padding:9px 16px;text-decoration:none">⇩ Download ${esc(label)}</a></div>`;
         status.textContent='';
       }catch(e){
         status.className='scan-status err';status.textContent=e.message;
       }
     }
     function closeDocViewer(){
+      if(currentDocUrl){URL.revokeObjectURL(currentDocUrl);currentDocUrl=null;}
       document.getElementById('docViewerOverlay').classList.remove('show');
       document.getElementById('docViewerOverlay').setAttribute('aria-hidden','true');
       document.getElementById('docViewerBody').innerHTML='';
@@ -212,14 +229,18 @@
       const approved=!['Pending','Acknowledged','For Review','For Approval'].includes(t.status)&&t.status!=='Rejected';
       const releasedOnward=['Released','Overdue','For Resolution','Replacement','Resolved','Completed'].includes(t.status);
       const returnedOnward=['For Resolution','Replacement','Resolved','Completed'].includes(t.status)||t.status==='Completed';
-      return `<div class="timeline">${event('Request Submitted',esc(t.date)+' · '+esc(t.time))}${event('Reviewed',t.status==='Rejected'&&!approved?'Rejected':t.review!=='—'?'Reviewed by '+esc(t.review):'Awaiting review',reviewed)}${event('Approved',t.status==='Rejected'?'Rejected':approved?'Approved by '+esc(t.approve):'Awaiting approval',approved)}${event('Released',releasedOnward?'Equipment released':'',releasedOnward)}${event('Returned',returnedOnward?'Equipment returned':'',returnedOnward)}</div>`;
+      return `<div class="timeline">${timelineEvent('Request Submitted',esc(t.date)+' · '+esc(t.time))}${timelineEvent('Reviewed',t.status==='Rejected'&&!approved?'Rejected':t.review!=='—'?'Reviewed by '+esc(t.review):'Awaiting review',reviewed)}${timelineEvent('Approved',t.status==='Rejected'?'Rejected':approved?'Approved by '+esc(t.approve):'Awaiting approval',approved)}${timelineEvent('Released',releasedOnward?'Equipment released':'',releasedOnward)}${timelineEvent('Returned',returnedOnward?'Equipment returned':'',returnedOnward)}</div>`;
     }
     function openDrawer(dbId){current=txns.find(t=>t.dbId===dbId);if(!current)return;const t=current;document.getElementById('drawerBadges').innerHTML=`<span class="badge ${cls(t.status)}">${esc(t.id)}</span> <span class="badge ${cls(t.status)}">${esc(t.status)}</span> <span class="badge type">${esc(t.type)}</span>`;document.getElementById('drawerName').textContent=t.name;document.getElementById('drawerCollege').textContent=`${t.college} · ${t.bsf}`;document.getElementById('drawerActions').innerHTML=drawerActionsHtml(t);
       document.getElementById('overview').innerHTML=section('Borrower Information',`<div class="info-grid"><div class="info"><label>Transaction No.</label><div>${esc(t.id)}</div></div><div class="info"><label>BSF Number</label><div>${esc(t.bsf)}</div></div><div class="info"><label>Borrower Name</label><div>${esc(t.name)}</div></div><div class="info"><label>Borrower Type</label><div>${esc(t.type)}</div></div><div class="info"><label>College / Unit</label><div>${esc(t.college)}</div></div><div class="info"><label>Email</label><div>${esc(t.email)}</div></div></div>`)+section('Request Details',`<div class="info-grid"><div class="info"><label>Request Date</label><div>${esc(t.date)} ${esc(t.time)}</div></div><div class="info"><label>Expected Return</label><div>${esc(t.due)}</div></div><div class="info" style="grid-column:1/-1"><label>Purpose</label><div>${esc(t.purpose)}</div></div></div>`)+section(`Equipment Requested · ${t.items.length} items`,equipmentDetails(t))+documentsSection(t);
       loadDocumentStatus(t);
       let workflowBody;
       if(t.status==='Approved'){
-        workflowBody=section('QR-Based Release Section',`<h4>Equipment Scan Checklist</h4>${equipment(t)}<div style="text-align:right;margin-top:12px"><button class="btn green" onclick="confirmRelease()">Confirm Release</button></div>`);
+        const acknowledged=!!t.receivedByBorrowerDatetime;
+        const ackNotice=acknowledged
+          ?`<div class="ack">✓ Borrower has electronically acknowledged receipt${t.receivedByBorrowerDatetime?' on '+esc(new Date(t.receivedByBorrowerDatetime).toLocaleString()):''}. Ready to release.</div>`
+          :`<div class="damage-box show">Waiting on the borrower's electronic acknowledgement of receipt — equipment cannot be released until they confirm from their account.</div>`;
+        workflowBody=section('QR-Based Release Section',`${ackNotice}<h4>Equipment Scan Checklist</h4>${equipment(t)}<div style="text-align:right;margin-top:12px"><button class="btn green" onclick="confirmRelease()" ${acknowledged?'':'disabled'}>Confirm Release</button></div>`);
       }else if(['Released','Overdue'].includes(t.status)){
         itemConditions={};
         workflowBody=section('QR-Based Return Section',`<p class="sub" style="margin:0 0 10px">Scan each item, then set its returned condition. Any Damaged/Lost item automatically creates a Damage/Loss Record and restricts the borrower until a verified replacement is resolved.</p>${equipment(t,true)}<div style="text-align:right;margin-top:12px"><button class="btn green" onclick="confirmReturn()">Confirm Return</button></div>`);
@@ -253,10 +274,12 @@
     }
     async function rejectTxn(){
       if(!confirm(`Reject transaction ${current.id}?`))return;
-      try{await apiFetch(`/api/borrow/${current.dbId}/reject`,{method:'PATCH'});closeDrawer();await loadTransactions();toast('Transaction rejected')}
+      const remarks=prompt('Reason for rejection (shown to the borrower):')||'';
+      try{await apiFetch(`/api/borrow/${current.dbId}/reject`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({remarks})});closeDrawer();await loadTransactions();toast('Transaction rejected')}
       catch(e){alert(e.message)}
     }
     async function confirmRelease(){
+      if(!current.receivedByBorrowerDatetime){toast("Borrower hasn't acknowledged receipt yet");return}
       if(document.querySelectorAll('#workflow .scan:not(.scanned)').length>0){toast('Scan every item before confirming release');return}
       try{
         await apiFetch(`/api/borrow/${current.dbId}/release`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemCodes:current.items.map(i=>i.code)})});

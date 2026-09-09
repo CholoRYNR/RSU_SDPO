@@ -5,27 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RSU-SDPO | Settings</title>
   <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <link rel="stylesheet" href="../../css/main.css">
   <style>
-    .content{max-width:760px;margin:auto}
+    /* Mirrors client/pages/user/settings.html's layout/format exactly (per
+       the user's explicit request: "I want by the settings is the same
+       format as the user side") — summary card + Edit Profile modal,
+       read-only Profile Details grid, an Account Actions card holding just
+       the password change, and a Display Preferences card. Previously this
+       page had its own different pattern: always-editable inline forms for
+       both profile and password, with no summary/read-only view at all. */
+    .content{width:100%;max-width:760px;margin:auto}
     .settings-card{background:var(--page);border:1px solid var(--softline);border-radius:14px;margin-bottom:16px;overflow:hidden}
     .settings-card-head{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--softline)}
     .settings-card-head .icon{width:32px;height:32px;border-radius:10px;background:#ecfdf5;color:#00865d;display:grid;place-items:center;font-size:15px;flex-shrink:0}
     .settings-card-head h2{margin:0;font-size:14px}
     .settings-card-head p{margin:2px 0 0;font-size:11px;color:var(--muted)}
     .settings-card-body{padding:18px 20px}
-
-    .account-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-    .account-summary .who b{display:block;font-size:14px}
-    .account-summary .who span{display:block;color:var(--muted);font-size:12px;margin-top:2px}
-    .link-btn{height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--green);background:var(--page);color:var(--deep);font-size:12px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center}
-
-    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-    .field{display:grid;gap:6px;margin-bottom:14px}
-    .field label{font-size:11px;font-weight:700;color:var(--ink)}
-    .field input,.field select{height:38px;border:1px solid var(--line);border-radius:8px;background:var(--softline);padding:0 11px;font-size:12px;color:var(--ink);outline-color:var(--green)}
-    .field-error{font-size:11px;color:#d92d20;min-height:14px}
-    .pw-row{position:relative}
-    .pw-toggle{position:absolute;right:8px;top:6px;background:transparent;border:0;color:var(--muted);font-size:11px;padding:4px 6px}
 
     .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--softline)}
     .toggle-row:last-child{border-bottom:0}
@@ -38,93 +33,168 @@
     .switch input:checked + .track{background:var(--green)}
     .switch input:checked + .track:before{transform:translateX(16px)}
 
-    .btn-solid{height:36px;padding:0 16px;border-radius:9px;border:0;background:var(--deep);color:#fff;font-size:12px;font-weight:600}
-    .btn-outline{height:36px;padding:0 16px;border-radius:9px;border:1px solid var(--line);background:var(--page);color:var(--ink);font-size:12px;font-weight:600}
-    .row-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:6px}
-
-    .session-row{display:flex;align-items:end;gap:12px;flex-wrap:wrap}
-    .session-row .field{margin-bottom:0;flex:1;min-width:160px}
-    .sync-btn{height:38px;padding:0 18px;border-radius:9px;border:0;background:var(--green);color:#fff;font-size:12px;font-weight:600}
-
     .save-toast{max-height:0;overflow:hidden;transition:max-height .25s ease}
     .save-toast.show{max-height:60px}
     .save-toast p{margin:12px 0 0;padding:9px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #d0fae5;color:#007a55;font-size:12px;font-weight:600}
 
-    @media(max-width:600px){.field-grid{grid-template-columns:1fr}.settings-card-body{padding:16px}.account-summary{align-items:flex-start}.session-row{flex-direction:column;align-items:stretch}}
+    /* ---------- Account: photo/name/badges summary ---------- */
+    .profile-summary{display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
+    .photo-column{display:flex;flex:0 0 80px;flex-direction:column;align-items:center;gap:8px}
+    .photo{display:grid;place-items:center;width:80px;height:80px;border-radius:50%;background:var(--deep);color:#fff;font-size:28px;font-weight:800;overflow:hidden}
+    .photo img{width:100%;height:100%;object-fit:cover}
+    .text-button{padding:0;border:0;background:transparent;color:var(--deep);font:500 12px/18px inherit;text-decoration:underline;cursor:pointer}
+    .field-error{font-size:11px;color:#d92d20;min-height:14px;margin-top:2px;max-width:100px;text-align:center}
+    .person{min-width:0;flex:1}
+    .person h2{margin:0;font-size:20px;line-height:25px;color:var(--ink)}
+    .person .email{margin:2px 0 0;color:var(--muted);font-size:14px}
+    .badges{display:flex;gap:8px;padding-top:12px;flex-wrap:wrap}
+    .badge{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;border:0.8px solid transparent}
+    .badge.status-active{border-color:#a4f4cf;background:#ecfdf5;color:#00865d}
+    .badge.status-blocked,.badge.status-restricted{border-color:#fda29b;background:#fef3f2;color:#d92d20}
+    .badge.role-tag{border-color:#93c5fd;background:#dbeafe;color:#1d4ed8}
+    .profile-summary .btn{margin-left:auto}
+
+    /* ---------- Profile Details: read-only info sub-sections ---------- */
+    .subsection-title{margin:0 0 12px;font-size:12px;font-weight:700;color:var(--ink)}
+    .profile-subsection + .profile-subsection{margin-top:22px;padding-top:22px;border-top:1px solid var(--softline)}
+    .data-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .field{display:grid;gap:2px;min-height:40px}
+    .field-label{color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.3px;text-transform:uppercase}
+    .field-value{font-size:14px;color:var(--ink)}
+
+    /* ---------- Account actions ---------- */
+    .actions{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
+    /* ---------- Dialogs (reuse shared modal chrome from main.css) ---------- */
+    .modal--form{width:440px}
+    .modal--form .modal__body{gap:14px;padding-top:16px}
+    .modal--form p{margin:0;color:var(--muted);font-size:13px;line-height:20px}
+
+    @media(max-width:600px){.settings-card-body{padding:16px}.profile-summary{flex-direction:column}.profile-summary .btn{margin-left:0}.data-grid{grid-template-columns:1fr}.actions{flex-direction:column;align-items:stretch}}
   </style>
 </head>
 <body>
-  <div id="app-root" data-page="" data-title="Settings" data-subtitle="Configure your account and system preferences">
+  <div id="app-root" data-page="" data-title="Settings" data-subtitle="Manage your account information and display preferences">
 
     <section class="settings-card">
-      <div class="settings-card-head"><span class="icon">◉</span><div><h2>Account</h2><p>Your signed-in administrator identity</p></div></div>
+      <div class="settings-card-head"><span class="icon">◉</span><div><h2>Account</h2><p>Your signed-in staff identity</p></div></div>
       <div class="settings-card-body">
-        <div class="account-summary">
-          <div class="who"><b id="acctName">SDPO Staff</b><span id="acctMeta">Administrator · sdpo.staff@rsu.edu.ph</span></div>
-          <a class="link-btn" href="admin-profile.html">Edit Profile</a>
-        </div>
-      </div>
-    </section>
-
-    <section class="settings-card">
-      <div class="settings-card-head"><span class="icon">🔒</span><div><h2>Security</h2><p>Change your account password</p></div></div>
-      <div class="settings-card-body">
-        <form id="passwordForm" novalidate>
-          <div class="field pw-row"><label for="currentPw">Current Password</label><input id="currentPw" type="password" required><button type="button" class="pw-toggle" data-target="currentPw">Show</button><span class="field-error" id="currentPwError"></span></div>
-          <div class="field-grid">
-            <div class="field pw-row"><label for="newPw">New Password</label><input id="newPw" type="password" required><button type="button" class="pw-toggle" data-target="newPw">Show</button><span class="field-error" id="newPwError"></span></div>
-            <div class="field pw-row"><label for="confirmPw">Confirm New Password</label><input id="confirmPw" type="password" required><button type="button" class="pw-toggle" data-target="confirmPw">Show</button><span class="field-error" id="confirmPwError"></span></div>
+        <div class="profile-summary">
+          <div class="photo-column">
+            <div class="photo" id="photoInitials">SD</div>
+            <button type="button" class="text-button" id="changePhoto">Change Photo</button>
+            <input type="file" id="avatarFile" accept="image/png,image/jpeg" hidden>
+            <p class="field-error" id="avatarError"></p>
           </div>
-          <div class="row-actions"><button type="submit" class="btn-solid">Update Password</button></div>
-          <div class="save-toast" id="pwToast"><p>✓ Password updated</p></div>
-        </form>
+          <div class="person">
+            <h2 id="displayName">—</h2>
+            <p class="email" id="displayEmail">—</p>
+            <div class="badges"><span class="badge status-active" id="accountStatusBadge">Active</span><span class="badge role-tag" id="roleBadge">Staff</span></div>
+          </div>
+          <button type="button" class="btn btn-secondary" id="editProfile"><img src="../../assets/icons/icon-settings.svg" alt="">Edit Profile</button>
+        </div>
       </div>
     </section>
 
     <section class="settings-card">
-      <div class="settings-card-head"><span class="icon">▤</span><div><h2>System &amp; Display Preferences</h2><p>Personalize how data is shown when you sign in</p></div></div>
+      <div class="settings-card-head"><span class="icon">▤</span><div><h2>Profile Details</h2><p>Contact and office information on file</p></div></div>
       <div class="settings-card-body">
-        <div class="field-grid">
-          <div class="field"><label for="density">Table Density</label><select id="density"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></div>
-          <div class="field"><label for="landing">Default Landing Page</label><select id="landing"><option value="dashboard.html">Dashboard</option><option value="transaction-management.html">Transactions</option><option value="../user/equipment-showroom-figma.html">Equipment</option></select></div>
+        <div class="profile-subsection">
+          <h3 class="subsection-title">Contact Information</h3>
+          <div class="data-grid">
+            <div class="field"><span class="field-label">Email Address</span><span class="field-value" id="emailAddress">—</span></div>
+            <div class="field"><span class="field-label">Contact Number</span><span class="field-value" id="contactNumber">—</span></div>
+          </div>
         </div>
+        <div class="profile-subsection">
+          <h3 class="subsection-title">Office Information</h3>
+          <div class="data-grid">
+            <div class="field"><span class="field-label">Department</span><span class="field-value">Sports Development Program Office</span></div>
+            <div class="field"><span class="field-label">Account Type</span><span class="field-value" id="accountType">—</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">⎋</span><div><h2>Account Actions</h2><p>Password for this account</p></div></div>
+      <div class="settings-card-body">
+        <div class="actions">
+          <button type="button" class="btn btn-secondary" id="passwordButton"><img src="../../assets/icons/icon-settings.svg" alt="">Change Password</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">▤</span><div><h2>System &amp; Display Preferences</h2><p>Personalize how the app looks when you sign in</p></div></div>
+      <div class="settings-card-body">
         <div class="toggle-row"><div class="label"><b>Dark Mode</b><span>Switch the whole app to a dark theme</span></div><label class="switch"><input type="checkbox" id="themeToggle"><span class="track"></span></label></div>
-      </div>
-    </section>
-
-    <section class="settings-card">
-      <div class="settings-card-head"><span class="icon">◉</span><div><h2>Active Academic Session</h2><p>Used across dashboard filters and reports</p></div></div>
-      <div class="settings-card-body">
-        <div class="session-row">
-          <div class="field"><label for="ay">Academic Year</label><select id="ay"><option>A.Y. 2025-2026</option><option>A.Y. 2026-2027</option></select></div>
-          <div class="field"><label for="semester">Semester</label><select id="semester"><option>1ST SEMESTER</option><option>2ND SEMESTER</option></select></div>
-          <button type="button" class="sync-btn" id="sessionSync">SYNC</button>
-        </div>
       </div>
     </section>
 
     <div class="save-toast" id="settingsToast"><p>✓ Settings saved</p></div>
   </div>
+
+  <!-- ---------- Edit Profile modal ---------- -->
+  <div class="modal-overlay" id="profileModalOverlay" hidden>
+    <div class="modal modal--form" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+      <div class="modal__header">
+        <div><p class="modal__title" id="profileModalTitle" style="font-size:18px">Edit Profile</p></div>
+        <button type="button" class="modal__close" data-close-modal="profileModalOverlay" aria-label="Close"><img src="../../assets/icons/icon-close.svg" alt=""></button>
+      </div>
+      <form id="profileForm">
+        <div class="modal__body">
+          <p>Update the contact details shown on your profile.</p>
+          <div class="field"><label class="field__label" for="emailInput">Email address</label><input class="field__control" id="emailInput" type="email" required></div>
+          <div class="field"><label class="field__label" for="phoneInput">Phone number</label><input class="field__control" id="phoneInput" type="tel" placeholder="+63 912 345 6789" required></div>
+        </div>
+        <div class="modal__footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="profileModalOverlay">Cancel</button>
+          <button type="submit" class="btn btn-success">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------- Change Password modal ---------- -->
+  <div class="modal-overlay" id="passwordModalOverlay" hidden>
+    <div class="modal modal--form" role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
+      <div class="modal__header">
+        <div><p class="modal__title" id="passwordModalTitle" style="font-size:18px">Change Password</p></div>
+        <button type="button" class="modal__close" data-close-modal="passwordModalOverlay" aria-label="Close"><img src="../../assets/icons/icon-close.svg" alt=""></button>
+      </div>
+      <form id="passwordForm">
+        <div class="modal__body">
+          <p>Enter your current password and choose a new one for your RSU-SDPO account.</p>
+          <div class="field"><label class="field__label" for="currentPassword">Current password</label><input class="field__control" id="currentPassword" type="password" required placeholder="Your current password"></div>
+          <div class="field"><label class="field__label" for="newPassword">New password</label><input class="field__control" id="newPassword" type="password" required minlength="8" placeholder="At least 8 characters"></div>
+          <div class="field"><label class="field__label" for="confirmPassword">Confirm password</label><input class="field__control" id="confirmPassword" type="password" required minlength="8" placeholder="Repeat new password"></div>
+        </div>
+        <div class="modal__footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="passwordModalOverlay">Cancel</button>
+          <button type="submit" class="btn btn-success">Update Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
   <script src="../../js/shared/api.js"></script>
   <script src="../../js/shared/app-shell.js"></script>
   <script>
-    const PROFILE_KEY = 'rsuSdpoAdminProfile';
-    const SETTINGS_KEY = 'rsuSdpoAdminSettings';
     const $ = (id) => document.getElementById(id);
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const profileModalOverlay = $('profileModalOverlay'), passwordModalOverlay = $('passwordModalOverlay');
 
-    const settingsDefaults = {
-      density: 'comfortable', landing: 'dashboard.html', ay: 'A.Y. 2025-2026', semester: '1ST SEMESTER'
-    };
+    function showToast(message, type) {
+      const toast = document.createElement('div');
+      toast.className = 'toast toast--' + (type === 'danger' ? 'danger' : 'success');
+      toast.innerHTML = `<span class="toast__dot"></span><span>${esc(message)}</span>`;
+      $('toastStack').appendChild(toast);
+      setTimeout(() => toast.remove(), 3200);
+    }
 
-    function loadSettings() {
-      try { return { ...settingsDefaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
-      catch (e) { return { ...settingsDefaults }; }
-    }
-    function saveSettings(patch) {
-      const merged = { ...loadSettings(), ...patch };
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
-      return merged;
-    }
     function flashToast(id) {
       const el = $(id);
       el.classList.add('show');
@@ -132,23 +202,130 @@
       el.__timer = setTimeout(() => el.classList.remove('show'), 2400);
     }
 
-    // Account summary, pulled from the real logged-in user (set at login; see js/shared/api.js)
-    (function renderAccount() {
-      try {
-        const u = currentUser();
-        if (!u) return; // keep the static placeholder markup
-        $('acctName').textContent = u.username || 'SDPO Staff';
-        $('acctMeta').textContent = (u.userRole || 'Administrator') + ' · ' + (u.emailAddress || 'sdpo.staff@rsu.edu.ph');
-      } catch (e) { /* keep defaults */ }
-    })();
+    // Avatar key is scoped to this account's own user id — a single shared
+    // key meant any staff/director account that ever signed in on this
+    // browser would show whichever account's photo was uploaded last.
+    // Reported by the user ("if they add image it should also change").
+    function avatarKeyFor(user) {
+      return 'rsuSdpoAdminAvatar:' + ((user && user.id) || 'anonymous');
+    }
+    let currentAvatar = '';
+    let currentInitials = 'SD';
+    function loadAvatar() {
+      try { return JSON.parse(localStorage.getItem(avatarKeyFor(currentUser())) || '{}').avatar || ''; }
+      catch (e) { return ''; }
+    }
+    function applyAvatar(avatar, initials) {
+      const el = $('photoInitials');
+      if (avatar) el.innerHTML = '<img src="' + avatar + '" alt="Profile photo">';
+      else el.textContent = initials;
+    }
 
-    const settings = loadSettings();
+    function renderProfile(user) {
+      const initials = (user.username || 'SD').slice(0, 2).toUpperCase();
+      currentInitials = initials;
+      applyAvatar(currentAvatar, currentInitials);
+      $('displayName').textContent = user.username || '—';
+      $('displayEmail').textContent = user.emailAddress || '—';
+      $('emailAddress').textContent = user.emailAddress || '—';
+      $('contactNumber').textContent = user.contactNumber || '—';
+      $('accountType').textContent = user.userRole || '—';
 
-    // System/display preferences
-    $('density').value = settings.density;
-    $('landing').value = settings.landing;
-    $('density').addEventListener('change', () => { saveSettings({ density: $('density').value }); flashToast('settingsToast'); });
-    $('landing').addEventListener('change', () => { saveSettings({ landing: $('landing').value }); flashToast('settingsToast'); });
+      const status = user.accountStatus || 'Active';
+      const statusBadge = $('accountStatusBadge');
+      statusBadge.textContent = status;
+      statusBadge.className = 'badge status-' + status.toLowerCase();
+
+      $('roleBadge').textContent = user.userRole || 'Staff';
+
+      $('emailInput').value = user.emailAddress || '';
+      $('phoneInput').value = user.contactNumber || '';
+    }
+
+    function loadProfile() {
+      // Paint immediately from the cached session (set at login and kept in
+      // sync on every save) so the page never flashes the static "—"
+      // placeholder markup while the network request below is still in
+      // flight; the fetch then refreshes it with the authoritative server
+      // copy once it resolves.
+      const cached = (function () { try { return currentUser(); } catch (e) { return null; } })();
+      if (cached) renderProfile(cached);
+      apiFetch('/api/auth/me').then(user => {
+        localStorage.setItem('rsuSdpoUser', JSON.stringify(user));
+        renderProfile(user);
+      }).catch(err => showToast('Could not load your profile: ' + err.message, 'danger'));
+    }
+
+    $('editProfile').addEventListener('click', () => { profileModalOverlay.hidden = false; });
+    $('passwordButton').addEventListener('click', () => { passwordModalOverlay.hidden = false; });
+
+    currentAvatar = loadAvatar();
+    applyAvatar(currentAvatar, currentInitials);
+    $('changePhoto').addEventListener('click', () => $('avatarFile').click());
+    $('avatarFile').addEventListener('change', () => {
+      const file = $('avatarFile').files[0];
+      $('avatarError').textContent = '';
+      if (!file) return;
+      if (!/^image\/(png|jpeg)$/.test(file.type)) { $('avatarError').textContent = 'Please choose a JPG or PNG image.'; return; }
+      if (file.size > 2 * 1024 * 1024) { $('avatarError').textContent = 'Image must be 2MB or smaller.'; return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        currentAvatar = reader.result;
+        applyAvatar(currentAvatar, currentInitials);
+        // Persisted immediately on upload rather than waiting for a
+        // separate "Save changes" click — previously the photo only
+        // looked like it had changed until the next reload (which
+        // silently reverted it if the admin never also saved the form),
+        // which is exactly the "add image, it doesn't actually change"
+        // behavior the user reported.
+        localStorage.setItem(avatarKeyFor(currentUser()), JSON.stringify({ avatar: currentAvatar }));
+        showToast('Photo updated.', 'success');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', () => { $(btn.dataset.closeModal).hidden = true; }));
+    [profileModalOverlay, passwordModalOverlay].forEach(overlay => overlay.addEventListener('click', e => { if (e.target === overlay) overlay.hidden = true; }));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { profileModalOverlay.hidden = true; passwordModalOverlay.hidden = true; } });
+
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const PHONE_RE = /^(\+?63|0)?[\s-]?9\d{2}[\s-]?\d{3}[\s-]?\d{4}$/;
+
+    $('profileForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const emailAddress = $('emailInput').value.trim();
+      const contactNumber = $('phoneInput').value.trim();
+      if (!EMAIL_RE.test(emailAddress)) { showToast('Enter a valid email address.', 'danger'); return; }
+      if (contactNumber && !PHONE_RE.test(contactNumber)) { showToast('Enter a valid PH mobile number.', 'danger'); return; }
+      apiFetch('/api/users/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emailAddress, contactNumber }) })
+        .then(user => {
+          localStorage.setItem('rsuSdpoUser', JSON.stringify(user));
+          renderProfile(user);
+          profileModalOverlay.hidden = true;
+          showToast('Profile updated successfully.', 'success');
+        })
+        .catch(err => showToast(err.message, 'danger'));
+    });
+
+    $('passwordForm').addEventListener('submit', e => {
+      e.preventDefault();
+      if ($('newPassword').value !== $('confirmPassword').value) {
+        showToast('Passwords do not match.', 'danger');
+        return;
+      }
+      apiFetch('/api/users/change-password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        currentPassword: $('currentPassword').value,
+        newPassword: $('newPassword').value
+      }) })
+        .then(() => {
+          passwordModalOverlay.hidden = true;
+          e.currentTarget.reset();
+          showToast('Password updated successfully.', 'success');
+        })
+        .catch(err => showToast(err.message, 'danger'));
+    });
+
+    loadProfile();
 
     // Theme (light/dark) — shared across the whole app via the same key app-shell.js reads on load
     const THEME_KEY = 'rsuSdpoTheme';
@@ -158,55 +335,6 @@
       localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
       flashToast('settingsToast');
-    });
-
-    // Active academic session
-    $('ay').value = settings.ay;
-    $('semester').value = settings.semester;
-    $('sessionSync').addEventListener('click', function () {
-      saveSettings({ ay: $('ay').value, semester: $('semester').value });
-      const btn = this;
-      btn.textContent = 'SYNCED';
-      btn.style.background = '#006045';
-      setTimeout(() => { btn.textContent = 'SYNC'; btn.style.background = ''; }, 1200);
-    });
-
-    // Password visibility toggles
-    document.querySelectorAll('.pw-toggle').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const input = $(btn.dataset.target);
-        const show = input.type === 'password';
-        input.type = show ? 'text' : 'password';
-        btn.textContent = show ? 'Hide' : 'Show';
-      });
-    });
-
-    // Password form — client-side validation, then a real call to the change-password endpoint
-    function setError(fieldId, errorId, message) {
-      $(errorId).textContent = message || '';
-      return !message;
-    }
-    $('passwordForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      let ok = true;
-      ok = setError('currentPw', 'currentPwError', $('currentPw').value ? '' : 'Enter your current password.') && ok;
-      ok = setError('newPw', 'newPwError', $('newPw').value.length >= 8 ? '' : 'New password must be at least 8 characters.') && ok;
-      ok = setError('confirmPw', 'confirmPwError', $('confirmPw').value === $('newPw').value && $('confirmPw').value ? '' : 'Passwords do not match.') && ok;
-      if (!ok) return;
-      const currentPassword = $('currentPw').value;
-      const newPassword = $('newPw').value;
-      apiFetch('/api/users/change-password', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword, newPassword })
-      }).then(() => {
-        $('passwordForm').reset();
-        document.querySelectorAll('.pw-toggle').forEach((btn) => { btn.textContent = 'Show'; });
-        document.querySelectorAll('#passwordForm input').forEach((input) => { input.type = 'password'; });
-        flashToast('pwToast');
-      }).catch((err) => {
-        setError('currentPw', 'currentPwError', (err && err.message) || 'Unable to update password.');
-      });
     });
   </script>
 </body>

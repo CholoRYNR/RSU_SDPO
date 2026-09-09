@@ -7,8 +7,21 @@
 // once. The per-report template files in this folder are thin wrappers
 // that just pin the download filename for their report type.
 
+const fs = require('fs');
+const path = require('path');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
+
+// Official RSU SDPO seal (already used elsewhere in the app, e.g. the
+// borrowing-form watermark) — reused here for branded PDF/Excel report
+// headers. server/app.js serves `client/` statically from the repo root
+// (`express.static('client')`), i.e. client/ and server/ are always
+// deployed side by side, so this relative path is safe across
+// environments. Resolved once at module load and existence-checked so a
+// missing/renamed asset degrades to a text-only header instead of crashing
+// report generation.
+const LOGO_PATH = path.join(__dirname, '..', '..', '..', 'client', 'assets', 'images', 'rsu-sdpo-logo.png');
+const LOGO_EXISTS = fs.existsSync(LOGO_PATH);
 
 function slugify(title) {
   const slug = String(title || 'report')
@@ -52,10 +65,33 @@ function sendPdf(res, reportData, filenameBase) {
   });
   doc.pipe(res);
 
+  const startX = doc.page.margins.left;
+  const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  const headerTop = doc.y;
+  const LOGO_WIDTH = 42;
+  if (LOGO_EXISTS) {
+    try {
+      doc.image(LOGO_PATH, startX, headerTop, { width: LOGO_WIDTH });
+    } catch (err) {
+      // A corrupt/unreadable logo file should never break report
+      // generation — fall back to the text-only header.
+      console.error('reportRenderer.sendPdf: failed to draw header logo:', err);
+    }
+  }
+
   doc.font('Helvetica-Bold').fontSize(16).text('RSU SDPO', { align: 'center' });
   doc.font('Helvetica').fontSize(12).text(title || 'Report', { align: 'center' });
   doc.fontSize(8).fillColor('#666666').text(`Generated: ${new Date().toLocaleString('en-US')}`, { align: 'center' });
   doc.fillColor('#000000');
+
+  // doc.image() with an explicit x/y draws without moving the text cursor,
+  // so the logo and the centered title block can end at different heights
+  // depending on title length/wrapping. Advance past whichever is taller
+  // before laying out the rest of the page.
+  if (LOGO_EXISTS) {
+    doc.y = Math.max(doc.y, headerTop + LOGO_WIDTH);
+  }
   doc.moveDown(1);
 
   if (stats.length) {
@@ -67,8 +103,6 @@ function sendPdf(res, reportData, filenameBase) {
     doc.moveDown(1);
   }
 
-  const startX = doc.page.margins.left;
-  const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const colWidth = heads.length ? usableWidth / heads.length : usableWidth;
   const rowHeight = 16;
 
@@ -140,6 +174,25 @@ async function sendExcel(res, reportData, filenameBase) {
   genCell.value = `Generated: ${new Date().toLocaleString('en-US')}`;
   genCell.font = { italic: true, size: 9, color: { argb: 'FF666666' } };
   genCell.alignment = { horizontal: 'center' };
+
+  // Official RSU SDPO seal, floated over the top-left corner of the header
+  // band (rows 1-2). This only overlays visually — it never touches cell
+  // values, so the `RSU SDPO - <title>` banner text and every downstream
+  // row/column offset the rest of this function (and its tests) depend on
+  // are unaffected whether or not the logo file is present.
+  if (LOGO_EXISTS) {
+    try {
+      sheet.getRow(1).height = 30;
+      sheet.getRow(2).height = 18;
+      const logoImageId = workbook.addImage({ filename: LOGO_PATH, extension: 'png' });
+      sheet.addImage(logoImageId, {
+        tl: { col: 0.15, row: 0.15 },
+        ext: { width: 46, height: 46 }
+      });
+    } catch (err) {
+      console.error('reportRenderer.sendExcel: failed to embed header logo:', err);
+    }
+  }
 
   let rowIdx = 4;
   if (stats.length) {

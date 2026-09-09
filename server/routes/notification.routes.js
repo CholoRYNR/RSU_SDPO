@@ -9,5 +9,6 @@ router.use(authMiddleware);
 router.get('/', catchAsync(ctrl.list));
 router.patch('/read-all', catchAsync(ctrl.markAllRead));
 router.patch('/:id/read', catchAsync(ctrl.markRead));
+router.delete('/:id', catchAsync(ctrl.remove));
 
 module.exports = router;

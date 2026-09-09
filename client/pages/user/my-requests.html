@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="../../css/shared/app-shell.css">
   <link rel="stylesheet" href="../../css/main.css">
   <style>
-    .content{max-width:1086px;margin:auto}
+    .content{width:100%;max-width:1086px;margin:auto}
 
     /* ---------- Filter pills + search ---------- */
     .tools{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
@@ -25,7 +25,7 @@
     .request-id{font-size:15px;font-weight:600;color:var(--color-text-900)}
     .requested-on{margin-top:2px;color:var(--color-text-500);font-size:12px}
     .badge{align-self:start;display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;white-space:nowrap}
-    .badge.pending{color:#a16207;background:#fef3c7}
+    .badge.pending,.badge.acknowledged,.badge.for-approval{color:#a16207;background:#fef3c7}
     .badge.approved{color:#059669;background:#d1fae5}
     .badge.rejected{color:#dc2626;background:#fee2e2}
     .badge.cancelled{color:var(--color-text-500);background:var(--color-surface-muted)}
@@ -86,12 +86,20 @@
   <script>
     // Only the request/approval phase lives here — once equipment is Released
     // it moves to My Borrowings, and closed-out transactions move to History.
-    const REQUEST_STATUSES=['Pending','Approved','Rejected','Cancelled'];
+    // A freshly submitted request starts life as 'Acknowledged' (not
+    // 'Pending' — that ENUM value is defensive/reserved and never actually
+    // assigned by the backend), then moves to 'For Approval' after staff
+    // review, before reaching Approved/Rejected — both need to be included
+    // here or a borrower's own in-flight request is invisible to them.
+    const REQUEST_STATUSES=['Acknowledged','For Approval','Approved','Rejected','Cancelled'];
     const NOTE_BY_STATUS={
-      Pending:'Your request is awaiting staff review.',
+      Acknowledged:'Your request is awaiting staff review.',
+      'For Approval':'Your request passed staff review and is awaiting Director approval.',
       Approved:'Please present your student ID when claiming the equipment.',
       Cancelled:'This request was cancelled.'
     };
+    const ACK_NOTE='Please acknowledge receipt below to confirm you accept responsibility for the equipment before it can be released to you.';
+    const AWAITING_RELEASE_NOTE='Receipt acknowledged. Please present your student ID when claiming the equipment.';
 
     function groupItems(items){
       const counts=new Map();
@@ -100,16 +108,20 @@
     }
 
     function mapTransaction(t){
+      const acknowledged=!!t.receivedByBorrowerDatetime;
       return {
         dbId:t.dbId,
         id:t.id,
         date:t.date,
         status:t.status,
+        acknowledged,
+        reason:t.reason||null,
+        cancelled:t.cancelledAt||null,
         items:groupItems(t.items),
         total:t.items.length,
         returnDate:t.due,
         purpose:t.purpose,
-        note:NOTE_BY_STATUS[t.status]
+        note:t.status==='Approved'?(acknowledged?AWAITING_RELEASE_NOTE:ACK_NOTE):NOTE_BY_STATUS[t.status]
       };
     }
 
@@ -120,10 +132,10 @@
       });
     }
 
-    const filterList=['All','Pending','Approved','Rejected','Cancelled'];
+    const filterList=['All','Acknowledged','For Approval','Approved','Rejected','Cancelled'];
     let active='All',term='';
-    const icon={Pending:'◷',Approved:'✓',Rejected:'⊗',Cancelled:'⊘',Completed:'✓'};
-    const classFor=s=>s.toLowerCase();
+    const icon={Acknowledged:'◷','For Approval':'◷',Approved:'✓',Rejected:'⊗',Cancelled:'⊘',Completed:'✓'};
+    const classFor=s=>s.toLowerCase().replace(/\s+/g,'-');
     const countFor=s=>s==='All'?requests.length:requests.filter(r=>r.status===s).length;
 
     const $=id=>document.getElementById(id);
@@ -155,6 +167,7 @@
           <div class="actions">
             <button type="button" class="btn btn-secondary detail-btn" data-id="${esc(r.id)}">View Details</button>
             ${r.status==='Pending'?`<button type="button" class="btn btn-outline-danger cancel-btn" data-id="${esc(r.id)}">Cancel Request</button>`:''}
+            ${r.status==='Approved'&&!r.acknowledged?`<button type="button" class="btn btn-primary ack-btn" data-id="${esc(r.id)}">Acknowledge Receipt</button>`:''}
           </div>
         </div>
       </article>`).join(''):'<div class="empty-state"><p class="empty-state__title">No requests found</p><p>Try adjusting your filter or search term.</p></div>';
@@ -173,11 +186,13 @@
       <h3>Equipment requested</h3>
       <ul class="detail-items">${r.items.map(([n,q])=>`<li><span>${esc(n)}</span><b>${q} ${q===1?'unit':'units'}</b></li>`).join('')}</ul>
       <div class="modal-note ${r.reason?'reject':''}">${r.reason?'Reason for rejection: '+esc(r.reason):esc(r.note||'')}</div>`;
-      detailModalFoot.innerHTML=`<button type="button" class="btn btn-secondary" id="modalCloseBtn">Close</button>${r.status==='Pending'?'<button type="button" class="btn btn-outline-danger" id="modalCancelBtn">Cancel Request</button>':''}`;
+      detailModalFoot.innerHTML=`<button type="button" class="btn btn-secondary" id="modalCloseBtn">Close</button>${r.status==='Pending'?'<button type="button" class="btn btn-outline-danger" id="modalCancelBtn">Cancel Request</button>':''}${r.status==='Approved'&&!r.acknowledged?'<button type="button" class="btn btn-primary" id="modalAckBtn">Acknowledge Receipt</button>':''}`;
       detailModalOverlay.hidden=false;
       $('modalCloseBtn').addEventListener('click',closeDetails);
       const cancelBtn=$('modalCancelBtn');
       if(cancelBtn)cancelBtn.addEventListener('click',()=>cancelRequest(r.id));
+      const ackBtn=$('modalAckBtn');
+      if(ackBtn)ackBtn.addEventListener('click',()=>acknowledgeReceipt(r.id));
     }
     function closeDetails(){detailModalOverlay.hidden=true;}
     function cancelRequest(id){
@@ -187,6 +202,17 @@
         .then(()=>{
           closeDetails();renderFilters();renderCards();
           showToast('Request '+r.id+' has been cancelled.','danger');
+        })
+        .catch(err=>showToast(err.message,'danger'));
+    }
+
+    function acknowledgeReceipt(id){
+      const r=requests.find(x=>x.id===id);
+      apiFetch('/api/borrow/'+r.dbId+'/acknowledge-receipt',{method:'PATCH'})
+        .then(()=>loadRequests())
+        .then(()=>{
+          closeDetails();renderFilters();renderCards();
+          showToast('Receipt acknowledged for '+r.id+'. It is now ready for release.','success');
         })
         .catch(err=>showToast(err.message,'danger'));
     }
@@ -204,7 +230,9 @@
     cards.addEventListener('click',e=>{
       const b=e.target.closest('[data-id]');
       if(!b)return;
-      b.classList.contains('cancel-btn')?cancelRequest(b.dataset.id):openDetails(b.dataset.id);
+      if(b.classList.contains('cancel-btn'))return cancelRequest(b.dataset.id);
+      if(b.classList.contains('ack-btn'))return acknowledgeReceipt(b.dataset.id);
+      openDetails(b.dataset.id);
     });
     document.querySelectorAll('[data-close-modal]').forEach(btn=>btn.addEventListener('click',closeDetails));
     detailModalOverlay.addEventListener('click',e=>{if(e.target===detailModalOverlay)closeDetails();});

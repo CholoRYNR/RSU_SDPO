@@ -7,6 +7,7 @@
   --ink:#1d293d;--muted:#62748e;--line:#e2e8f0;--softline:#f1f5f9;--page:#fff;--canvas:#f8fafc;
   --nav-text:#45556c;--nav-title:#90a1b9;--online-bg:#ecfdf5;--online-border:#d0fae5;--online-text:#007a55;
   --unread-bg:#f8fffc;
+  --font-sans:Inter,Arial,sans-serif;
 }
 :root[data-theme="dark"]{
   --deep:#00c98a;
@@ -17,7 +18,7 @@
 
 html,body{height:100%}
 *{box-sizing:border-box}
-body{margin:0;background:var(--canvas);color:var(--ink);font-family:Inter,Arial,sans-serif;font-size:13px;transition:background .15s ease,color .15s ease}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--font-sans);font-size:13px;transition:background .15s ease,color .15s ease}
 button,input,select{font:inherit}
 button{cursor:pointer}
 
@@ -38,13 +39,8 @@ button{cursor:pointer}
 .sidebar .nav a.active{background:var(--online-bg);border-left-color:var(--green);color:var(--online-text)}
 .sidebar .nav img{width:18px;height:18px;object-fit:contain}
 .sidebar .user-area{border-top:1px solid var(--softline);padding:12px;flex-shrink:0}
-.sidebar .user-card{height:51px;border:1px solid var(--softline);background:var(--softline);border-radius:10px;padding:8px;display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;cursor:pointer;transition:border-color .15s ease,background .15s ease}
-.sidebar .user-card:hover{border-color:var(--green);background:var(--online-bg)}
-.sidebar .avatar{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#d0fae5;color:#007a55;font-size:11px;font-weight:700;flex-shrink:0}
-.sidebar .user-card b{font-size:12px;display:block}
-.sidebar .user-card span{display:block;color:var(--muted);font-size:10px;margin-top:2px}
 .sidebar .utility{margin-top:7px}
-.sidebar .utility button,.sidebar .utility a{border:0;background:transparent;color:var(--muted);font:500 11px Inter,sans-serif;padding:7px 8px;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;text-decoration:none}
+.sidebar .utility button,.sidebar .utility a{border:0;background:transparent;color:var(--muted);font:500 11px var(--font-sans);padding:7px 8px;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;text-decoration:none}
 .sidebar .utility button:hover,.sidebar .utility a:hover{color:var(--ink)}
 .sidebar .utility img{width:12px;height:12px;flex-shrink:0}
 
@@ -127,7 +123,7 @@ main{flex:1;min-width:0;background:var(--page);display:flex;flex-direction:colum
 .mobile-menu a.nav-link.active{background:var(--online-bg);color:var(--online-text)}
 .mobile-menu a.nav-link img{width:16px;height:16px;object-fit:contain;flex-shrink:0}
 .mobile-menu .menu-divider{height:1px;background:var(--softline);margin:8px 4px}
-.mobile-menu .menu-utility button,.mobile-menu .menu-utility a{border:0;background:transparent;color:var(--muted);font:500 12px Inter,sans-serif;padding:9px 10px;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;text-decoration:none;border-radius:8px}
+.mobile-menu .menu-utility button,.mobile-menu .menu-utility a{border:0;background:transparent;color:var(--muted);font:500 12px var(--font-sans);padding:9px 10px;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px;text-decoration:none;border-radius:8px}
 .mobile-menu .menu-utility button:hover,.mobile-menu .menu-utility a:hover{background:var(--softline);color:var(--ink)}
 .mobile-menu .menu-utility img{width:13px;height:13px;flex-shrink:0}
 
@@ -139,10 +135,13 @@ main{flex:1;min-width:0;background:var(--page);display:flex;flex-direction:colum
   .app{display:block;height:auto}
   .sidebar{display:none}
   main{height:auto;overflow:visible}
-  .topbar{padding:10px 16px;height:auto;flex-wrap:wrap;gap:8px}
-  /* When header-right wraps to its own row, space-between leaves a lone
-     flex item flush-left — pin it to the top-right instead. */
-  .header-right{gap:8px;width:100%;justify-content:flex-end}
+  .topbar{padding:10px 16px;height:auto;flex-wrap:nowrap;gap:8px}
+  .topbar>div:first-child{min-width:0;flex:1}
+  .topbar h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Icons stay inline with the title on a single row; .topbar's own
+     space-between keeps this cluster pinned to the right. */
+  .header-right{gap:8px;width:auto;flex-shrink:0}
   .online{display:none}
   .clock{display:none}
   .content{padding:12px;overflow:visible}

@@ -1,6 +1,7 @@
 'use strict';
 
-const { Transaction, TransactionDetail, Borrower, User, Item, Equipment, Category, MaintenanceFee, sequelize } = require('../models');
+const { Op } = require('sequelize');
+const { Transaction, TransactionDetail, Borrower, User, Item, Equipment, Category, MaintenanceFee, TransactionLog, sequelize } = require('../models');
 const { notifyBorrower, notifyStaff } = require('../helpers/notify');
 const { logStatusChange } = require('../helpers/transactionLog');
 
@@ -13,8 +14,106 @@ const INCLUDE = [
     as: 'details',
     include: [{ model: Item, as: 'item', include: [{ model: Equipment, as: 'equipment', include: [{ model: Category, as: 'category' }] }] }]
   },
-  { model: MaintenanceFee, as: 'maintenanceFees' }
+  { model: MaintenanceFee, as: 'maintenanceFees' },
+  { model: TransactionLog, as: 'logs' }
 ];
+
+// Availability-threshold borrowing caps, per the approved RSU SDPO spec:
+//   > 5 available  = Green  = up to 2 units may be borrowed per request
+//   4-5 available  = Yellow = only 1 unit may be borrowed per request
+//   1-3 available  = Red    = borrowing not allowed
+// (0 available never reaches this check — it's already caught by the
+// "not enough stock" check below, since no positive quantity can be filled.)
+//
+// This is enforced as a hard rule for self-service requests
+// (createSelfRequest) only. The spec itself frames these thresholds as
+// "operational guidelines" whose "final approval remains subject to
+// authorized SDPO personnel based on actual equipment availability" — so
+// staff-initiated create() (used when a Property Custodian/Administrative
+// Aide is physically registering a walk-in borrower, already holding the
+// item) intentionally does not apply this cap; that in-person judgment call
+// is the discretion the spec is describing. The Director's approve() step
+// is a separate, later checkpoint and is likewise left to their judgment.
+function maxBorrowableUnits(availableQuantity) {
+  if (availableQuantity > 5) return 2;
+  if (availableQuantity >= 4) return 1;
+  return 0;
+}
+
+// Late Return Policy, per the approved RSU SDPO spec: "Borrowers who fail to
+// return equipment within two to three days after the due date shall be
+// temporarily blocked from submitting another borrowing request... shall be
+// restored after all overdue equipment has been returned and applicable
+// penalties have been settled."
+//
+// This is deliberately implemented as a targeted check inside
+// createSelfRequest() rather than by writing User.accountStatus='Blocked' —
+// accountStatus already drives a full login lockout in auth.controller.js
+// (`accountStatus !== 'Active'` refuses sign-in outright), which is the
+// mechanism the damage/loss restriction system uses ('Restricted'). The
+// spec's own wording for late returns is narrower: only *new borrowing
+// requests* should be refused, not sign-in itself — a late borrower still
+// needs to be able to log in to see their overdue item and its due date. So
+// this reuses the existing Overdue status + expectedReturnDatetime instead
+// of touching accountStatus, and unblocks itself automatically the moment
+// the overdue transaction is returned (no separate field to remember to
+// clear). Overdue-specific penalty fees (MaintenanceFee feeType 'Overdue')
+// are not generated anywhere in this codebase yet, so "penalties settled" is
+// vacuously satisfied for now; wiring up actual overdue-fee amounts is a
+// separate feature, out of scope for this fix.
+//
+// Chose 3 days (the lenient end of the spec's "two to three days" range) as
+// the grace window — see the equivalent hedge for the availability-threshold
+// caps above; picking the more forgiving end when the spec itself gives a
+// range is the same judgment call made there.
+const LATE_RETURN_GRACE_DAYS = 3;
+
+// Returns null if the borrower may submit new requests, or a small summary
+// object if they're currently blocked by an overdue return past the grace
+// window.
+async function getLateReturnBlock(borrowerId) {
+  const cutoff = new Date(Date.now() - LATE_RETURN_GRACE_DAYS * 24 * 60 * 60 * 1000);
+  const overdue = await Transaction.findAll({
+    where: {
+      borrowerId,
+      transactionStatus: 'Overdue',
+      expectedReturnDatetime: { [Op.lt]: cutoff }
+    },
+    order: [['expectedReturnDatetime', 'ASC']]
+  });
+  if (overdue.length === 0) return null;
+  const oldest = overdue[0];
+  const daysOverdue = Math.floor((Date.now() - new Date(oldest.expectedReturnDatetime).getTime()) / (24 * 60 * 60 * 1000));
+  return {
+    count: overdue.length,
+    graceDays: LATE_RETURN_GRACE_DAYS,
+    daysOverdue,
+    oldestTransactionId: oldest.id
+  };
+}
+
+// Counterpart to the item reservation done in create()/createSelfRequest():
+// releases any still-Reserved items on this transaction back to Available
+// stock and restores Equipment.availableQuantity. Must run whenever a
+// transaction is Rejected or Cancelled before ever reaching Release — those
+// items were pulled out of the available pool the moment the request was
+// submitted, not at release time, so failing to give them back here would
+// permanently strand that stock as neither available nor actually borrowed.
+async function releaseReservedItems(txn, t) {
+  const reserved = txn.details.filter((d) => d.item.availabilityStatus === 'Reserved');
+  if (reserved.length === 0) return;
+  await Item.update(
+    { availabilityStatus: 'Available' },
+    { where: { id: reserved.map((d) => d.item.id) }, transaction: t }
+  );
+  const byEquipment = {};
+  reserved.forEach((d) => {
+    byEquipment[d.item.equipmentId] = (byEquipment[d.item.equipmentId] || 0) + 1;
+  });
+  for (const [equipmentId, qty] of Object.entries(byEquipment)) {
+    await Equipment.increment('availableQuantity', { by: qty, where: { id: equipmentId }, transaction: t });
+  }
+}
 
 function fmtDate(d) {
   return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -23,9 +122,21 @@ function fmtTime(d) {
   return d ? new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
 }
 
+// Finds the most recent audit-trail entry (TransactionLog, already written
+// by every status-changing action via logStatusChange()) whose newStatus
+// matches, so the borrower-facing UI can show *why* a request was rejected
+// or when it was cancelled without a separate column to keep in sync.
+function lastLogFor(t, newStatus) {
+  const logs = (t.logs || []).filter((l) => l.newStatus === newStatus);
+  if (logs.length === 0) return null;
+  return logs.reduce((latest, l) => (new Date(l.changeDatetime) > new Date(latest.changeDatetime) ? l : latest));
+}
+
 function serialize(t) {
   const b = t.borrower;
   const firstItem = (t.details || [])[0];
+  const rejectionLog = t.transactionStatus === 'Rejected' ? lastLogFor(t, 'Rejected') : null;
+  const cancellationLog = t.transactionStatus === 'Cancelled' ? lastLogFor(t, 'Cancelled') : null;
   return {
     dbId: t.id,
     borrowerId: t.borrowerId,
@@ -41,6 +152,9 @@ function serialize(t) {
     due: fmtDate(t.expectedReturnDatetime),
     returned: t.returnDatetime ? fmtDate(t.returnDatetime) : null,
     status: t.transactionStatus,
+    reason: rejectionLog ? rejectionLog.remarks : null,
+    cancelledAt: cancellationLog ? fmtDate(cancellationLog.changeDatetime) : null,
+    receivedByBorrowerDatetime: t.receivedByBorrowerDatetime || null,
     review: t.reviewer ? t.reviewer.username : '—',
     approve: t.approver ? t.approver.username : '—',
     category: firstItem && firstItem.item && firstItem.item.equipment && firstItem.item.equipment.category ? firstItem.item.equipment.category.categoryName : '—',
@@ -80,6 +194,22 @@ exports.mine = async (req, res) => {
   res.json({ success: true, data: rows.map(serialize) });
 };
 
+// Lets the borrowing UI check — before the borrower even fills out a
+// request — whether they're currently blocked by the Late Return Policy, so
+// it can show a clear explanation instead of only surfacing the block as a
+// rejected-submission error. See getLateReturnBlock() for the policy logic.
+exports.lateReturnStatus = async (req, res) => {
+  const borrower = await Borrower.findOne({ where: { userId: req.user.id } });
+  if (!borrower) {
+    return res.json({ success: true, data: { blocked: false } });
+  }
+  const block = await getLateReturnBlock(borrower.id);
+  res.json({
+    success: true,
+    data: block ? { blocked: true, ...block } : { blocked: false }
+  });
+};
+
 exports.create = async (req, res) => {
   const { borrowerId, itemIds, purpose, expectedReturnDatetime } = req.body;
   if (!borrowerId || !Array.isArray(itemIds) || itemIds.length === 0) {
@@ -95,20 +225,39 @@ exports.create = async (req, res) => {
     throw err;
   }
 
-  const items = await Item.findAll({ where: { id: itemIds } });
-  if (items.length !== itemIds.length) {
-    const err = new Error('One or more selected items were not found');
-    err.statusCode = 404;
-    throw err;
-  }
-  const notAvailable = items.filter((i) => i.availabilityStatus !== 'Available');
-  if (notAvailable.length > 0) {
-    const err = new Error(`These items are not available: ${notAvailable.map((i) => i.itemCode).join(', ')}`);
-    err.statusCode = 409;
-    throw err;
-  }
-
   const created = await sequelize.transaction(async (t) => {
+    // FOR UPDATE row-locks the candidate items for the life of this
+    // transaction, so a concurrent request (self-service or staff) can't
+    // select the same physical item before this one commits its Reserved
+    // status below — without this lock, two near-simultaneous requests can
+    // both read the same item as 'Available' and both get assigned it.
+    const items = await Item.findAll({ where: { id: itemIds }, transaction: t, lock: t.LOCK.UPDATE });
+    if (items.length !== itemIds.length) {
+      const err = new Error('One or more selected items were not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    const notAvailable = items.filter((i) => i.availabilityStatus !== 'Available');
+    if (notAvailable.length > 0) {
+      const err = new Error(`These items are not available: ${notAvailable.map((i) => i.itemCode).join(', ')}`);
+      err.statusCode = 409;
+      throw err;
+    }
+
+    // Reserve immediately — see releaseReservedItems()/release() for the
+    // matching un-reserve-on-Rejected/Cancelled and consume-on-Released
+    // halves of this. availableQuantity moves here, at reservation time,
+    // not at release, so it accurately reflects what's actually still free
+    // to request while this transaction is pending.
+    await Item.update({ availabilityStatus: 'Reserved' }, { where: { id: items.map((i) => i.id) }, transaction: t });
+    const byEquipment = {};
+    items.forEach((i) => {
+      byEquipment[i.equipmentId] = (byEquipment[i.equipmentId] || 0) + 1;
+    });
+    for (const [equipmentId, qty] of Object.entries(byEquipment)) {
+      await Equipment.decrement('availableQuantity', { by: qty, where: { id: equipmentId }, transaction: t });
+    }
+
     // Staff creating this on a borrower's behalf implies the ID/requirements
     // were just verified in person, so it starts Acknowledged just like a
     // self-request — there's no separate "Pending" gate to sit behind.
@@ -153,8 +302,19 @@ exports.createSelfRequest = async (req, res) => {
     throw err;
   }
 
-  const selectedItems = [];
-  for (const line of items) {
+  const lateBlock = await getLateReturnBlock(borrower.id);
+  if (lateBlock) {
+    const err = new Error(
+      `You have equipment overdue by ${lateBlock.daysOverdue} day(s) (Transaction #${lateBlock.oldestTransactionId}). New borrowing requests are blocked until all overdue equipment is returned and any applicable penalties are settled.`
+    );
+    err.statusCode = 403;
+    throw err;
+  }
+
+  // Validate shape up front; stock/threshold checks happen inside the DB
+  // transaction below, where the row locks that make them race-safe
+  // actually apply.
+  const lines = items.map((line) => {
     const equipmentId = Number(line.equipmentId);
     const quantity = Number(line.quantity) || 1;
     if (!equipmentId || quantity < 1) {
@@ -162,22 +322,59 @@ exports.createSelfRequest = async (req, res) => {
       err.statusCode = 400;
       throw err;
     }
-    const available = await Item.findAll({
-      where: { equipmentId, availabilityStatus: 'Available' },
-      limit: quantity
-    });
-    if (available.length < quantity) {
-      const equipment = await Equipment.findByPk(equipmentId);
-      const err = new Error(
-        `Not enough stock for "${equipment ? equipment.equipmentName : 'equipment #' + equipmentId}" — ${available.length} available, ${quantity} requested`
-      );
-      err.statusCode = 409;
-      throw err;
-    }
-    selectedItems.push(...available);
-  }
+    return { equipmentId, quantity };
+  });
 
   const created = await sequelize.transaction(async (t) => {
+    const selectedItems = [];
+    for (const { equipmentId, quantity } of lines) {
+      // FOR UPDATE serializes concurrent requests against this same
+      // equipment row, so the tier check just below and the item
+      // reservation that follows can't race with another borrower's
+      // request for the same equipment.
+      const equipment = await Equipment.findByPk(equipmentId, { transaction: t, lock: t.LOCK.UPDATE });
+      if (!equipment) {
+        const err = new Error(`Equipment #${equipmentId} not found`);
+        err.statusCode = 404;
+        throw err;
+      }
+
+      const cap = maxBorrowableUnits(equipment.availableQuantity);
+      if (quantity > cap) {
+        const err = new Error(
+          cap === 0
+            ? `"${equipment.equipmentName}" is low in stock (${equipment.availableQuantity} available) and can't be borrowed right now under the SDPO's minimum-stock guideline.`
+            : `Only ${cap} unit(s) of "${equipment.equipmentName}" may be borrowed per request while stock is at ${equipment.availableQuantity} available (SDPO minimum-stock guideline).`
+        );
+        err.statusCode = 409;
+        throw err;
+      }
+
+      const available = await Item.findAll({
+        where: { equipmentId, availabilityStatus: 'Available' },
+        limit: quantity,
+        lock: t.LOCK.UPDATE,
+        transaction: t
+      });
+      if (available.length < quantity) {
+        const err = new Error(
+          `Not enough stock for "${equipment.equipmentName}" — ${available.length} available, ${quantity} requested`
+        );
+        err.statusCode = 409;
+        throw err;
+      }
+
+      // Reserve immediately — see releaseReservedItems()/release() for the
+      // matching un-reserve-on-Rejected/Cancelled and consume-on-Released
+      // halves of this.
+      await Item.update(
+        { availabilityStatus: 'Reserved' },
+        { where: { id: available.map((i) => i.id) }, transaction: t }
+      );
+      await equipment.decrement('availableQuantity', { by: quantity, transaction: t });
+      selectedItems.push(...available);
+    }
+
     // The wizard's Acknowledge checkbox already gates submission client-side
     // (equipment-showroom-figma.html), so a self-request reaching here has
     // always been acknowledged — record that explicitly rather than sitting
@@ -250,8 +447,11 @@ exports.cancelSelfRequest = async (req, res) => {
   }
   assertStatusIn(txn, ['Pending', 'Acknowledged']);
   const oldStatus = txn.transactionStatus;
-  txn.transactionStatus = 'Cancelled';
-  await txn.save();
+  await sequelize.transaction(async (t) => {
+    await releaseReservedItems(txn, t);
+    txn.transactionStatus = 'Cancelled';
+    await txn.save({ transaction: t });
+  });
   await logStatusChange(txn.id, req.user.id, oldStatus, 'Cancelled', 'Cancelled by borrower');
   res.json({ success: true, data: serialize(await loadTransactionOr404(txn.id)) });
 };
@@ -272,10 +472,22 @@ exports.review = async (req, res) => {
   const oldStatus = txn.transactionStatus;
 
   const nextStatus = action === 'accept' ? 'For Approval' : action === 'reject' ? 'Rejected' : 'Acknowledged';
-  txn.transactionStatus = nextStatus;
-  txn.reviewedBy = req.user.id;
-  txn.reviewDatetime = new Date();
-  await txn.save();
+  if (action === 'reject') {
+    // Rejecting at Review means these items never actually get borrowed —
+    // release the Reserved stock this request took at submission time.
+    await sequelize.transaction(async (t) => {
+      await releaseReservedItems(txn, t);
+      txn.transactionStatus = nextStatus;
+      txn.reviewedBy = req.user.id;
+      txn.reviewDatetime = new Date();
+      await txn.save({ transaction: t });
+    });
+  } else {
+    txn.transactionStatus = nextStatus;
+    txn.reviewedBy = req.user.id;
+    txn.reviewDatetime = new Date();
+    await txn.save();
+  }
   await logStatusChange(txn.id, req.user.id, oldStatus, nextStatus, remarks || null);
 
   if (txn.borrower && txn.borrower.user) {
@@ -305,15 +517,69 @@ exports.approve = async (req, res) => {
   res.json({ success: true, data: serialize(await loadTransactionOr404(txn.id)) });
 };
 
+// Step 4 — the borrower's pre-issuance electronic acknowledgement (spec:
+// "Before equipment issuance, the borrower completes an electronic
+// acknowledgement confirming receipt of the equipment and acceptance of
+// responsibility for its proper use, timely return, and applicable
+// liabilities. No handwritten or digital signature is required.").
+//
+// This is distinct from borrowerAcknowledged/acknowledgementTimestamp above,
+// which record the borrower agreeing to the general borrowing guidelines at
+// *submission* time (step 1) — a separate, earlier moment. This endpoint is
+// the actual step-4 gate: the borrower is physically at the SDPO office
+// receiving the item and taps this on their own account (no signature) to
+// confirm they've received it and accept responsibility, which release()
+// below now requires before staff can scan-to-release. Tracked in
+// receivedByBorrowerDatetime, a field that already existed on the model but
+// was never written anywhere before this.
+exports.acknowledgeReceipt = async (req, res) => {
+  const borrower = await Borrower.findOne({ where: { userId: req.user.id } });
+  const txn = await loadTransactionOr404(req.params.id);
+  if (!borrower || txn.borrowerId !== borrower.id) {
+    const err = new Error('You do not have permission to acknowledge this transaction');
+    err.statusCode = 403;
+    throw err;
+  }
+  assertStatus(txn, 'Approved');
+  if (txn.receivedByBorrowerDatetime) {
+    const err = new Error('Receipt has already been acknowledged for this transaction');
+    err.statusCode = 409;
+    throw err;
+  }
+  txn.receivedByBorrowerDatetime = new Date();
+  await txn.save();
+  res.json({ success: true, data: serialize(await loadTransactionOr404(txn.id)) });
+};
+
 exports.reject = async (req, res) => {
+  const { remarks } = req.body;
   const txn = await loadTransactionOr404(req.params.id);
   assertStatusIn(txn, ['Pending', 'Acknowledged', 'For Approval']);
+  // The route allows Staff/Director/Admin generally (this action also covers
+  // the earlier Review-stage reject at Pending/Acknowledged), but per the
+  // approved workflow "the SDPO Director approves or rejects" is a single
+  // decision point once a request reaches For Approval — only Director/Admin
+  // may reject at that stage, mirroring approve()'s directorOnly route gate.
+  // The admin UI already hides the Reject button from non-Directors here;
+  // this is the server-side enforcement of the same rule.
+  if (txn.transactionStatus === 'For Approval' && !['Director', 'Admin'].includes(req.user.userRole)) {
+    const err = new Error('Only a Director can reject a request that has reached the approval stage');
+    err.statusCode = 403;
+    throw err;
+  }
   const oldStatus = txn.transactionStatus;
-  txn.transactionStatus = 'Rejected';
-  await txn.save();
-  await logStatusChange(txn.id, req.user.id, oldStatus, 'Rejected');
+  await sequelize.transaction(async (t) => {
+    await releaseReservedItems(txn, t);
+    txn.transactionStatus = 'Rejected';
+    await txn.save({ transaction: t });
+  });
+  await logStatusChange(txn.id, req.user.id, oldStatus, 'Rejected', remarks || null);
   if (txn.borrower && txn.borrower.user) {
-    await notifyBorrower(txn.borrower.user.id, `Your borrow request (Transaction #${txn.id}) was rejected.`, 'Rejection');
+    await notifyBorrower(
+      txn.borrower.user.id,
+      `Your borrow request (Transaction #${txn.id}) was rejected.${remarks ? ' Reason: ' + remarks : ''}`,
+      'Rejection'
+    );
   }
   res.json({ success: true, data: serialize(await loadTransactionOr404(txn.id)) });
 };
@@ -329,6 +595,19 @@ exports.release = async (req, res) => {
   const txn = await loadTransactionOr404(req.params.id);
   assertStatus(txn, 'Approved');
 
+  // Electronic acknowledgement (per the approved borrowing workflow) must
+  // happen before issuance: the borrower has to confirm receipt and accept
+  // responsibility for proper use, timely return, and applicable liabilities
+  // before the admin can release the equipment. This is distinct from the
+  // request-submission-time `borrowerAcknowledged` guideline agreement.
+  if (!txn.receivedByBorrowerDatetime) {
+    const err = new Error(
+      'The borrower has not yet completed the electronic acknowledgement of receipt for this request — it must be acknowledged before equipment can be released.'
+    );
+    err.statusCode = 409;
+    throw err;
+  }
+
   const expectedCodes = txn.details.map((d) => d.item.itemCode).sort();
   const scannedCodes = [...itemCodes].sort();
   const matches = expectedCodes.length === scannedCodes.length && expectedCodes.every((c, i) => c === scannedCodes[i]);
@@ -338,13 +617,30 @@ exports.release = async (req, res) => {
     throw err;
   }
 
+  // Every item here should already be 'Reserved' (set at request-creation
+  // time in create()/createSelfRequest(), never undone since — Approved is
+  // downstream of that). Re-check anyway rather than assume: this is the
+  // one place that would otherwise silently double-book or double-decrement
+  // availableQuantity if an item's state had diverged for any reason (e.g.
+  // manually forced back to Available via QR Management).
+  const notReserved = txn.details.filter((d) => d.item.availabilityStatus !== 'Reserved');
+  if (notReserved.length > 0) {
+    const err = new Error(
+      `These items are no longer reserved for this transaction and can't be released: ${notReserved.map((d) => d.item.itemCode).join(', ')}`
+    );
+    err.statusCode = 409;
+    throw err;
+  }
+
   await sequelize.transaction(async (t) => {
     for (const detail of txn.details) {
+      // availableQuantity was already decremented when this item was
+      // reserved at request-creation time — decrementing it again here
+      // would double-count it, so this only flips the item's own status.
       await detail.item.update(
         { availabilityStatus: 'Borrowed', currentBorrowerId: txn.borrowerId },
         { transaction: t }
       );
-      await Equipment.decrement('availableQuantity', { by: 1, where: { id: detail.item.equipmentId }, transaction: t });
     }
     txn.transactionStatus = 'Released';
     txn.releasedBy = req.user.id;

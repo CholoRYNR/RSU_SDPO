@@ -6,20 +6,19 @@
   <title>RSU-SDPO | Transaction Log Report</title>
   <link rel="stylesheet" href="../../css/shared/app-shell.css">
   <style>
-    .content{padding:26px 28px;max-width:1080px;margin:auto}
+    .content{width:100%;padding:26px 28px;max-width:1080px;margin:auto}
     .back-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;font-weight:500;text-decoration:none;margin-bottom:14px}
     .back-link:hover{color:var(--ink)}
     .page-head{margin-bottom:20px}
     .page-head h1{font-size:22px;margin:0 0 4px}
     .page-head p{color:var(--muted);font-size:13px;margin:0}
-    .log-grid{display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start}
+    .log-grid{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
     @media(max-width:820px){.log-grid{grid-template-columns:1fr}}
     .cal-card{background:var(--page);border:1px solid var(--line);border-radius:16px;padding:20px}
-    .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
-    .cal-head h2{font-size:17px;margin:0}
+    .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px}
+    .cal-head h2{font-size:14px;margin:0;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
     .cal-nav{display:flex;gap:6px}
-    .cal-nav button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;background:var(--page);color:var(--muted);cursor:pointer;font-size:14px}
-    .cal-nav button:hover{background:var(--softline)}
+    .cal-nav select{height:30px;border:1px solid var(--line);border-radius:7px;background:var(--page);color:var(--ink);font-size:12px;padding:0 6px}
     .cal-weekdays,.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
     .cal-weekdays span{font-size:11px;font-weight:700;color:#90a1b9;padding:6px 0}
     .cal-day{position:relative;height:38px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:13px;font-weight:500;color:var(--ink);cursor:pointer;border:0;background:transparent}
@@ -33,9 +32,16 @@
     .detail-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:295px;color:var(--muted);text-align:center;gap:6px}
     .detail-empty .icon{font-size:40px;opacity:.35}
     .detail-empty b{color:var(--ink);font-size:15px}
-    .detail-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .detail-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:6px}
     .detail-head h3{margin:0;font-size:15px}
     .detail-head span{color:var(--muted);font-size:12px}
+    .clear-filter{border:0;background:transparent;color:var(--green);font-size:11px;font-weight:700;cursor:pointer;padding:0}
+    .clear-filter:hover{text-decoration:underline}
+    .day-group{margin-bottom:18px}
+    .day-group:last-child{margin-bottom:0}
+    .day-group-head{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+    .day-group-head b{font-size:12px;color:var(--ink)}
+    .day-group-head span{color:var(--muted);font-size:11px}
     .detail-list{display:grid;gap:10px}
     .log-row{border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;gap:10px;align-items:center;cursor:pointer;background:var(--page)}
     .log-row:hover{border-color:var(--green);background:#f8fffb}
@@ -43,20 +49,20 @@
     .log-row b{font-size:12px}
     .log-row .sub{display:block;color:var(--muted);font-size:11px;margin-top:2px}
     .log-badge{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;font-weight:700;font-size:10px;white-space:nowrap}
-    .pending{background:#fef3c7;color:#a16207}.approved{background:#d1fae5;color:#059669}.released{background:#dbeafe;color:#2563eb}.returned{background:#e2e8f0;color:var(--muted)}.rejected{background:#fee2e2;color:#dc2626}.cancelled{background:var(--softline);color:var(--muted)}.overdue{background:#fee2e2;color:#dc2626}.completed{background:#d1fae5;color:#059669}
+    .pending,.acknowledged{background:#fef3c7;color:#a16207}.for-approval{background:#fef3c7;color:#a16207}.approved{background:#d1fae5;color:#059669}.released{background:#dbeafe;color:#2563eb}.returned{background:#e2e8f0;color:var(--muted)}.rejected{background:#fee2e2;color:#dc2626}.cancelled{background:var(--softline);color:var(--muted)}.overdue{background:#fee2e2;color:#dc2626}.for-resolution,.replacement{background:#fef2f2;color:#b91c1c}.resolved{background:#ede9fe;color:#7c3aed}.completed{background:#d1fae5;color:#059669}
   </style>
 </head>
 <body>
   <div id="app-root" data-page="reports" data-title="Transaction Log Report" data-subtitle="Calendar view of all system transactions">
     <a class="back-link" href="reports-analytics.html">‹ Back to Reports</a>
     <section class="log-grid">
+      <article class="detail-card" id="detailCard">
+        <div class="detail-empty"><span class="icon">▤</span><b>Loading transaction log…</b><p>The full log for this month will appear here.</p></div>
+      </article>
       <article class="cal-card">
-        <div class="cal-head"><h2 id="calMonthLabel">—</h2><div class="cal-nav"><button type="button" id="calPrev" aria-label="Previous month">‹</button><button type="button" id="calNext" aria-label="Next month">›</button></div></div>
+        <div class="cal-head"><h2>Jump to Month</h2><div class="cal-nav"><select id="monthSelect" aria-label="Month"></select><select id="yearSelect" aria-label="Year"></select></div></div>
         <div class="cal-weekdays"><span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span></div>
         <div class="cal-days" id="calDays"></div>
-      </article>
-      <article class="detail-card" id="detailCard">
-        <div class="detail-empty"><span class="icon">▤</span><b>Select a Date</b><p>Click on a date in the calendar to view transaction details</p></div>
       </article>
     </section>
   </div>
@@ -64,18 +70,34 @@
   <script src="../../js/shared/app-shell.js"></script>
   <script>
     const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    const cls=s=>String(s).toLowerCase();
+    const cls=s=>String(s).toLowerCase().replace(/\s+/g,'-');
+    const MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
     const today=new Date();
     let viewYear=today.getFullYear(),viewMonth=today.getMonth()+1,selectedDay=null,byDay={};
 
+    function populateMonthYearSelects(){
+      const monthSel=document.getElementById('monthSelect'),yearSel=document.getElementById('yearSelect');
+      monthSel.innerHTML=MONTH_NAMES.map((m,i)=>`<option value="${i+1}">${m}</option>`).join('');
+      let yearOpts='';
+      for(let y=today.getFullYear()+1;y>=today.getFullYear()-3;y--)yearOpts+=`<option value="${y}">${y}</option>`;
+      yearSel.innerHTML=yearOpts;
+      monthSel.value=String(viewMonth);
+      yearSel.value=String(viewYear);
+      monthSel.addEventListener('change',()=>{viewMonth=Number(monthSel.value);selectedDay=null;loadMonth();});
+      yearSel.addEventListener('change',()=>{viewYear=Number(yearSel.value);selectedDay=null;loadMonth();});
+    }
+
     function loadMonth(){
-      document.getElementById('calMonthLabel').textContent=new Date(viewYear,viewMonth-1,1).toLocaleDateString([],{month:'long',year:'numeric'});
+      document.getElementById('monthSelect').value=String(viewMonth);
+      document.getElementById('yearSelect').value=String(viewYear);
       apiFetch(`/api/reports/transaction-log?year=${viewYear}&month=${viewMonth}`).then(d=>{
         byDay=d.byDay||{};
         renderCalendar();
+        renderLog();
       }).catch(err=>{
         document.getElementById('calDays').innerHTML='';
+        document.getElementById('detailCard').innerHTML=`<div class="detail-empty"><span class="icon">⚠</span><b>Could not load the transaction log</b><p>${esc(err.message)}</p></div>`;
         console.error('Could not load transaction log:',err.message);
       });
     }
@@ -92,29 +114,51 @@
       }
       document.getElementById('calDays').innerHTML=html;
       document.querySelectorAll('.cal-day[data-day]').forEach(btn=>btn.addEventListener('click',()=>selectDay(Number(btn.dataset.day))));
-      if(selectedDay)renderDetail();
     }
 
     function selectDay(day){
-      selectedDay=day;
+      selectedDay=selectedDay===day?null:day; // clicking the already-selected day clears the filter
       renderCalendar();
-      renderDetail();
+      renderLog();
     }
 
-    function renderDetail(){
+    function logRowHtml(t){
+      return `<div class="log-row" onclick="location.href='transaction-management.html?open=${t.dbId}'"><div><span class="txn-id">${esc(t.id)}</span><b style="display:block;margin-top:3px">${esc(t.name)}</b><span class="sub">${esc(t.college)} · ${esc(t.purpose)}</span></div><span class="log-badge ${cls(t.status)}">${esc(t.status)}</span></div>`;
+    }
+
+    // Main/left panel: by default shows the FULL month's log, grouped by day.
+    // Clicking a date in the calendar filters this panel down to just that
+    // day; clicking it again (or the "Show full month" link) clears the filter.
+    function renderLog(){
       const card=document.getElementById('detailCard');
-      const rows=byDay[selectedDay]||[];
-      const dateLabel=new Date(viewYear,viewMonth-1,selectedDay).toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-      if(!rows.length){
-        card.innerHTML=`<div class="detail-head"><h3>${esc(dateLabel)}</h3><span>0 transactions</span></div><div class="detail-empty" style="height:200px"><span class="icon">▤</span><b>No transactions</b><p>Nothing was logged on this day.</p></div>`;
+      const monthLabel=`${MONTH_NAMES[viewMonth-1]} ${viewYear}`;
+      const totalCount=Object.values(byDay).reduce((n,rows)=>n+rows.length,0);
+
+      if(selectedDay){
+        const rows=byDay[selectedDay]||[];
+        const dateLabel=new Date(viewYear,viewMonth-1,selectedDay).toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+        const head=`<div class="detail-head"><div><h3>${esc(dateLabel)}</h3><span>${rows.length} transaction${rows.length===1?'':'s'}</span></div><button type="button" class="clear-filter" onclick="selectDay(${selectedDay})">← Show full month</button></div>`;
+        card.innerHTML=rows.length
+          ? `${head}<div class="detail-list">${rows.map(logRowHtml).join('')}</div>`
+          : `${head}<div class="detail-empty" style="height:200px"><span class="icon">▤</span><b>No transactions</b><p>Nothing was logged on this day.</p></div>`;
         return;
       }
-      card.innerHTML=`<div class="detail-head"><h3>${esc(dateLabel)}</h3><span>${rows.length} transaction${rows.length===1?'':'s'}</span></div><div class="detail-list">${rows.map(t=>`<div class="log-row" onclick="location.href='transaction-management.html?open=${t.dbId}'"><div><span class="txn-id">${esc(t.id)}</span><b style="display:block;margin-top:3px">${esc(t.name)}</b><span class="sub">${esc(t.college)} · ${esc(t.purpose)}</span></div><span class="log-badge ${cls(t.status)}">${esc(t.status)}</span></div>`).join('')}</div>`;
+
+      if(!totalCount){
+        card.innerHTML=`<div class="detail-head"><h3>${esc(monthLabel)}</h3><span>0 transactions</span></div><div class="detail-empty" style="height:200px"><span class="icon">▤</span><b>No transactions this month</b><p>Nothing has been logged for ${esc(monthLabel)} yet.</p></div>`;
+        return;
+      }
+
+      const days=Object.keys(byDay).map(Number).filter(d=>byDay[d].length>0).sort((a,b)=>a-b);
+      const groups=days.map(d=>{
+        const rows=byDay[d];
+        const dateLabel=new Date(viewYear,viewMonth-1,d).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+        return `<div class="day-group"><div class="day-group-head"><b>${esc(dateLabel)}</b><span>${rows.length} transaction${rows.length===1?'':'s'}</span></div><div class="detail-list">${rows.map(logRowHtml).join('')}</div></div>`;
+      }).join('');
+      card.innerHTML=`<div class="detail-head"><h3>${esc(monthLabel)}</h3><span>${totalCount} transaction${totalCount===1?'':'s'}</span></div>${groups}`;
     }
 
-    document.getElementById('calPrev').addEventListener('click',()=>{viewMonth--;if(viewMonth<1){viewMonth=12;viewYear--;}selectedDay=null;loadMonth();});
-    document.getElementById('calNext').addEventListener('click',()=>{viewMonth++;if(viewMonth>12){viewMonth=1;viewYear++;}selectedDay=null;loadMonth();});
-
+    populateMonthYearSelects();
     loadMonth();
   </script>
 </body>

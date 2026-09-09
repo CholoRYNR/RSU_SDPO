@@ -10,6 +10,7 @@ body{font:15px/1.5 Inter,Arial,sans-serif;background:#eef2f7;margin:0;padding:22
 .wrap{max-width:420px;margin:0 auto}
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
 .brand .mark{width:38px;height:38px;border-radius:10px;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:800}
+.brand .mark img{width:20px;height:20px;filter:brightness(0) invert(1)}
 .brand b{display:block;font-size:15px}
 .brand small{color:#7286a3}
 .card{background:#fff;border:1px solid #dde6ef;border-radius:16px;box-shadow:0 4px 14px #1c355014;padding:22px;text-align:center}
@@ -18,17 +19,22 @@ body{font:15px/1.5 Inter,Arial,sans-serif;background:#eef2f7;margin:0;padding:22
 .badge{display:inline-block;border-radius:20px;padding:6px 14px;font-size:12px;font-weight:800;letter-spacing:.3px;margin-bottom:16px}
 .badge.available{background:#eafff5;color:#00875a}
 .badge.borrowed{background:#fff4e0;color:#b45900}
+.badge.maintenance{background:#fef3e2;color:#92400e}
+.badge.decommissioned{background:#f1f5f9;color:#64748b}
 .badge.unknown{background:#fdecea;color:#c0392b}
 .rows{text-align:left;border-top:1px solid #eef1f5;margin-top:6px}
 .row{display:flex;justify-content:space-between;gap:12px;padding:11px 2px;border-bottom:1px solid #eef1f5;font-size:13px}
 .row span:first-child{color:#7286a3}
 .row span:last-child{color:#172139;font-weight:700;text-align:right}
+.row span:last-child.cond-good{color:#00875a}
+.row span:last-child.cond-warn{color:#b45900}
+.row span:last-child.cond-bad{color:#c0392b}
 .note{margin-top:18px;font-size:11px;color:#8ca3c3;line-height:1.5}
 .notfound .icon{font-size:34px;margin-bottom:8px}
 </style></head>
 <body>
 <div class="wrap">
-<div class="brand"><span class="mark">▦</span><div><b>RSU-SDPO</b><small>Sports Development Program Office</small></div></div>
+<div class="brand"><span class="mark"><img src="../assets/images/icon-qr-code.png" alt=""></span><div><b>RSU-SDPO</b><small>Sports Development Program Office</small></div></div>
 <div class="card" id="card"></div>
 <p class="note" id="footNote"></p>
 </div>
@@ -76,15 +82,33 @@ async function render(){
   }
 
   const item=body.data;
-  const badgeClass=item.status==='Available'?'available':item.status==='Borrowed'?'borrowed':'unknown';
+  // Maintenance/Decommissioned (S7 Phase 3) previously fell through to
+  // 'unknown' here — the same red, error-looking badge used for a status
+  // this page doesn't recognize at all, which misleads a staff member
+  // scanning an item that's simply out for repair or retired on purpose.
+  const BADGE_CLASS={Available:'available',Borrowed:'borrowed',Maintenance:'maintenance',Decommissioned:'decommissioned'};
+  const badgeClass=BADGE_CLASS[item.status]||'unknown';
+  // The top badge already names the exact status, but a staff member
+  // glancing at the rows below it (not just the badge) had no plain-text
+  // answer to "can this be borrowed right now?" or "is it damaged?" for
+  // anything other than a Borrowed item — Category/Condition showed the
+  // same way regardless of status. Availability now always gets its own
+  // row (in plain words, not just the color of the badge), and Condition
+  // is color-coded so a damaged/lost/under-repair item doesn't read the
+  // same as a Good one. Borrower details are still shown only when the
+  // item is actually Borrowed, since there's no borrower to show otherwise.
+  const AVAILABILITY_TEXT={Available:'Available to borrow',Borrowed:'Borrowed — not available',Reserved:'Reserved — not available',Maintenance:'Under maintenance — not available',Decommissioned:'Decommissioned — not available'};
+  const CONDITION_CLASS={Good:'cond-good',Damaged:'cond-bad',Lost:'cond-bad','Under Repair':'cond-warn'};
+  const condClass=CONDITION_CLASS[item.condition]||'';
   $('#card').innerHTML=`
     <span class="badge ${badgeClass}">${esc(item.status)}</span>
     <h1>${esc(item.name)}</h1>
     <span class="code">${esc(item.code)}</span>
     <div class="rows">
       <div class="row"><span>Category</span><span>${esc(item.category||'—')}</span></div>
-      <div class="row"><span>Condition</span><span>${esc(item.condition||'—')}</span></div>
-      ${item.status==='Borrowed'?`<div class="row"><span>Borrowed by</span><span>${esc(item.borrower?item.borrower.name:'—')}</span></div><div class="row"><span>College/Unit</span><span>${esc(item.borrower?item.borrower.collegeOrUnit:'—')}</span></div><div class="row"><span>Since</span><span>${esc(formatDate(item.lastTransaction&&item.lastTransaction.releaseDatetime))}</span></div>`:''}
+      <div class="row"><span>Availability</span><span>${esc(AVAILABILITY_TEXT[item.status]||item.status)}</span></div>
+      <div class="row"><span>Condition</span><span class="${condClass}">${esc(item.condition||'—')}</span></div>
+      ${item.status==='Borrowed'?`<div class="row"><span>Borrowed by</span><span>${esc(item.borrower?item.borrower.name:'—')}</span></div><div class="row"><span>College/Unit</span><span>${esc(item.borrower?item.borrower.collegeOrUnit:'—')}</span></div><div class="row"><span>Checked Out</span><span>${esc(formatDate(item.lastTransaction&&item.lastTransaction.releaseDatetime))}</span></div><div class="row"><span>Due Date</span><span>${esc(formatDate(item.lastTransaction&&item.lastTransaction.expectedReturnDatetime))}</span></div>`:''}
     </div>`;
   $('#footNote').textContent='Live data from the RSU-SDPO database, looked up by this item’s permanent Item Code.';
 }

@@ -138,8 +138,33 @@
           <span class="field-error" id="verifyCodeError" style="text-align:center"></span>
           <button class="primary-button" type="submit">Verify Code</button>
         </form>
-        <p class="screen-note small">Please enter the complete 6-digit code.</p>
+        <p class="screen-note small">Didn't get a code? <button class="text-link" id="resendCodeButton" type="button">Resend</button> <span id="resendVerifyNote"></span></p>
         <p class="card-foot"><button class="text-link" id="backToLoginFromVerify" type="button">Back to Sign In</button></p>
+      </div>
+    </section>
+
+    <section class="screen" id="resetPasswordScreen">
+      <div class="card">
+        <div class="card-brand">
+          <div class="card-badge"><img src="../../assets/images/rsu-sdpo-logo.png" alt="RSU SDPO"></div>
+          <div><h2>RSU-<span>SDPO</span></h2><p>Sports Equipment &amp; Transaction Monitoring System</p><p class="screen-title">Set New Password</p></div>
+        </div>
+        <p class="screen-note">Your code was verified. Enter a new password for your admin account.</p>
+        <form id="resetPasswordForm" class="form-card" novalidate>
+          <label>
+            <span>New Password</span>
+            <div class="field-group" id="resetPasswordGroup"><input id="resetPassword" type="password" placeholder="Create a new password" autocomplete="new-password"><button type="button" class="toggle-pw" data-target="resetPassword" aria-label="Show password" aria-pressed="false"><svg class="icon-eye" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="icon-eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg></button></div>
+            <span class="field-error" id="resetPasswordError"></span>
+          </label>
+          <label>
+            <span>Confirm Password</span>
+            <div class="field-group" id="resetConfirmGroup"><input id="resetConfirm" type="password" placeholder="Confirm your new password" autocomplete="new-password"><button type="button" class="toggle-pw" data-target="resetConfirm" aria-label="Show password" aria-pressed="false"><svg class="icon-eye" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="icon-eye-off" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg></button></div>
+            <span class="field-error" id="resetConfirmError"></span>
+          </label>
+          <span class="field-error" id="resetPasswordFormError"></span>
+          <button class="primary-button" type="submit">Reset Password</button>
+        </form>
+        <p class="card-foot"><button class="text-link" id="backToForgotFromReset" type="button">Code expired? Request a new one</button></p>
       </div>
     </section>
   </div>
@@ -147,8 +172,13 @@
   <script src="../../js/shared/api.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
-    const screens = ['loginScreen','forgotScreen','verifyScreen'].map($);
+    const screens = ['loginScreen','forgotScreen','verifyScreen','resetPasswordScreen'].map($);
     const staffRoles = ['Admin', 'Director', 'Staff'];
+
+    // This screen only ever serves password-reset (there is no admin
+    // sign-up flow), so verifyContext just tracks the email/code being
+    // reset — no 'mode' field is needed here.
+    let verifyContext = null;
 
     function clearScreens() { screens.forEach((s) => s.classList.remove('active')); }
     function showScreen(el) { clearScreens(); el.classList.add('active'); }
@@ -160,6 +190,7 @@
     }
     function showForgot() { showScreen($('forgotScreen')); }
     function showVerify() { showScreen($('verifyScreen')); }
+    function showResetPassword() { showScreen($('resetPasswordScreen')); }
     function goToDashboard(user) {
       window.location.href = staffRoles.includes(user.userRole) ? '../admin/dashboard.html' : '../user/equipment-showroom-figma.html';
     }
@@ -167,6 +198,7 @@
     $('forgotPasswordButton').addEventListener('click', showForgot);
     $('backToLoginFromForgot').addEventListener('click', () => showLogin());
     $('backToLoginFromVerify').addEventListener('click', () => showLogin());
+    $('backToForgotFromReset').addEventListener('click', () => showForgot());
 
     // --- Validation helpers ---
     const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -222,19 +254,54 @@
         localStorage.setItem('rsuSdpoUser', JSON.stringify(user));
         goToDashboard(user);
       } catch (err) {
-        showLogin(err.message, true);
+        // A staff account is reachable here whenever it's marked unverified
+        // — most likely because it just changed its email address (server-
+        // side fix, see user.controller.js#updateProfile), which resets the
+        // flag so the new address gets confirmed before it's trusted. This
+        // screen has no signup flow to have reached it from otherwise, so
+        // route straight to it with a working Resend button rather than
+        // just showing the error text with no way to act on it.
+        // Only route to the verify screen when we actually know their email
+        // (they logged in with it, not a bare username) — verify-registration
+        // and resend-verification both look accounts up by email address.
+        if (err.message && err.message.toLowerCase().includes('verify your email') && username.includes('@')) {
+          verifyContext = { mode: 'register', email: username };
+          $('verifyEmailTarget').textContent = maskEmail(username);
+          showVerify();
+        } else {
+          showLogin(err.message, true);
+        }
       } finally {
         submitBtn.disabled = false;
       }
     });
 
     // --- Forgot Password ---
-    $('forgotForm').addEventListener('submit', (e) => {
+    $('forgotForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = $('forgotEmail').value.trim();
       if (!setFieldError('forgotEmailGroup', 'forgotEmailError', EMAIL_RE.test(email) ? '' : 'Enter a valid email address.')) return;
-      $('verifyEmailTarget').textContent = maskEmail(email);
-      showVerify();
+
+      const submitBtn = $('forgotForm').querySelector('.primary-button');
+      submitBtn.disabled = true;
+      try {
+        await apiFetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        verifyContext = { mode: 'reset', email };
+        $('verifyEmailTarget').textContent = maskEmail(email);
+        showVerify();
+      } catch (err) {
+        // Low finding, 2026-09-08 system audit: this used to always show a
+        // generic message, discarding the server's actual reason (e.g. a
+        // rate-limit message) — matches user-login.html's equivalent
+        // handler, which already surfaces err.message.
+        setFieldError('forgotEmailGroup', 'forgotEmailError', err.message || 'Something went wrong. Please try again.');
+      } finally {
+        submitBtn.disabled = false;
+      }
     });
 
     // --- Verify code ---
@@ -248,14 +315,94 @@
         if (e.key === 'Backspace' && !el.value && codeDigits[i - 1]) codeDigits[i - 1].focus();
       });
     });
-    $('verifyForm').addEventListener('submit', (e) => {
+    $('verifyForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const complete = codeDigits.every((el) => el.value);
       codeDigits.forEach((el) => el.classList.toggle('invalid', !complete));
       $('verifyCodeError').textContent = complete ? '' : 'Please enter the complete 6-digit code.';
       if (!complete) return;
-      codeDigits.forEach((el) => { el.value = ''; el.classList.remove('invalid'); });
-      showLogin('Password reset successfully. Please sign in with your new password.');
+      const code = codeDigits.map((el) => el.value).join('');
+
+      if (!verifyContext) { showLogin(); return; }
+
+      if (verifyContext.mode === 'register') {
+        try {
+          await apiFetch('/api/auth/verify-registration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: verifyContext.email, code })
+          });
+          verifyContext = null;
+          showLogin('Email verified. You can now sign in.');
+        } catch (err) {
+          codeDigits.forEach((el) => el.classList.add('invalid'));
+          $('verifyCodeError').textContent = err.message;
+        }
+        return;
+      }
+
+      verifyContext.code = code;
+      $('resendVerifyNote').textContent = '';
+      showResetPassword();
+    });
+
+    // --- Resend code ---
+    $('resendCodeButton').addEventListener('click', async () => {
+      if (!verifyContext) return;
+      const note = $('resendVerifyNote');
+      try {
+        if (verifyContext.mode === 'register') {
+          await apiFetch('/api/auth/resend-verification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: verifyContext.email })
+          });
+        } else {
+          await apiFetch('/api/auth/forgot-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: verifyContext.email })
+          });
+        }
+        note.textContent = 'Code resent.';
+      } catch (err) {
+        note.textContent = 'Could not resend code. Please try again.';
+      }
+      setTimeout(() => { note.textContent = ''; }, 4000);
+    });
+
+    // --- Reset Password ---
+    $('resetPasswordForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pw = $('resetPassword').value;
+      const confirm = $('resetConfirm').value;
+      let ok = true;
+      ok = setFieldError('resetPasswordGroup', 'resetPasswordError', pw ? '' : 'Enter a new password.') && ok;
+      ok = setFieldError('resetConfirmGroup', 'resetConfirmError', confirm && confirm === pw ? '' : 'Passwords do not match.') && ok;
+      if (!ok) return;
+
+      if (!verifyContext || !verifyContext.code) {
+        $('resetPasswordFormError').textContent = 'Your session expired. Please request a new code.';
+        return;
+      }
+
+      const submitBtn = $('resetPasswordForm').querySelector('.primary-button');
+      submitBtn.disabled = true;
+      $('resetPasswordFormError').textContent = '';
+      try {
+        await apiFetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: verifyContext.email, code: verifyContext.code, newPassword: pw })
+        });
+        $('resetPasswordForm').reset();
+        verifyContext = null;
+        showLogin('Password reset successfully. Please sign in with your new password.');
+      } catch (err) {
+        $('resetPasswordFormError').textContent = err.message;
+      } finally {
+        submitBtn.disabled = false;
+      }
     });
   </script>
 </body>

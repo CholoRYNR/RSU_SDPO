@@ -68,11 +68,17 @@
   var detailsStatTotal = $("detailsStatTotal");
   var detailsStatAvailable = $("detailsStatAvailable");
   var detailsStatBorrowed = $("detailsStatBorrowed");
+  var detailsStatusExtra = $("detailsStatusExtra");
+  var detailsStatMaintenance = $("detailsStatMaintenance");
+  var detailsStatDecommissioned = $("detailsStatDecommissioned");
   var detailsCategoryWrap = $("detailsCategoryWrap");
   var detailsDescriptionWrap = $("detailsDescriptionWrap");
   var detailsQrWrap = $("detailsQrWrap");
   var detailsEditBtn = $("detailsEditBtn");
   var detailsDeleteBtn = $("detailsDeleteBtn");
+  var changePhotoBtn = $("changePhotoBtn");
+  var photoFileInput = $("photoFileInput");
+  var photoError = $("photoError");
 
   var formModalOverlay = $("formModalOverlay");
   var formModalTitle = $("formModalTitle");
@@ -120,16 +126,21 @@
     return "EQ-" + String(item.id).padStart(3, "0");
   }
 
-  // Stock-level warning tier — thresholds scale off each equipment's own
-  // total quantity rather than a single fixed number, so e.g. a 10-unit
-  // item turns amber at 5 left / red at 3 left, while a 3-unit item turns
-  // amber at 2 left / red at 1 left.
+  // Stock-level warning tier — the approved RSU SDPO Availability Indicator
+  // uses fixed absolute thresholds (not scaled off each equipment's own
+  // total quantity, which is what this used to do — a 20-unit item was
+  // showing "red" at 6 available and "yellow" at 10, well outside the
+  // approved rule below):
+  //   > 5 available = Green  = up to 2 units may be borrowed
+  //   4-5 available = Yellow = only 1 unit may be borrowed
+  //   1-3 available = Red    = borrowing not allowed
+  // Matches the server-side cap in server/controllers/borrow.controller.js
+  // (maxBorrowableUnits) — this function only drives the badge/label shown
+  // here; the server is what actually enforces the cap.
   function stockLevel(available, total) {
-    if (!total || total <= 0 || available <= 0) return "low";
-    var redMax = Math.max(1, Math.round(total * 0.3));
-    var yellowMax = Math.max(redMax + 1, Math.round(total * 0.5));
-    if (available <= redMax) return "low";
-    if (available <= yellowMax) return "limited";
+    if (available <= 0) return "low";
+    if (available <= 3) return "low";
+    if (available <= 5) return "limited";
     return "available";
   }
 
@@ -155,6 +166,13 @@
           totalQty: e.totalQuantity,
           availableQty: e.availableQuantity,
           description: e.description || "",
+          photoUrl: e.photoUrl || null,
+          // Per-unit Maintenance/Decommissioned counts (migration 021) — only
+          // present when the API eager-loaded items (list/getOne), which it
+          // always does for this endpoint; kept optional here defensively so
+          // a future response shape without it doesn't throw in the Details
+          // modal below.
+          statusCounts: e.statusCounts || null,
         };
       });
     });
@@ -314,7 +332,7 @@
     return (
       '<div class="equipment-card" data-id="' + item.id + '">' +
         '<div class="equipment-card__media">' +
-          '<img src="' + categoryImage(item.category) + '" alt="' + escapeHtml(item.name) + '" onerror="this.onerror=null;this.src=\'' + FALLBACK_IMAGE + '\'" />' +
+          '<img src="' + escapeHtml(item.photoUrl || categoryImage(item.category)) + '" alt="' + escapeHtml(item.name) + '" onerror="this.onerror=null;this.src=\'' + FALLBACK_IMAGE + '\'" />' +
           '<span class="equipment-card__badge equipment-card__badge--' + statusClass + '">' + statusLabel + "</span>" +
           '<div class="equipment-card__id-strip"><span class="equipment-card__id">' + displayId(item) + "</span></div>" +
         "</div>" +
@@ -385,7 +403,7 @@
     if (!item) return;
     state.detailsId = id;
 
-    detailsHeroImg.src = categoryImage(item.category);
+    detailsHeroImg.src = item.photoUrl || categoryImage(item.category);
     detailsHeroImg.onerror = function () {
       detailsHeroImg.onerror = null;
       detailsHeroImg.src = FALLBACK_IMAGE;
@@ -406,6 +424,23 @@
     detailsStatTotal.textContent = item.totalQty;
     detailsStatAvailable.textContent = avail;
     detailsStatBorrowed.textContent = borrowedQty(item);
+
+    // Maintenance/Decommissioned units are already excluded from
+    // availableQty by the backend (qr.controller.js), so without this row
+    // they simply vanished from the picture — a director looking at "3
+    // available out of 10 total" had no way to tell whether the other 7
+    // were on loan, being repaired, or retired for good. Shown only when at
+    // least one unit is actually in one of these states, so equipment with
+    // none doesn't get an empty row of zeroes.
+    var maintCount = item.statusCounts ? item.statusCounts.Maintenance || 0 : 0;
+    var decomCount = item.statusCounts ? item.statusCounts.Decommissioned || 0 : 0;
+    if (maintCount > 0 || decomCount > 0) {
+      detailsStatMaintenance.textContent = maintCount;
+      detailsStatDecommissioned.textContent = decomCount;
+      detailsStatusExtra.hidden = false;
+    } else {
+      detailsStatusExtra.hidden = true;
+    }
 
     detailsCategoryWrap.innerHTML =
       '<span class="chip chip--neutral">' + escapeHtml(item.category) + "</span>";
@@ -433,6 +468,47 @@
 
   detailsDeleteBtn.addEventListener("click", function () {
     confirmDelete(state.detailsId);
+  });
+
+  // Real per-listing photo upload — replaces the category stock icon that's
+  // the only visual an Equipment listing has until one is uploaded. Scoped
+  // to the Details modal since it needs an existing equipment id (a fresh
+  // "Add Equipment" listing has nowhere to upload a photo to until it's
+  // been created and this modal is opened for it).
+  changePhotoBtn.addEventListener("click", function () {
+    photoError.style.display = "none";
+    photoFileInput.click();
+  });
+
+  photoFileInput.addEventListener("change", function () {
+    var file = photoFileInput.files[0];
+    photoFileInput.value = "";
+    if (!file) return;
+    var id = state.detailsId;
+    if (!id) return;
+
+    var formData = new FormData();
+    formData.append("photo", file);
+    changePhotoBtn.disabled = true;
+    changePhotoBtn.textContent = "Uploading…";
+    apiFetch("/api/equipment/" + id + "/photo", { method: "POST", body: formData })
+      .then(function (updated) {
+        state.equipment = state.equipment.map(function (e) {
+          return e.id === id ? Object.assign({}, e, { photoUrl: updated.photoUrl }) : e;
+        });
+        detailsHeroImg.onerror = null;
+        detailsHeroImg.src = updated.photoUrl + "?t=" + Date.now(); // cache-bust this view immediately
+        renderGrid();
+        showToast("Photo updated");
+      })
+      .catch(function (err) {
+        photoError.textContent = err.message;
+        photoError.style.display = "block";
+      })
+      .finally(function () {
+        changePhotoBtn.disabled = false;
+        changePhotoBtn.textContent = "Change Photo";
+      });
   });
 
   /* ---------- Delete flow ---------- */

@@ -51,7 +51,10 @@
         <div class="details-hero__id-strip">
           <span class="details-hero__id" id="detailsHeroId"></span>
         </div>
+        <button type="button" class="btn btn-secondary" id="changePhotoBtn" style="position:absolute;right:10px;bottom:10px;font-size:11px;padding:6px 10px">Change Photo</button>
+        <input type="file" id="photoFileInput" accept="image/jpeg,image/png,image/webp" hidden>
       </div>
+      <p class="field__error" id="photoError" style="display:none;margin:6px 0 0"></p>
 
       <div class="details-title">
         <h2 id="detailsName"></h2>
@@ -81,6 +84,18 @@
           <div class="stock-stat stock-stat--borrowed">
             <div class="stock-stat__value" id="detailsStatBorrowed">0</div>
             <div class="stock-stat__label">Borrowed</div>
+          </div>
+        </div>
+        <!-- Only shown when this equipment actually has units under repair or
+             retired — see openDetailsModal() in equipment.js. -->
+        <div class="stock-overview__stats stock-overview__stats--extra" id="detailsStatusExtra" hidden>
+          <div class="stock-stat stock-stat--maintenance">
+            <div class="stock-stat__value" id="detailsStatMaintenance">0</div>
+            <div class="stock-stat__label">Maintenance</div>
+          </div>
+          <div class="stock-stat stock-stat--decommissioned">
+            <div class="stock-stat__value" id="detailsStatDecommissioned">0</div>
+            <div class="stock-stat__label">Decommissioned</div>
           </div>
         </div>
       </div>

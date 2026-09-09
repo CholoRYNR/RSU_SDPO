@@ -14,5 +14,6 @@ router.use('/notifications', require('./notification.routes'));
 router.use('/reports', require('./report.routes'));
 router.use('/dashboard', require('./dashboard.routes'));
 router.use('/audit-logs', require('./auditLog.routes'));
+router.use('/cron', require('./cron.routes'));
 
 module.exports = router;

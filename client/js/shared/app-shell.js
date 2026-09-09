@@ -69,6 +69,29 @@
   // empty and fills in shortly after the shell renders.
   var NOTIFICATIONS = [];
 
+  // Mirrors api.js#handleExpiredSession — kept as its own copy rather than
+  // calling the api.js version directly, since this file is deliberately
+  // self-contained and can't assume api.js was also loaded on this page.
+  // If api.js *is* loaded, window.sessionExpiredRedirected there is a
+  // separate flag from this closure's own, but the redirect itself is
+  // idempotent (a second window.location.href to the same place is a
+  // no-op in practice), so having two independent guards is harmless.
+  var shellSessionExpiredRedirected = false;
+  function shellHandleExpiredSession() {
+    if (shellSessionExpiredRedirected) return;
+    var storedRole = null;
+    try {
+      var raw = localStorage.getItem('rsuSdpoUser');
+      storedRole = raw ? JSON.parse(raw).userRole : null;
+    } catch (e) { /* malformed/missing — fall through to the admin default below */ }
+    localStorage.removeItem('rsuSdpoToken');
+    localStorage.removeItem('rsuSdpoUser');
+    var target = storedRole === 'Borrower' ? base + 'pages/auth/user-login.html' : base + 'pages/auth/admin-login.html';
+    if (/\/(user|admin)-login\.html$/.test(window.location.pathname)) return;
+    shellSessionExpiredRedirected = true;
+    window.location.href = target;
+  }
+
   // Self-contained fetch helper (mirrors js/shared/api.js) so the shell
   // doesn't require every page to also include api.js just for the bell.
   function shellApiFetch(url, options) {
@@ -78,6 +101,10 @@
     if (token) headers.Authorization = 'Bearer ' + token;
     return fetch(url, Object.assign({}, options, { headers: headers })).then(function (res) {
       return res.json().catch(function () { return null; }).then(function (body) {
+        if (body && body.code === 'AUTH_EXPIRED') {
+          shellHandleExpiredSession();
+          throw new Error('Your session has expired. Please sign in again.');
+        }
         if (!res.ok || !body || !body.success) {
           throw new Error((body && body.message) || 'Request failed (' + res.status + ')');
         }
@@ -140,28 +167,18 @@
     }).join('');
   }
 
+  // Same markup for every role — a boxed "user-card" (avatar + name/role,
+  // linking to Settings) used to render here for admin/director/staff only,
+  // sitting directly above a "Settings" button that already goes to the
+  // exact same page. That was the same redundant-duplicate-entry pattern
+  // already fixed on the borrower side (see the user-card removal noted
+  // elsewhere in this file's history) — reported again here by the user
+  // directly, comparing screenshots of both sidebars and asking for the
+  // admin one to match the user one, which has never had this card.
   function userAreaHtml() {
-    if (role === 'user') {
-      return (
-        '<div class="user-area">' +
-          '<a class="user-card" href="' + base + 'pages/user/profile.html" id="userCardLink">' +
-            '<div class="avatar">JD</div><div><b>Juan Dela Cruz</b><span>Student</span></div>' +
-          '</a>' +
-          '<div class="utility">' +
-            '<a href="' + base + 'pages/user/profile.html" class="js-profile-link"><img src="' + base + 'assets/icons/icon-settings.svg" alt="">My Profile</a>' +
-            '<button class="js-signout-btn"><img src="' + base + 'assets/icons/icon-signout.svg" alt="">Sign Out</button>' +
-          '</div>' +
-        '</div>'
-      );
-    }
     return (
       '<div class="user-area">' +
-        '<a class="user-card" href="' + base + 'pages/admin/admin-profile.html" id="userCardLink">' +
-          '<div class="avatar">SD</div>' +
-          '<div><b>SDPO Staff</b><span>Administrator</span></div>' +
-        '</a>' +
         '<div class="utility">' +
-          '<a href="' + base + 'pages/admin/admin-profile.html" class="js-profile-link"><img src="' + base + 'assets/icons/icon-settings.svg" alt="">My Profile</a>' +
           '<button class="js-settings-btn"><img src="' + base + 'assets/icons/icon-settings.svg" alt="">Settings</button>' +
           '<button class="js-signout-btn"><img src="' + base + 'assets/icons/icon-signout.svg" alt="">Sign Out</button>' +
         '</div>' +
@@ -169,16 +186,14 @@
     );
   }
 
-  // Mobile-only: collapses the sidebar nav + profile/sign-out into a
+  // Mobile-only: collapses the sidebar nav + settings/sign-out into a
   // hamburger button anchored at the top-right of the topbar, opening a
-  // dropdown that carries the same nav links plus My Profile / Sign Out
-  // (and Settings for admin). Shown only under the 650px breakpoint (see
-  // app-shell.css); the desktop sidebar stays as-is at wider widths.
+  // dropdown that carries the same nav links plus Settings / Sign Out.
+  // Shown only under the 650px breakpoint (see app-shell.css); the desktop
+  // sidebar stays as-is at wider widths.
   function mobileMenuHtml() {
-    var profileHref = base + (role === 'user' ? 'pages/user/profile.html' : 'pages/admin/admin-profile.html');
     var utility =
-      '<a href="' + profileHref + '" class="js-profile-link"><img src="' + base + 'assets/icons/icon-settings.svg" alt="">My Profile</a>' +
-      (role === 'admin' ? '<button class="js-settings-btn"><img src="' + base + 'assets/icons/icon-settings.svg" alt="">Settings</button>' : '') +
+      '<button class="js-settings-btn"><img src="' + base + 'assets/icons/icon-settings.svg" alt="">Settings</button>' +
       '<button class="js-signout-btn"><img src="' + base + 'assets/icons/icon-signout.svg" alt="">Sign Out</button>';
     return (
       '<div class="menu-wrap">' +
@@ -388,7 +403,7 @@
     // instead of a single getElementById.
     document.querySelectorAll('.js-settings-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        window.location.href = base + 'pages/admin/admin-settings.html';
+        window.location.href = base + (role === 'user' ? 'pages/user/settings.html' : 'pages/admin/admin-settings.html');
       });
     });
     document.querySelectorAll('.js-signout-btn').forEach(function (btn) {
@@ -398,23 +413,6 @@
         window.location.href = base + (role === 'user' ? 'pages/auth/user-login.html' : 'pages/auth/admin-login.html');
       });
     });
-
-    // Reflect the real logged-in user in the sidebar card, if one exists.
-    try {
-      var rawUser = localStorage.getItem('rsuSdpoUser');
-      if (rawUser) {
-        var loggedInUser = JSON.parse(rawUser);
-        var nameEl = document.querySelector('.user-card b');
-        var roleEl = document.querySelector('.user-card span');
-        var avatarEl = document.querySelector('.user-card .avatar');
-        var borrowerProfile = loggedInUser.borrowerProfile;
-        var fullName = borrowerProfile && [borrowerProfile.firstName, borrowerProfile.lastName].filter(Boolean).join(' ');
-        var displayName = fullName || loggedInUser.username || loggedInUser.emailAddress || 'User';
-        if (nameEl) nameEl.textContent = displayName;
-        if (roleEl) roleEl.textContent = loggedInUser.userRole || '';
-        if (avatarEl) avatarEl.textContent = displayName.slice(0, 2).toUpperCase();
-      }
-    } catch (e) { /* malformed localStorage value — keep the static placeholder */ }
   }
 
   // --- Assemble shell ---

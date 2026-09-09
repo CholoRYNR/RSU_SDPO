@@ -100,11 +100,21 @@ describe('GET /api/reports/borrowing', () => {
     const args = Transaction.findAll.mock.calls[0][0];
     const gte = args.where.requestDatetime[Op.gte];
     const lt = args.where.requestDatetime[Op.lt];
-    // Q2 = April(3) - June, i.e. [2025-04-01, 2025-07-01)
-    expect(gte.getFullYear()).toBe(2025);
-    expect(gte.getMonth()).toBe(3);
-    expect(gte.getDate()).toBe(1);
-    expect(lt.getMonth()).toBe(6);
+    // Medium #6: the boundary is pinned to PHT (UTC+8), not whatever
+    // timezone the test/CI/production process happens to run in — so this
+    // asserts the actual UTC instant (00:00 PHT on Apr 1 == 16:00 UTC on
+    // Mar 31) via the UTC getters, rather than the local getters used
+    // before the fix, which would silently pass or fail depending on the
+    // machine's own TZ setting instead of proving the PHT math itself.
+    // Q2 = April - June PHT, i.e. [2025-03-31T16:00:00Z, 2025-06-30T16:00:00Z)
+    expect(gte.getUTCFullYear()).toBe(2025);
+    expect(gte.getUTCMonth()).toBe(2); // March (0-indexed)
+    expect(gte.getUTCDate()).toBe(31);
+    expect(gte.getUTCHours()).toBe(16);
+    expect(lt.getUTCFullYear()).toBe(2025);
+    expect(lt.getUTCMonth()).toBe(5); // June (0-indexed)
+    expect(lt.getUTCDate()).toBe(30);
+    expect(lt.getUTCHours()).toBe(16);
   });
 });
 
@@ -230,12 +240,27 @@ describe('GET /api/reports/history', () => {
 });
 
 describe('GET /api/reports/inventory', () => {
-  test('derives borrowed count from registered items, not totalQuantity, and flags equipment missing QR-registered items', async () => {
+  test('derives borrowed count from each item\'s own availabilityStatus, not arithmetic, and flags equipment missing QR-registered items', async () => {
+    // Medium #8 from the 2026-09-08 system audit: `registered -
+    // availableQuantity` over-counts "Borrowed" — a Reserved (pending, not
+    // yet released) or Maintenance item also isn't in availableQuantity,
+    // but isn't actually borrowed either. Only 1 of these 8 registered
+    // items is really out on loan; the old arithmetic would have reported
+    // 3 (8 registered - 5 available).
     const fullyRegistered = makeEquipment({
       equipmentName: 'Basketball',
       totalQuantity: 10,
-      availableQuantity: 7,
-      items: new Array(8).fill(0).map(() => makeItem())
+      availableQuantity: 5,
+      items: [
+        makeItem({ availabilityStatus: 'Borrowed' }),
+        makeItem({ availabilityStatus: 'Reserved' }),
+        makeItem({ availabilityStatus: 'Maintenance' }),
+        makeItem({ availabilityStatus: 'Available' }),
+        makeItem({ availabilityStatus: 'Available' }),
+        makeItem({ availabilityStatus: 'Available' }),
+        makeItem({ availabilityStatus: 'Available' }),
+        makeItem({ availabilityStatus: 'Available' })
+      ]
     });
     const missingItems = makeEquipment({
       equipmentName: 'Cones',
@@ -252,18 +277,20 @@ describe('GET /api/reports/inventory', () => {
     expect(payload.data.title).toBe('EQUIPMENT INVENTORY REPORT');
 
     const basketballRow = payload.data.data.find((r) => r[0] === 'Basketball');
-    // registered(8) - available(7) = borrowed 1; registered = 8
+    // Only the one item whose availabilityStatus is actually 'Borrowed'
+    // counts — Reserved and Maintenance items are excluded even though
+    // neither is in availableQuantity either.
     expect(basketballRow[4]).toBe('1');
     expect(basketballRow[5]).toBe('8');
 
     const conesRow = payload.data.data.find((r) => r[0] === 'Cones');
-    expect(conesRow[4]).toBe('0'); // registered(0) - available(20) clamped to 0, not negative
+    expect(conesRow[4]).toBe('0'); // no registered items at all
     expect(conesRow[5]).toBe('0');
 
     const stats = Object.fromEntries(payload.data.stats);
     expect(stats['Total Equipment Types']).toBe('2');
     expect(stats['Total Units']).toBe('30');
-    expect(stats['Total Units Available']).toBe('27');
+    expect(stats['Total Units Available']).toBe('25'); // 5 (basketball) + 20 (cones)
     expect(stats['Equipment Missing QR/Items']).toBe('1'); // only Cones: registered 0 but totalQuantity > 0
   });
 });

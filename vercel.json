@@ -1,0 +1,5 @@
+{
+  "builds": [{ "src": "server/app.js", "use": "@vercel/node" }],
+  "routes": [{ "src": "/(.*)", "dest": "server/app.js" }],
+  "crons": [{ "path": "/api/cron/sweep", "schedule": "0 0 * * *" }]
+}

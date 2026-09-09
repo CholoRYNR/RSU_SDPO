@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="../../css/main.css">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    .content{max-width:1086px;margin:auto}
+    .content{width:100%;max-width:1086px;margin:auto}
 
     /* ---------- Welcome hero (same treatment as the admin dashboard) ---------- */
     .welcome{height:120px;border-radius:14px;background:linear-gradient(180deg,#006045 8%,#007a55 92%);padding:12px 20px;color:#fff;overflow:hidden;position:relative}
@@ -18,6 +18,10 @@
     .live i{width:4px;height:4px;background:#00d492;border-radius:50%}
     .welcome h2{position:relative;font-size:22px;line-height:33px;margin:6px 0 0}
     .welcome p{position:relative;margin:0;color:#d0fae5;font-size:13px;line-height:20px}
+
+    /* ---------- Late Return Policy block banner ---------- */
+    .late-block-banner{display:flex;align-items:flex-start;gap:10px;margin-top:12px;padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#991b1b;font-size:13px;line-height:1.4}
+    .late-block-banner b{display:block;margin-bottom:2px;font-size:13px}
 
     /* ---------- Stat cards ---------- */
     .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
@@ -39,22 +43,49 @@
 
     /* ---------- Requirement modal ---------- */
     .requirement-card{width:min(460px,100%)}
-    .requirement-card .modal__body{gap:0;padding:0 24px 4px}
+    .requirement-card .modal__body{gap:0;padding:0 24px 4px;position:relative;z-index:0}
+    /* Faint RSU-SDPO brand-mark watermark behind the requirement text only —
+       a local stacking context (position:relative + z-index:0 above) keeps this
+       ::before's negative z-index scoped here, so it sits behind the req-group
+       text without affecting the rest of the page's stacking order. */
+    .requirement-card .modal__body::before{
+      content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+      background-image:url(../../assets/images/rsu-sdpo-logo.png);
+      background-repeat:no-repeat;background-position:center;background-size:220px;
+      opacity:.05;
+    }
     .req-group{padding:16px 0;border-bottom:1px solid var(--color-border-soft)}
     .req-group:last-child{border-bottom:0}
     .req-group h3{margin:0 0 8px;font-size:12px;font-weight:700;color:var(--color-accent-green-dark)}
     .req-group ul{margin:0;padding-left:16px;color:var(--color-text-600);font-size:12px;line-height:1.6}
     .req-foot{display:flex;justify-content:space-between;align-items:center;padding:14px 24px;background:var(--color-surface-soft);border-top:1px solid var(--color-border-soft);color:var(--color-text-600);font-size:11px;border-radius:0 0 14px 14px}
 
-    /* ---------- Borrowing Sports Equipment Form flow (4-step wizard) ---------- */
+    /* ---------- Borrowing Sports Equipment Form flow (4-step wizard) ----------
+       This wizard is deliberately styled as a fixed, always-light "official
+       paper form" (background:#f9fafb, .wizard-card background:#fff, etc.) —
+       it doesn't switch to the app's dark theme along with everything else.
+       Several of its text colors were still pointed at the app-wide
+       var(--ink)/var(--muted) tokens, though, which DO flip in dark mode
+       (var(--ink) becomes near-white). Paired with this component's own
+       backgrounds staying fixed-white/light regardless of theme, that made
+       headings, list items, typed field values, and review/summary text
+       nearly invisible (near-white on white) whenever a borrower had Dark
+       Mode on — reported as "some words can't be seen ... specifically for
+       the borrow form." Fixed by pinning those specific declarations to
+       their literal light-mode values so this form reads the same whether
+       the rest of the app is in light or dark mode, matching the fixed
+       backgrounds around them. The couple of spots where BOTH the
+       background and the text color already come from the same theme pair
+       (e.g. readonly inputs, the review-qty pill) were left alone — those
+       already flip together correctly and were never actually broken. */
     .borrow-flow{display:none;position:fixed;inset:0;z-index:1000;overflow:auto;background:#f9fafb}
     .borrow-flow.open{display:block}
     .close-flow{position:fixed;top:16px;right:18px;border:0;border-radius:50%;height:34px;width:34px;background:#fff;color:#344054;font-size:22px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:5;cursor:pointer}
     .wizard-shell{max-width:900px;margin:0 auto;padding:56px 24px 48px}
     .wizard-letterhead{display:flex;align-items:center;gap:12px;padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid var(--line)}
     .wizard-letterhead img{width:44px;height:44px;object-fit:contain;flex-shrink:0;border:1px solid var(--line);border-radius:8px;background:#fff;padding:4px}
-    .wizard-letterhead__title{margin:0;font-size:15px;font-weight:700;color:var(--ink)}
-    .wizard-letterhead__sub{margin:2px 0 0;font-size:11px;color:var(--muted)}
+    .wizard-letterhead__title{margin:0;font-size:15px;font-weight:700;color:#1d293d}
+    .wizard-letterhead__sub{margin:2px 0 0;font-size:11px;color:#62748e}
 
     .wizard-progress{display:flex;align-items:flex-start;justify-content:center;padding:8px 0 36px}
     .wizard-step{display:flex;flex-direction:column;align-items:center;gap:6px;width:120px}
@@ -67,32 +98,32 @@
 
     .wizard-panel{display:none}
     .wizard-panel.active{display:block}
-    .wizard-panel>h2{font-size:20px;margin:0;color:var(--ink)}
-    .wizard-sub{color:var(--muted);font-size:13px;margin:4px 0 0}
+    .wizard-panel>h2{font-size:20px;margin:0;color:#1d293d}
+    .wizard-sub{color:#62748e;font-size:13px;margin:4px 0 0}
 
     .wizard-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:16px}
     .wizard-panel>.wizard-card:first-of-type{margin-top:24px}
     .wizard-card__head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--softline);padding-bottom:12px;margin-bottom:16px}
-    .wizard-card__head h3{margin:0;font-size:13px;color:var(--ink)}
+    .wizard-card__head h3{margin:0;font-size:13px;color:#1d293d}
     .wizard-edit{border:0;background:none;color:var(--deep);font-size:12px;font-weight:500;cursor:pointer;padding:0}
 
     .wizard-quote{border-left:2px solid var(--deep);padding-left:12px;margin:0 0 20px;color:#374151;font-size:13px;font-style:italic;line-height:1.6}
     .wizard-section{padding-top:20px;border-top:1px solid var(--softline)}
     .wizard-section:first-of-type{border-top:0;padding-top:0}
-    .wizard-section h4{margin:0 0 8px;font-size:12px;letter-spacing:.3px;text-transform:uppercase;color:var(--ink)}
+    .wizard-section h4{margin:0 0 8px;font-size:12px;letter-spacing:.3px;text-transform:uppercase;color:#1d293d}
     .wizard-section p{font-size:13px;color:#374151;line-height:1.6;margin:0}
     .wizard-steplist,.wizard-numlist{list-style:none;margin:0;padding:0;font-size:13px;line-height:1.9;color:#374151}
     .wizard-steplist li,.wizard-numlist li{display:flex;gap:8px}
     .wizard-steplist b{color:var(--deep);flex-shrink:0}
-    .wizard-numlist li>span:first-child{color:var(--muted);flex-shrink:0}
-    .wizard-privacy{color:var(--muted);font-size:11px;font-style:italic;margin:16px 0 0;line-height:1.6}
+    .wizard-numlist li>span:first-child{color:#62748e;flex-shrink:0}
+    .wizard-privacy{color:#62748e;font-size:11px;font-style:italic;margin:16px 0 0;line-height:1.6}
 
     .wizard-field{display:block}
     .wizard-field+.wizard-field{margin-top:16px}
     .wizard-field label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:6px}
     .wizard-field label em{color:#fb2c36;font-style:normal}
     .wizard-card__head h3 em{color:#fb2c36;font-style:normal}
-    .wizard-field input[type=text],.wizard-field input[type=date],.wizard-field input[type=time],.wizard-field textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:13px Inter,sans-serif;color:var(--ink);background:#fff;box-sizing:border-box}
+    .wizard-field input[type=text],.wizard-field input[type=date],.wizard-field input[type=time],.wizard-field textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:13px Inter,sans-serif;color:#1d293d;background:#fff;box-sizing:border-box}
     .wizard-field input[readonly]{background:var(--softline);color:var(--muted)}
     .wizard-field textarea{resize:vertical;min-height:80px;font-family:inherit}
     .wizard-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -100,19 +131,19 @@
     .equip-row{background:var(--canvas);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start}
     .equip-row+.equip-row{margin-top:10px}
     .equip-row__main{flex:1;min-width:0}
-    .equip-row__main select{width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:13px Inter,sans-serif;background:#fff;color:var(--ink)}
+    .equip-row__main select{width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:13px Inter,sans-serif;background:#fff;color:#1d293d}
     .equip-row__meta{display:flex;align-items:center;gap:8px;margin-top:8px}
     .equip-badge{background:#fef3c7;color:var(--amber);font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
     .equip-badge--available{background:#ecfdf5;color:#00865d}
     .equip-badge--limited{background:#fef3c7;color:var(--amber)}
     .equip-badge--low{background:#fef2f2;color:#c10007}
     .equip-row__stepper{display:flex;align-items:center;gap:6px;flex-shrink:0;padding-top:2px}
-    .equip-row__stepper button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px;line-height:1;cursor:pointer;color:var(--ink)}
+    .equip-row__stepper button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px;line-height:1;cursor:pointer;color:#1d293d}
     .equip-row__stepper button:disabled{opacity:.4;cursor:not-allowed}
     .equip-row__stepper span{display:inline-block;width:22px;text-align:center;font-size:13px;font-weight:600}
     .equip-row__remove{width:28px;height:28px;border:1px solid #fecaca;background:#fff5f5;border-radius:8px;cursor:pointer;flex-shrink:0}
     .equip-add{border:0;background:none;color:var(--deep);font-size:13px;font-weight:500;cursor:pointer;padding:12px 0 0;display:flex;align-items:center;gap:6px}
-    .equip-empty{color:var(--muted);font-size:12px;margin:0}
+    .equip-empty{color:#62748e;font-size:12px;margin:0}
 
     .dropzone{border:1.6px dashed var(--line);border-radius:10px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;text-align:center;transition:border-color .15s ease,background .15s ease}
     .dropzone:hover{border-color:var(--deep)}
@@ -126,16 +157,16 @@
     .wizard-warn{background:#fffbeb;border:1px solid #fde68a;border-radius:14px;padding:16px;font-size:12px;color:#92400e;margin-top:16px}
 
     .review-row{display:flex;gap:12px;padding:6px 0;margin:0}
-    .review-row dt{width:150px;flex-shrink:0;color:var(--muted);font-size:12px}
-    .review-row dd{margin:0;font-size:13px;font-weight:500;color:var(--ink)}
+    .review-row dt{width:150px;flex-shrink:0;color:#62748e;font-size:12px}
+    .review-row dd{margin:0;font-size:13px;font-weight:500;color:#1d293d}
     .review-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--softline)}
     .review-item:last-child{border-bottom:0}
-    .review-item__name{font-size:13px;color:var(--ink)}
+    .review-item__name{font-size:13px;color:#1d293d}
     .review-qty{background:var(--softline);color:var(--muted);font-size:12px;font-weight:500;padding:2px 8px;border-radius:999px}
-    .review-total{display:flex;justify-content:space-between;padding-top:10px;font-size:12px;color:var(--muted)}
-    .review-total b{color:var(--ink);font-size:13px}
+    .review-total{display:flex;justify-content:space-between;padding-top:10px;font-size:12px;color:#62748e}
+    .review-total b{color:#1d293d;font-size:13px}
     .doc-status{display:flex;align-items:center;justify-content:space-between;padding:8px 0}
-    .doc-status__name{font-size:13px;color:var(--ink)}
+    .doc-status__name{font-size:13px;color:#1d293d}
     .doc-pill{font-size:11px;font-weight:600;padding:2px 10px;border-radius:999px}
     .doc-pill--ok{background:#dcfce7;color:#16a34a}
     .doc-pill--missing{background:#fee2e2;color:#dc2626}
@@ -147,22 +178,32 @@
 
     .success-screen{max-width:448px;margin:24px auto 0;text-align:center}
     .success-icon{width:80px;height:80px;border-radius:50%;background:#dcfce7;display:grid;place-items:center;margin:0 auto;font-size:32px;color:#16a34a;font-weight:700}
-    .success-screen h2{font-size:22px;margin:20px 0 0;color:var(--ink)}
-    .success-screen>p{color:var(--muted);font-size:14px;line-height:1.6;margin:8px 0 0}
+    .success-screen h2{font-size:22px;margin:20px 0 0;color:#1d293d}
+    .success-screen>p{color:#62748e;font-size:14px;line-height:1.6;margin:8px 0 0}
     .success-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;text-align:left;margin-top:32px}
     .success-row{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--softline);margin-bottom:12px}
-    .success-row span:first-child{color:var(--muted);font-size:12px}
+    .success-row span:first-child{color:#62748e;font-size:12px}
     .success-req-id{color:var(--deep);font-weight:700;font-size:13px;font-family:Consolas,monospace}
     .status-pill{background:#fef3c7;color:var(--amber);font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px}
     .success-next b{display:block;font-size:11px;color:#374151;margin-bottom:4px}
-    .success-next span{font-size:11px;color:var(--muted)}
+    .success-next span{font-size:11px;color:#62748e}
     .success-next em{color:var(--amber);font-weight:700;font-style:normal}
     .success-actions{display:flex;flex-direction:column;gap:12px;margin-top:32px}
     .success-actions .btn-primary{background:var(--deep);color:#fff;border:0;border-radius:14px;padding:12px;font-size:14px;font-weight:600;cursor:pointer}
     .success-actions .btn-back{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;font-size:14px;font-weight:600;color:#374151;cursor:pointer}
 
     @media(max-width:900px){.stats{grid-template-columns:1fr 1fr}}
-    @media(max-width:650px){.welcome{height:auto;min-height:140px}.welcome h2{font-size:20px}.stats{grid-template-columns:1fr}.wizard-grid-2{grid-template-columns:1fr}.wizard-progress{overflow-x:auto;justify-content:flex-start}.wizard-connector{width:32px}.wizard-shell{padding:52px 16px 32px}.equip-row{flex-wrap:wrap}}
+    @media(max-width:650px){
+      .welcome{height:auto;min-height:140px}.welcome h2{font-size:20px}
+      /* Keep the 3 metric tiles side-by-side (compact) rather than
+         stacking them full-width and pushing the catalog off screen. */
+      .stats{grid-template-columns:repeat(3,1fr);gap:8px}
+      .stat-card{height:auto;min-height:76px;padding:10px;border-radius:10px}
+      .metric-icon{width:22px;height:22px;border-radius:7px;font-size:12px}
+      .stat-label{font-size:8.5px;letter-spacing:.3px;line-height:1.25}
+      .stat-value{font-size:17px;line-height:1.3;margin-top:5px}
+      .wizard-grid-2{grid-template-columns:1fr}.wizard-progress{overflow-x:auto;justify-content:flex-start}.wizard-connector{width:32px}.wizard-shell{padding:52px 16px 32px}.equip-row{flex-wrap:wrap}
+    }
   </style>
 </head>
 <body>
@@ -172,6 +213,8 @@
       <h2 id="welcomeName">Welcome back.</h2>
       <p>Browse real-time equipment availability and submit your borrowing request in minutes.</p>
     </section>
+
+    <div class="late-block-banner" id="lateBlockBanner" hidden></div>
 
     <section class="stats">
       <article class="stat-card"><div class="stat-head"><span class="stat-label">TOTAL EQUIPMENT</span><span class="metric-icon mint">▣</span></div><div class="stat-value" id="statTotal">0</div></article>
@@ -313,24 +356,24 @@
 
       <section class="wizard-panel" id="panel-2">
         <h2>Required Documents</h2>
-        <p class="wizard-sub">Upload the documents required for your borrowing request.</p>
-        <div class="wizard-card">
+        <p class="wizard-sub" id="docsIntro">Upload the documents required for your borrowing request.</p>
+        <div class="wizard-card" id="validIdCard">
           <div class="wizard-card__head"><h3>Valid ID <em>*</em></h3></div>
           <label class="dropzone" id="validIdZone" for="validIdUpload">
             <span class="dropzone__icon"><img src="../../assets/icons/icon-upload.svg" alt="" style="width:16px;height:16px"></span>
             <span class="dropzone__title" id="validIdZoneTitle">Upload Document</span>
-            <span class="dropzone__hint">JPG, PNG, WEBP, or PDF — max 5MB</span>
+            <span class="dropzone__hint">Images (JPG, PNG, WEBP) or PDF/DOCX — max 2MB.</span>
           </label>
-          <input id="validIdUpload" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>
+          <input id="validIdUpload" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
         </div>
         <div class="wizard-card">
-          <div class="wizard-card__head"><h3>Approved Proposal / Authorization <em>*</em></h3></div>
+          <div class="wizard-card__head"><h3 id="authDocCardTitle">Approved Proposal / Authorization <em>*</em></h3></div>
           <label class="dropzone" id="authDocZone" for="authDocUpload">
             <span class="dropzone__icon"><img src="../../assets/icons/icon-upload.svg" alt="" style="width:16px;height:16px"></span>
             <span class="dropzone__title" id="authDocZoneTitle">Upload Document</span>
-            <span class="dropzone__hint">JPG, PNG, WEBP, or PDF — max 5MB</span>
+            <span class="dropzone__hint" id="authDocZoneHint">Images (JPG, PNG, WEBP) or PDF/DOCX — max 2MB.</span>
           </label>
-          <input id="authDocUpload" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden>
+          <input id="authDocUpload" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
         </div>
         <div class="wizard-note">🔒<span>Your uploaded documents are used only for processing your SDPO borrowing request and will not be shared with other borrowers.</span></div>
         <p class="wizard-sub" id="docsRequiredHint">Upload both required documents to continue.</p>
@@ -362,8 +405,8 @@
         </div>
         <div class="wizard-card">
           <div class="wizard-card__head"><h3>Requirements</h3><button type="button" class="wizard-edit" data-jump="2">Edit</button></div>
-          <div class="doc-status"><span class="doc-status__name">Valid ID</span><span class="doc-pill" id="reviewValidIdPill"></span></div>
-          <div class="doc-status"><span class="doc-status__name">Approved Proposal / Authorization</span><span class="doc-pill" id="reviewAuthDocPill"></span></div>
+          <div class="doc-status" id="reviewValidIdRow"><span class="doc-status__name">Valid ID</span><span class="doc-pill" id="reviewValidIdPill"></span></div>
+          <div class="doc-status"><span class="doc-status__name" id="reviewAuthDocLabel">Approved Proposal / Authorization</span><span class="doc-pill" id="reviewAuthDocPill"></span></div>
         </div>
         <div class="wizard-warn">By submitting this request, you confirm that the information and documents provided are accurate and that you agree to comply with SDPO borrowing policies.</div>
         <div class="wizard-actions">
@@ -442,7 +485,8 @@
           name:e.equipmentName,
           category:e.category?e.category.categoryName:'',
           available:e.availableQuantity,
-          total:e.totalQuantity
+          total:e.totalQuantity,
+          photoUrl:e.photoUrl||null
         }));
       });
     }
@@ -476,7 +520,7 @@
       const badgeLabel=p.available<=0?'Unavailable':level==='available'?'Available':`${STOCK_LABEL[level]} — ${p.available} left`;
       return `<article class="equipment-card" data-id="${p.id}">
         <div class="equipment-card__media">
-          <img src="${productImage(p.category)}" alt="${esc(p.category)}" onerror="this.onerror=null;this.src='${productSvg(icon[p.category]||'🏅')}'">
+          <img src="${p.photoUrl||productImage(p.category)}" alt="${esc(p.category)}" onerror="this.onerror=null;this.src='${productSvg(icon[p.category]||'🏅')}'">
           <span class="equipment-card__badge equipment-card__badge--${badgeClass}">${badgeLabel}</span>
           <div class="equipment-card__id-strip"><span class="equipment-card__id">${displayId(p)}</span></div>
         </div>
@@ -498,9 +542,17 @@
       grid.innerHTML=shown.length?shown.map(cardTemplate).join(''):'<div class="empty-state"><img src="../../assets/icons/icon-search.svg" alt="" style="width:32px;height:32px;opacity:.5"><p class="empty-state__title">No equipment found</p><p>Try adjusting your search term or category filter.</p></div>';
     }
     searchInput.addEventListener('input',render);
+    // Set once the late-return-status check resolves at init (see below) —
+    // blocks opening a new request while a prior overdue item hasn't been
+    // returned, per the Late Return Policy.
+    let lateBlock=null;
     grid.addEventListener('click',e=>{
       const btn=e.target.closest('[data-id]');
       if(!btn||btn.disabled)return;
+      if(lateBlock){
+        showToast(`New requests are blocked until your overdue equipment is returned (Transaction #${lateBlock.oldestTransactionId}).`,'danger');
+        return;
+      }
       current=products.find(p=>p.id===Number(btn.dataset.id));
       reqModalOverlay.hidden=false;
     });
@@ -509,7 +561,46 @@
     document.querySelectorAll('[data-close-modal]').forEach(btn=>btn.addEventListener('click',()=>{$(btn.dataset.closeModal).hidden=true;}));
     reqModalOverlay.addEventListener('click',e=>{if(e.target===reqModalOverlay)reqModalOverlay.hidden=true;});
 
-    /* ---------- Attachments (valid ID + authorization document) ---------- */
+    /* ---------- Attachments (valid ID + authorization document) ----------
+       Per the approved RSU SDPO spec, required documents differ by borrower
+       category — previously every borrower type was shown the same generic
+       "Valid ID + Approved Proposal/Authorization" pair regardless of
+       category (a Faculty member was being asked for a Valid ID the spec
+       never requires of them; a Student got the same generic pair instead
+       of an adviser-signed authorization letter). The schema only has 2
+       document slots on Borrower (validIdPath, authorizationDocumentPath),
+       so this doesn't add a new upload type — it decides, per category,
+       whether the Valid ID slot is required at all, and relabels the
+       second slot to say what it actually needs to be for that category. */
+    const DOC_REQUIREMENTS_BY_CATEGORY={
+      Faculty:{needsValidId:false,docLabel:'Activity Schedule',docHint:'The schedule of the activity you\'re borrowing equipment for.'},
+      Staff:{needsValidId:false,docLabel:'Approved Proposal / Request Letter',docHint:'An approved proposal or request letter for this borrowing.'},
+      Employee:{needsValidId:false,docLabel:'Approved Proposal / Request Letter',docHint:'An approved proposal or request letter for this borrowing.'},
+      Student:{needsValidId:false,docLabel:'Authorization Letter',docHint:'An authorization letter signed by your adviser or faculty member.'},
+      External:{needsValidId:true,docLabel:'Approved Proposal / Request Letter',docHint:'An approved proposal or request letter for this borrowing.'}
+    };
+    const DOC_REQ_DEFAULT={needsValidId:true,docLabel:'Approved Proposal / Authorization',docHint:'Images (JPG, PNG, WEBP) or PDF/DOCX — max 2MB.'};
+    let docReq=DOC_REQ_DEFAULT;
+
+    function applyDocRequirements(borrowerCategory){
+      docReq=DOC_REQUIREMENTS_BY_CATEGORY[borrowerCategory]||DOC_REQ_DEFAULT;
+      $('validIdCard').hidden=!docReq.needsValidId;
+      // .doc-status{display:flex} (an author rule) beats the [hidden]
+      // attribute's UA-stylesheet display:none at equal specificity — the
+      // same "later/author rule silently wins" pattern already found
+      // elsewhere in this app — so this one is toggled via inline style
+      // instead of the hidden attribute, which the plain wizard-card above
+      // doesn't need since nothing sets its display explicitly.
+      $('reviewValidIdRow').style.display=docReq.needsValidId?'':'none';
+      $('authDocCardTitle').innerHTML=esc(docReq.docLabel)+' <em>*</em>';
+      $('authDocZoneHint').textContent=docReq.docHint;
+      $('reviewAuthDocLabel').textContent=docReq.docLabel;
+      $('docsIntro').textContent=docReq.needsValidId
+        ?'Upload the documents required for your borrowing request.'
+        :`As a ${esc(borrowerCategory==='Employee'||borrowerCategory==='Staff'?'RSU Employee':borrowerCategory)}, only the document below is required — no Valid ID needed.`;
+      updateStepValidity();
+    }
+
     let uploadedValidId=false,uploadedAuthDoc=false;
 
     function markZoneUploaded(zoneId,titleId,fileName){
@@ -607,12 +698,34 @@
     const connectors=Array.from(document.querySelectorAll('.wizard-connector'));
     let wizardStep=0;
 
+    // Medium #14 from the 2026-09-08 system audit: the return-date input
+    // had no `min`, so a borrower could pick a return date in the past (or
+    // today, ambiguous against the page's own "2–5 days ahead" guideline
+    // text above) and the request would be accepted as-is. Setting `min`
+    // only blocks it in browsers that enforce native date-input
+    // constraints in their UI — updateStepValidity() below also checks it
+    // directly so Continue stays disabled even if a past date reaches the
+    // field some other way. Deliberately using "today" as the floor here,
+    // not a stricter multi-day-ahead minimum: the wizard has no separate
+    // "event date" field to anchor a 2–5-day rule against, and picking an
+    // exact number of required lead days is a policy call for SDPO, not
+    // something to invent unilaterally.
+    function todayLocalDateStr(){
+      const d=new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    $('returnDateInput').min=todayLocalDateStr();
+
     function showWizardStep(n){
       wizardStep=n;
       const activeId=n===4?'panel-success':stepPanels[n];
       ['panel-0','panel-1','panel-2','panel-3','panel-success'].forEach(id=>$(id).classList.toggle('active',id===activeId));
       stepEls.forEach((el,i)=>{el.classList.toggle('is-active',i===n);el.classList.toggle('is-done',i<n||n===4);});
       connectors.forEach((el,i)=>el.classList.toggle('is-done',i<n||n===4));
+      // Re-floor the min (and re-check validity) every time this step is
+      // reached, not just once at page load — a wizard left open past
+      // midnight would otherwise still accept "today" meaning yesterday.
+      if(n===1){$('returnDateInput').min=todayLocalDateStr();updateStepValidity();}
       if(n===3)renderReview();
       borrowFlow.scrollTo(0,0);
     }
@@ -620,11 +733,13 @@
     function updateStepValidity(){
       $('toStep1').disabled=!$('acknowledge').checked;
       const hasEquip=equipmentRows.length>0&&equipmentRows.every(r=>r.equipmentId&&r.quantity>0);
-      const infoValid=hasEquip&&$('purposeInput').value.trim()&&$('returnDateInput').value&&$('returnTimeInput').value;
+      const returnDateOk=$('returnDateInput').value&&$('returnDateInput').value>=todayLocalDateStr();
+      const infoValid=hasEquip&&$('purposeInput').value.trim()&&returnDateOk&&$('returnTimeInput').value;
       $('toStep2').disabled=!infoValid;
-      const docsReady=uploadedValidId&&uploadedAuthDoc;
+      const docsReady=docReq.needsValidId?(uploadedValidId&&uploadedAuthDoc):uploadedAuthDoc;
       $('toStep3').disabled=!docsReady;
       $('docsRequiredHint').hidden=docsReady;
+      $('docsRequiredHint').textContent=docReq.needsValidId?'Upload both required documents to continue.':`Upload your ${docReq.docLabel} to continue.`;
     }
 
     $('acknowledge').addEventListener('change',updateStepValidity);
@@ -721,9 +836,21 @@
     apiFetch('/api/borrow/mine').then(rows=>{
       if(rows.length)$('welcomeName').textContent=`Welcome back, ${firstName}.`;
     }).catch(()=>{});
+    // Late Return Policy: a borrower with equipment overdue past the grace
+    // period is blocked from submitting new requests server-side (see
+    // createSelfRequest in borrow.controller.js) — this just surfaces that
+    // clearly up front instead of only as a rejected-submission error.
+    apiFetch('/api/borrow/late-return-status').then(status=>{
+      if(!status.blocked)return;
+      lateBlock=status;
+      const banner=$('lateBlockBanner');
+      banner.hidden=false;
+      banner.innerHTML=`<span>⚠</span><div><b>New borrowing requests are blocked</b>You have equipment overdue by ${status.daysOverdue} day(s) (Transaction #${status.oldestTransactionId}). Please return it to the SDPO office — borrowing privileges are restored once all overdue equipment is returned and any applicable penalties are settled.</div>`;
+    }).catch(()=>{});
     $('slipBorrowerName').value=displayName;
     $('slipBorrowerType').value=(borrowerProfile&&borrowerProfile.borrowerCategory)||'—';
     $('slipCollege').value=(borrowerProfile&&borrowerProfile.collegeOrUnit)||'—';
+    applyDocRequirements(borrowerProfile&&borrowerProfile.borrowerCategory);
 
     loadEquipment().then(()=>{
       renderStats();

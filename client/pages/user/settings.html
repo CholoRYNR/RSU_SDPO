@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RSU-SDPO | Settings</title>
+  <link rel="stylesheet" href="../../css/shared/app-shell.css">
+  <link rel="stylesheet" href="../../css/main.css">
+  <style>
+    .content{width:100%;max-width:760px;margin:auto}
+    .settings-card{background:var(--page);border:1px solid var(--softline);border-radius:14px;margin-bottom:16px;overflow:hidden}
+    .settings-card-head{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--softline)}
+    .settings-card-head .icon{width:32px;height:32px;border-radius:10px;background:#ecfdf5;color:#00865d;display:grid;place-items:center;font-size:15px;flex-shrink:0}
+    .settings-card-head h2{margin:0;font-size:14px}
+    .settings-card-head p{margin:2px 0 0;font-size:11px;color:var(--muted)}
+    .settings-card-body{padding:18px 20px}
+
+    .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--softline)}
+    .toggle-row:last-child{border-bottom:0}
+    .toggle-row .label b{display:block;font-size:12px}
+    .toggle-row .label span{display:block;color:var(--muted);font-size:11px;margin-top:1px}
+    .switch{position:relative;width:38px;height:22px;flex-shrink:0}
+    .switch input{opacity:0;width:0;height:0}
+    .switch .track{position:absolute;inset:0;background:#cbd5e1;border-radius:999px;cursor:pointer;transition:background .15s}
+    .switch .track:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .15s}
+    .switch input:checked + .track{background:var(--green)}
+    .switch input:checked + .track:before{transform:translateX(16px)}
+
+    .save-toast{max-height:0;overflow:hidden;transition:max-height .25s ease}
+    .save-toast.show{max-height:60px}
+    .save-toast p{margin:12px 0 0;padding:9px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #d0fae5;color:#007a55;font-size:12px;font-weight:600}
+
+    /* ---------- Account: photo/name/badges summary ---------- */
+    .profile-summary{display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
+    .photo-column{display:flex;flex:0 0 80px;flex-direction:column;align-items:center;gap:8px}
+    .photo{display:grid;place-items:center;width:80px;height:80px;border-radius:50%;background:var(--deep);color:#fff;font-size:28px;font-weight:800;overflow:hidden}
+    .photo img{width:100%;height:100%;object-fit:cover}
+    .text-button{padding:0;border:0;background:transparent;color:var(--deep);font:500 12px/18px inherit;text-decoration:underline;cursor:pointer}
+    .field-error{font-size:11px;color:#d92d20;min-height:14px;margin-top:2px;max-width:100px;text-align:center}
+    .field-note{display:block;color:var(--muted);font-size:11px;margin-top:4px;line-height:1.4}
+    .person{min-width:0;flex:1}
+    .person h2{margin:0;font-size:20px;line-height:25px;color:var(--ink)}
+    .person .email{margin:2px 0 0;color:var(--muted);font-size:14px}
+    .badges{display:flex;gap:8px;padding-top:12px;flex-wrap:wrap}
+    .badge{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;border:0.8px solid transparent}
+    .badge.status-active{border-color:#a4f4cf;background:#ecfdf5;color:#00865d}
+    .badge.role-tag{border-color:#93c5fd;background:#dbeafe;color:#1d4ed8}
+    .profile-summary .btn{margin-left:auto}
+
+    /* ---------- Profile Details: read-only info sub-sections ---------- */
+    .subsection-title{margin:0 0 12px;font-size:12px;font-weight:700;color:var(--ink)}
+    .profile-subsection + .profile-subsection{margin-top:22px;padding-top:22px;border-top:1px solid var(--softline)}
+    .data-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+    .field{display:grid;gap:2px;min-height:40px}
+    .field-label{color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.3px;text-transform:uppercase}
+    .field-value{font-size:14px;color:var(--ink)}
+
+    /* ---------- Account actions ---------- */
+    .actions{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+    .btn-logout{height:40px;border:0.8px solid var(--color-danger-border);background:#fff1f2;color:var(--color-danger-strong);padding:0 20px}
+
+    /* ---------- Dialogs (reuse shared modal chrome from main.css) ---------- */
+    .modal--form{width:440px}
+    .modal--form .modal__body{gap:14px;padding-top:16px}
+    .modal--form p{margin:0;color:var(--muted);font-size:13px;line-height:20px}
+
+    @media(max-width:600px){.settings-card-body{padding:16px}.profile-summary{flex-direction:column}.profile-summary .btn{margin-left:0}.data-grid{grid-template-columns:1fr}.actions{flex-direction:column;align-items:stretch}}
+  </style>
+</head>
+<body>
+  <div id="app-root" data-role="user" data-page="" data-title="Settings" data-subtitle="Manage your account information and display preferences">
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">◉</span><div><h2>Account</h2><p>Your signed-in borrower identity</p></div></div>
+      <div class="settings-card-body">
+        <div class="profile-summary">
+          <div class="photo-column">
+            <div class="photo" id="photoInitials">JD</div>
+            <button type="button" class="text-button" id="changePhoto">Change Photo</button>
+            <input type="file" id="avatarFile" accept="image/png,image/jpeg" hidden>
+            <p class="field-error" id="avatarError"></p>
+          </div>
+          <div class="person">
+            <h2 id="displayName">Juan Dela Cruz</h2>
+            <p class="email" id="displayEmail">juan.delacruz@rsu.edu.ph</p>
+            <div class="badges"><span class="badge status-active">Active</span><span class="badge role-tag">Student</span></div>
+          </div>
+          <button type="button" class="btn btn-secondary" id="editProfile"><img src="../../assets/icons/icon-settings.svg" alt="">Edit Profile</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">▤</span><div><h2>Profile Details</h2><p>Personal, university, and account information on file</p></div></div>
+      <div class="settings-card-body">
+        <div class="profile-subsection">
+          <h3 class="subsection-title">Personal Information</h3>
+          <div class="data-grid">
+            <div class="field"><span class="field-label">Full Name</span><span class="field-value" id="fullName">—</span></div>
+            <div class="field"><span class="field-label">Email Address</span><span class="field-value" id="emailAddress">—</span></div>
+            <div class="field"><span class="field-label">Contact Number</span><span class="field-value" id="contactNumber">—</span></div>
+          </div>
+        </div>
+        <div class="profile-subsection">
+          <h3 class="subsection-title">University Information</h3>
+          <div class="data-grid">
+            <div class="field"><span class="field-label">Borrower Type</span><span class="field-value" id="borrowerType">—</span></div>
+            <div class="field"><span class="field-label">College / Unit</span><span class="field-value" id="collegeOrUnit">—</span></div>
+          </div>
+        </div>
+        <div class="profile-subsection">
+          <h3 class="subsection-title">Account Information</h3>
+          <div class="data-grid">
+            <div class="field"><span class="field-label">Account Status</span><span class="badge status-active" id="accountStatusBadge">—</span></div>
+            <div class="field"><span class="field-label">Account Type</span><span class="field-value" id="accountType">—</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">⎋</span><div><h2>Account Actions</h2><p>Password for this account</p></div></div>
+      <div class="settings-card-body">
+        <div class="actions">
+          <button type="button" class="btn btn-secondary" id="passwordButton"><img src="../../assets/icons/icon-settings.svg" alt="">Change Password</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-card">
+      <div class="settings-card-head"><span class="icon">▤</span><div><h2>Display Preferences</h2><p>Personalize how the app looks when you sign in</p></div></div>
+      <div class="settings-card-body">
+        <div class="toggle-row"><div class="label"><b>Dark Mode</b><span>Switch the whole app to a dark theme</span></div><label class="switch"><input type="checkbox" id="themeToggle"><span class="track"></span></label></div>
+      </div>
+    </section>
+
+    <div class="save-toast" id="settingsToast"><p>✓ Settings saved</p></div>
+  </div>
+
+  <!-- ---------- Edit Profile modal ---------- -->
+  <div class="modal-overlay" id="profileModalOverlay" hidden>
+    <div class="modal modal--form" role="dialog" aria-modal="true" aria-labelledby="profileModalTitle">
+      <div class="modal__header">
+        <div><p class="modal__title" id="profileModalTitle" style="font-size:18px">Edit Profile</p></div>
+        <button type="button" class="modal__close" data-close-modal="profileModalOverlay" aria-label="Close"><img src="../../assets/icons/icon-close.svg" alt=""></button>
+      </div>
+      <form id="profileForm">
+        <div class="modal__body">
+          <p>Update the contact details shown on your profile.</p>
+          <div class="field"><label class="field__label" for="nameInput">Full name</label><input class="field__control" id="nameInput" required></div>
+          <div class="field"><label class="field__label" for="emailInput">Email address</label><input class="field__control" id="emailInput" type="email" required></div>
+          <div class="field"><label class="field__label" for="contactInput">Contact number</label><input class="field__control" id="contactInput" placeholder="e.g. 09123456789"></div>
+          <div class="field"><label class="field__label" for="collegeInput">College / Unit</label><input class="field__control" id="collegeInput"></div>
+          <div class="field" id="categoryField" hidden>
+            <label class="field__label" for="categoryInput">Borrower Type</label>
+            <select class="field__control" id="categoryInput">
+              <option value="Student">Student</option>
+              <option value="Faculty">Faculty</option>
+              <option value="Staff">Staff (non-teaching university staff)</option>
+              <option value="Employee">Employee</option>
+              <option value="External">External</option>
+            </select>
+            <span class="field-note">Your account doesn't have a borrower profile yet (this can happen after signing up with Google) — pick the type that describes you so you can start borrowing equipment.</span>
+          </div>
+        </div>
+        <div class="modal__footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="profileModalOverlay">Cancel</button>
+          <button type="submit" class="btn btn-success">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ---------- Change Password modal ---------- -->
+  <div class="modal-overlay" id="passwordModalOverlay" hidden>
+    <div class="modal modal--form" role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
+      <div class="modal__header">
+        <div><p class="modal__title" id="passwordModalTitle" style="font-size:18px">Change Password</p></div>
+        <button type="button" class="modal__close" data-close-modal="passwordModalOverlay" aria-label="Close"><img src="../../assets/icons/icon-close.svg" alt=""></button>
+      </div>
+      <form id="passwordForm">
+        <div class="modal__body">
+          <p>Enter your current password and choose a new one for your RSU-SDPO account.</p>
+          <div class="field"><label class="field__label" for="currentPassword">Current password</label><input class="field__control" id="currentPassword" type="password" required placeholder="Your current password"></div>
+          <div class="field"><label class="field__label" for="newPassword">New password</label><input class="field__control" id="newPassword" type="password" required minlength="8" placeholder="At least 8 characters"></div>
+          <div class="field"><label class="field__label" for="confirmPassword">Confirm password</label><input class="field__control" id="confirmPassword" type="password" required minlength="8" placeholder="Repeat new password"></div>
+        </div>
+        <div class="modal__footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="passwordModalOverlay">Cancel</button>
+          <button type="submit" class="btn btn-success">Update Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="../../js/shared/api.js"></script>
+  <script src="../../js/shared/app-shell.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const profileModalOverlay = $('profileModalOverlay'), passwordModalOverlay = $('passwordModalOverlay');
+
+    function showToast(message, type) {
+      const toast = document.createElement('div');
+      toast.className = 'toast toast--' + (type === 'danger' ? 'danger' : 'success');
+      toast.innerHTML = `<span class="toast__dot"></span><span>${esc(message)}</span>`;
+      $('toastStack').appendChild(toast);
+      setTimeout(() => toast.remove(), 3200);
+    }
+
+    function flashToast(id) {
+      const el = $(id);
+      el.classList.add('show');
+      clearTimeout(el.__timer);
+      el.__timer = setTimeout(() => el.classList.remove('show'), 2400);
+    }
+
+    function fullNameOf(user) {
+      const bp = user.borrowerProfile;
+      return bp && (bp.firstName || bp.lastName) ? [bp.firstName, bp.lastName].filter(Boolean).join(' ') : user.username;
+    }
+
+    // Profile photo — client-side only (same approach admin-settings.html
+    // already uses for its avatar): a chosen image is read as a data URL and
+    // persisted to localStorage, so it survives reloads on this device/
+    // browser but isn't uploaded anywhere server-side.
+    //
+    // The key is scoped to this account's own user id (not a single shared
+    // key) — a shared key meant that on a browser where more than one
+    // borrower account had ever signed in, whichever account uploaded a
+    // photo last would show that same photo for every other account too,
+    // since nothing about the key identified whose photo it was. Reported
+    // by the user as "the profile photo stays as is even though different
+    // account."
+    function avatarKeyFor(user) {
+      return 'rsuSdpoBorrowerAvatar:' + ((user && user.id) || 'anonymous');
+    }
+    let currentAvatar = '';
+    let currentInitials = 'JD';
+    function loadAvatar() {
+      try { return JSON.parse(localStorage.getItem(avatarKeyFor(currentUser())) || '{}').avatar || ''; }
+      catch (e) { return ''; }
+    }
+    function applyAvatar(avatar, initials) {
+      const el = $('photoInitials');
+      if (avatar) el.innerHTML = '<img src="' + avatar + '" alt="Profile photo">';
+      else el.textContent = initials;
+    }
+
+    // Tracks whether the signed-in account has a Borrower profile row at
+    // all — false for a Google-signed-up account that never completed one
+    // (config/passport.js#handleGoogleProfile intentionally doesn't create
+    // it). Drives whether the Edit Profile modal shows the one-time
+    // "Borrower Type" field needed to create that row.
+    let hasBorrowerProfile = true;
+
+    function renderProfile(user) {
+      hasBorrowerProfile = !!user.borrowerProfile;
+      const name = fullNameOf(user);
+      const initials = name.split(/\s+/).map(x => x[0]).slice(0, 2).join('').toUpperCase();
+      currentInitials = initials;
+      applyAvatar(currentAvatar, currentInitials);
+      $('displayName').textContent = name;
+      $('displayEmail').textContent = user.emailAddress;
+      $('fullName').textContent = name;
+      $('emailAddress').textContent = user.emailAddress;
+      $('contactNumber').textContent = user.contactNumber || '—';
+      $('borrowerType').textContent = (user.borrowerProfile && user.borrowerProfile.borrowerCategory) || '—';
+      $('collegeOrUnit').textContent = (user.borrowerProfile && user.borrowerProfile.collegeOrUnit) || '—';
+      $('accountStatusBadge').textContent = user.accountStatus || '—';
+      $('accountType').textContent = user.userRole || '—';
+
+      const roleBadge = document.querySelector('.badges .role-tag');
+      if (roleBadge) roleBadge.textContent = (user.borrowerProfile && user.borrowerProfile.borrowerCategory) || user.userRole;
+
+      $('nameInput').value = hasBorrowerProfile ? name : '';
+      $('emailInput').value = user.emailAddress;
+      $('contactInput').value = user.contactNumber || '';
+      $('collegeInput').value = (user.borrowerProfile && user.borrowerProfile.collegeOrUnit) || '';
+
+      // Only a Google-signed-up account with no Borrower row yet needs to
+      // pick a Borrower Type here — for everyone else it's already set and
+      // this endpoint never changes it after first-time creation (see
+      // user.controller.js#updateProfile), so keep the field out of the
+      // way entirely rather than showing an editable value that submitting
+      // this form would silently ignore.
+      $('categoryField').hidden = hasBorrowerProfile;
+      $('categoryInput').required = !hasBorrowerProfile;
+      // collegeInput has no required attribute in markup because it's an
+      // optional per-field update once a profile already exists (see the
+      // `if (collegeOrUnit)` truthy check server-side) — but it's mandatory
+      // the one time a profile is being created for the first time.
+      $('collegeInput').required = !hasBorrowerProfile;
+    }
+
+    function loadProfile() {
+      // Paint immediately from the cached session (set at login and kept in
+      // sync on every save — same shape as /api/auth/me's response) so the
+      // page never flashes the static "Juan Dela Cruz" placeholder markup
+      // while the network request below is still in flight; the fetch then
+      // refreshes it with the authoritative server copy once it resolves.
+      const cached = currentUser();
+      if (cached) renderProfile(cached);
+      apiFetch('/api/auth/me').then(user => {
+        localStorage.setItem('rsuSdpoUser', JSON.stringify(user));
+        renderProfile(user);
+      }).catch(err => showToast('Could not load your profile: ' + err.message, 'danger'));
+    }
+
+    $('editProfile').addEventListener('click', () => { profileModalOverlay.hidden = false; });
+    $('passwordButton').addEventListener('click', () => { passwordModalOverlay.hidden = false; });
+
+    currentAvatar = loadAvatar();
+    applyAvatar(currentAvatar, currentInitials);
+    $('changePhoto').addEventListener('click', () => $('avatarFile').click());
+    $('avatarFile').addEventListener('change', () => {
+      const file = $('avatarFile').files[0];
+      $('avatarError').textContent = '';
+      if (!file) return;
+      if (!/^image\/(png|jpeg)$/.test(file.type)) { $('avatarError').textContent = 'Please choose a JPG or PNG image.'; return; }
+      if (file.size > 2 * 1024 * 1024) { $('avatarError').textContent = 'Image must be 2MB or smaller.'; return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        currentAvatar = reader.result;
+        applyAvatar(currentAvatar, currentInitials);
+        localStorage.setItem(avatarKeyFor(currentUser()), JSON.stringify({ avatar: currentAvatar }));
+        showToast('Photo updated.', 'success');
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListener('click', () => { $(btn.dataset.closeModal).hidden = true; }));
+    [profileModalOverlay, passwordModalOverlay].forEach(overlay => overlay.addEventListener('click', e => { if (e.target === overlay) overlay.hidden = true; }));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { profileModalOverlay.hidden = true; passwordModalOverlay.hidden = true; } });
+
+    $('profileForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const name = $('nameInput').value.trim();
+      // See user-login.html's sign-up handler for why this no longer
+      // falls back to duplicating firstName into lastName for a
+      // single-word name.
+      const [firstName, ...rest] = name.split(/\s+/);
+      const lastName = rest.join(' ');
+      const payload = {
+        firstName,
+        lastName,
+        emailAddress: $('emailInput').value.trim(),
+        contactNumber: $('contactInput').value.trim() || null,
+        collegeOrUnit: $('collegeInput').value.trim()
+      };
+      if (!hasBorrowerProfile) payload.borrowerCategory = $('categoryInput').value;
+      apiFetch('/api/users/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        .then(user => {
+          localStorage.setItem('rsuSdpoUser', JSON.stringify(user));
+          renderProfile(user);
+          profileModalOverlay.hidden = true;
+          showToast('Profile updated successfully.', 'success');
+        })
+        .catch(err => showToast(err.message, 'danger'));
+    });
+
+    $('passwordForm').addEventListener('submit', e => {
+      e.preventDefault();
+      if ($('newPassword').value !== $('confirmPassword').value) {
+        showToast('Passwords do not match.', 'danger');
+        return;
+      }
+      apiFetch('/api/users/change-password', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        currentPassword: $('currentPassword').value,
+        newPassword: $('newPassword').value
+      }) })
+        .then(() => {
+          passwordModalOverlay.hidden = true;
+          e.currentTarget.reset();
+          showToast('Password updated successfully.', 'success');
+        })
+        .catch(err => showToast(err.message, 'danger'));
+    });
+
+    // Sign-out itself lives in the sidebar/mobile-menu "Sign Out" button
+    // (app-shell.js), reachable from every page — Account Actions here only
+    // holds the password form, per the user's explicit request to drop the
+    // duplicate Log Out button from this card.
+
+    loadProfile();
+
+    // Theme (light/dark) — shared across the whole app via the same key app-shell.js reads on load
+    const THEME_KEY = 'rsuSdpoTheme';
+    $('themeToggle').checked = localStorage.getItem(THEME_KEY) === 'dark';
+    $('themeToggle').addEventListener('change', () => {
+      const dark = $('themeToggle').checked;
+      localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      flashToast('settingsToast');
+    });
+  </script>
+</body>
+</html>
