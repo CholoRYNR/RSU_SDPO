@@ -27,6 +27,18 @@
   width: 580px;
 }
 
+/* Add Category modal — same treatment as .modal--confirm (a short two-field
+   form doesn't need the full 672px Add/Edit Equipment modal width). */
+.modal--narrow {
+  width: 440px;
+}
+
+.modal--narrow #addCategoryForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
 .modal__header {
   display: flex;
   align-items: flex-start;

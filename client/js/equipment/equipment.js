@@ -102,6 +102,15 @@
   var formSubmitIcon = $("formSubmitIcon");
   var formSubmitLabel = $("formSubmitLabel");
 
+  var openAddCategoryBtn = $("openAddCategoryBtn");
+  var addCategoryModalOverlay = $("addCategoryModalOverlay");
+  var addCategoryForm = $("addCategoryForm");
+  var fieldNewCategoryName = $("fieldNewCategoryName");
+  var fieldNewCategoryNameError = $("fieldNewCategoryNameError");
+  var fieldNewCategoryDescription = $("fieldNewCategoryDescription");
+  var addCategoryCancelBtn = $("addCategoryCancelBtn");
+  var addCategorySubmitBtn = $("addCategorySubmitBtn");
+
   var confirmModalOverlay = $("confirmModalOverlay");
   var confirmIcon = $("confirmIcon");
   var confirmTitle = $("confirmTitle");
@@ -205,7 +214,7 @@
     });
   }
 
-  [detailsModalOverlay, formModalOverlay, confirmModalOverlay].forEach(
+  [detailsModalOverlay, formModalOverlay, addCategoryModalOverlay, confirmModalOverlay].forEach(
     wireOverlayClose
   );
 
@@ -588,6 +597,77 @@
   openAddBtn.addEventListener("click", openAddModal);
   formCancelBtn.addEventListener("click", function () {
     closeModal(formModalOverlay);
+  });
+
+  /* ---------- Add Category modal ----------
+     Opened from the "+ Add New" link next to the Equipment form's Category
+     field, for a category the seeded list (server/database/seeders/
+     001_seed_categories.js) doesn't cover. Deliberately skips the Yes/No
+     confirm-dialog step used below for Add/Edit/Delete Equipment — adding a
+     category has no destructive side effect worth a confirmation prompt. */
+  function resetAddCategoryForm() {
+    addCategoryForm.reset();
+    fieldNewCategoryName.value = "";
+    fieldNewCategoryDescription.value = "";
+    fieldNewCategoryName.removeAttribute("aria-invalid");
+    fieldNewCategoryNameError.classList.remove("field__error--visible");
+  }
+
+  openAddCategoryBtn.addEventListener("click", function () {
+    resetAddCategoryForm();
+    openModal(addCategoryModalOverlay);
+    fieldNewCategoryName.focus();
+  });
+
+  addCategoryCancelBtn.addEventListener("click", function () {
+    closeModal(addCategoryModalOverlay);
+  });
+
+  addCategorySubmitBtn.addEventListener("click", function () {
+    var categoryName = fieldNewCategoryName.value.trim();
+    if (!categoryName) {
+      fieldNewCategoryName.setAttribute("aria-invalid", "true");
+      fieldNewCategoryNameError.classList.add("field__error--visible");
+      return;
+    }
+    fieldNewCategoryName.removeAttribute("aria-invalid");
+    fieldNewCategoryNameError.classList.remove("field__error--visible");
+
+    var description = fieldNewCategoryDescription.value.trim() || null;
+
+    addCategorySubmitBtn.disabled = true;
+    apiFetch("/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categoryName: categoryName, description: description }),
+    })
+      .then(function (created) {
+        // Re-fetch the full list (rather than just pushing the new one onto
+        // state.categories) so it stays alphabetically sorted exactly like
+        // a fresh page load — the same order the server already returns it
+        // in (GET /api/categories orders by categoryName ASC).
+        return loadCategories().then(function () {
+          return created;
+        });
+      })
+      .then(function (created) {
+        populateCategoryOptions();
+        renderCategoryPanel();
+        // Select it in the Equipment form immediately — the whole point of
+        // adding a category from here is to use it on the equipment being
+        // added/edited right now, not to visit a separate management screen.
+        fieldCategory.value = created.id;
+        fieldCategory.removeAttribute("aria-invalid");
+        fieldCategoryError.classList.remove("field__error--visible");
+        closeModal(addCategoryModalOverlay);
+        showToast('Category "' + created.categoryName + '" added.', "success");
+      })
+      .catch(function (err) {
+        showToast(err.message, "danger");
+      })
+      .then(function () {
+        addCategorySubmitBtn.disabled = false;
+      });
   });
 
   function validateForm() {
