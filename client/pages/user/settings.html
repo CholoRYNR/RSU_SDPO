@@ -6,71 +6,12 @@
   <title>RSU-SDPO | Settings</title>
   <link rel="stylesheet" href="../../css/shared/app-shell.css">
   <link rel="stylesheet" href="../../css/main.css">
-  <style>
-    .content{width:100%;max-width:760px;margin:auto}
-    .settings-card{background:var(--page);border:1px solid var(--softline);border-radius:14px;margin-bottom:16px;overflow:hidden}
-    .settings-card-head{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--softline)}
-    .settings-card-head .icon{width:32px;height:32px;border-radius:10px;background:#ecfdf5;color:#00865d;display:grid;place-items:center;font-size:15px;flex-shrink:0}
-    .settings-card-head h2{margin:0;font-size:14px}
-    .settings-card-head p{margin:2px 0 0;font-size:11px;color:var(--muted)}
-    .settings-card-body{padding:18px 20px}
-
-    .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--softline)}
-    .toggle-row:last-child{border-bottom:0}
-    .toggle-row .label b{display:block;font-size:12px}
-    .toggle-row .label span{display:block;color:var(--muted);font-size:11px;margin-top:1px}
-    .switch{position:relative;width:38px;height:22px;flex-shrink:0}
-    .switch input{opacity:0;width:0;height:0}
-    .switch .track{position:absolute;inset:0;background:#cbd5e1;border-radius:999px;cursor:pointer;transition:background .15s}
-    .switch .track:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .15s}
-    .switch input:checked + .track{background:var(--green)}
-    .switch input:checked + .track:before{transform:translateX(16px)}
-
-    .save-toast{max-height:0;overflow:hidden;transition:max-height .25s ease}
-    .save-toast.show{max-height:60px}
-    .save-toast p{margin:12px 0 0;padding:9px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #d0fae5;color:#007a55;font-size:12px;font-weight:600}
-
-    /* ---------- Account: photo/name/badges summary ---------- */
-    .profile-summary{display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
-    .photo-column{display:flex;flex:0 0 80px;flex-direction:column;align-items:center;gap:8px}
-    .photo{display:grid;place-items:center;width:80px;height:80px;border-radius:50%;background:var(--deep);color:#fff;font-size:28px;font-weight:800;overflow:hidden}
-    .photo img{width:100%;height:100%;object-fit:cover}
-    .text-button{padding:0;border:0;background:transparent;color:var(--deep);font:500 12px/18px inherit;text-decoration:underline;cursor:pointer}
-    .field-error{font-size:11px;color:#d92d20;min-height:14px;margin-top:2px;max-width:100px;text-align:center}
-    .field-note{display:block;color:var(--muted);font-size:11px;margin-top:4px;line-height:1.4}
-    .person{min-width:0;flex:1}
-    .person h2{margin:0;font-size:20px;line-height:25px;color:var(--ink)}
-    .person .email{margin:2px 0 0;color:var(--muted);font-size:14px}
-    .badges{display:flex;gap:8px;padding-top:12px;flex-wrap:wrap}
-    .badge{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;border:0.8px solid transparent}
-    .badge.status-active{border-color:#a4f4cf;background:#ecfdf5;color:#00865d}
-    .badge.role-tag{border-color:#93c5fd;background:#dbeafe;color:#1d4ed8}
-    .profile-summary .btn{margin-left:auto}
-
-    /* ---------- Profile Details: read-only info sub-sections ---------- */
-    .subsection-title{margin:0 0 12px;font-size:12px;font-weight:700;color:var(--ink)}
-    .profile-subsection + .profile-subsection{margin-top:22px;padding-top:22px;border-top:1px solid var(--softline)}
-    .data-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-    .field{display:grid;gap:2px;min-height:40px}
-    .field-label{color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.3px;text-transform:uppercase}
-    .field-value{font-size:14px;color:var(--ink)}
-
-    /* ---------- Account actions ---------- */
-    .actions{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
-    .btn-logout{height:40px;border:0.8px solid var(--color-danger-border);background:#fff1f2;color:var(--color-danger-strong);padding:0 20px}
-
-    /* ---------- Dialogs (reuse shared modal chrome from main.css) ---------- */
-    .modal--form{width:440px}
-    .modal--form .modal__body{gap:14px;padding-top:16px}
-    .modal--form p{margin:0;color:var(--muted);font-size:13px;line-height:20px}
-
-    @media(max-width:600px){.settings-card-body{padding:16px}.profile-summary{flex-direction:column}.profile-summary .btn{margin-left:0}.data-grid{grid-template-columns:1fr}.actions{flex-direction:column;align-items:stretch}}
-  </style>
 </head>
-<body>
+<body class="settings-page">
   <div id="app-root" data-role="user" data-page="" data-title="Settings" data-subtitle="Manage your account information and display preferences">
+    <div class="settings-grid">
 
-    <section class="settings-card">
+    <section class="settings-card settings-card--wide">
       <div class="settings-card-head"><span class="icon">◉</span><div><h2>Account</h2><p>Your signed-in borrower identity</p></div></div>
       <div class="settings-card-body">
         <div class="profile-summary">
@@ -90,7 +31,7 @@
       </div>
     </section>
 
-    <section class="settings-card">
+    <section class="settings-card settings-card--wide">
       <div class="settings-card-head"><span class="icon">▤</span><div><h2>Profile Details</h2><p>Personal, university, and account information on file</p></div></div>
       <div class="settings-card-body">
         <div class="profile-subsection">
@@ -134,6 +75,8 @@
       </div>
     </section>
 
+    </div>
+
     <div class="save-toast" id="settingsToast"><p>✓ Settings saved</p></div>
   </div>
 
@@ -146,21 +89,21 @@
       </div>
       <form id="profileForm">
         <div class="modal__body">
-          <p>Update the contact details shown on your profile.</p>
+          <p>Update your profile details. Changes apply everywhere your information is shown.</p>
           <div class="field"><label class="field__label" for="nameInput">Full name</label><input class="field__control" id="nameInput" required></div>
           <div class="field"><label class="field__label" for="emailInput">Email address</label><input class="field__control" id="emailInput" type="email" required></div>
           <div class="field"><label class="field__label" for="contactInput">Contact number</label><input class="field__control" id="contactInput" placeholder="e.g. 09123456789"></div>
           <div class="field"><label class="field__label" for="collegeInput">College / Unit</label><input class="field__control" id="collegeInput"></div>
-          <div class="field" id="categoryField" hidden>
+          <div class="field" id="categoryField">
             <label class="field__label" for="categoryInput">Borrower Type</label>
-            <select class="field__control" id="categoryInput">
+            <select class="field__control" id="categoryInput" required>
               <option value="Student">Student</option>
               <option value="Faculty">Faculty</option>
               <option value="Staff">Staff (non-teaching university staff)</option>
               <option value="Employee">Employee</option>
               <option value="External">External</option>
             </select>
-            <span class="field-note">Your account doesn't have a borrower profile yet (this can happen after signing up with Google) — pick the type that describes you so you can start borrowing equipment.</span>
+            <span class="field-note" id="categoryNote">Determines which documents your borrowing requests require. Changes apply to your requests, transactions, and reports.</span>
           </div>
         </div>
         <div class="modal__footer">
@@ -269,7 +212,13 @@
       $('contactNumber').textContent = user.contactNumber || '—';
       $('borrowerType').textContent = (user.borrowerProfile && user.borrowerProfile.borrowerCategory) || '—';
       $('collegeOrUnit').textContent = (user.borrowerProfile && user.borrowerProfile.collegeOrUnit) || '—';
-      $('accountStatusBadge').textContent = user.accountStatus || '—';
+      // Flagged accounts show as "Flagged" (the server's 'Restricted').
+      const statusText = user.accountStatus === 'Restricted' ? 'Flagged' : (user.accountStatus || '—');
+      const statusClass = 'badge status-' + String(user.accountStatus || 'active').toLowerCase();
+      $('accountStatusBadge').textContent = statusText;
+      $('accountStatusBadge').className = statusClass;
+      const summaryStatus = document.querySelector('.badges .badge:not(.role-tag)');
+      if (summaryStatus) { summaryStatus.textContent = statusText; summaryStatus.className = statusClass; }
       $('accountType').textContent = user.userRole || '—';
 
       const roleBadge = document.querySelector('.badges .role-tag');
@@ -279,15 +228,12 @@
       $('emailInput').value = user.emailAddress;
       $('contactInput').value = user.contactNumber || '';
       $('collegeInput').value = (user.borrowerProfile && user.borrowerProfile.collegeOrUnit) || '';
-
-      // Only a Google-signed-up account with no Borrower row yet needs to
-      // pick a Borrower Type here — for everyone else it's already set and
-      // this endpoint never changes it after first-time creation (see
-      // user.controller.js#updateProfile), so keep the field out of the
-      // way entirely rather than showing an editable value that submitting
-      // this form would silently ignore.
-      $('categoryField').hidden = hasBorrowerProfile;
-      $('categoryInput').required = !hasBorrowerProfile;
+      // Borrower Type is editable; the server validates it and every page
+      // reads it live from the profile, so a change applies system-wide.
+      $('categoryInput').value = (user.borrowerProfile && user.borrowerProfile.borrowerCategory) || 'Student';
+      if (!hasBorrowerProfile) {
+        $('categoryNote').textContent = "Your account doesn't have a borrower profile yet (this can happen after signing up with Google) — pick the type that describes you so you can start borrowing equipment.";
+      }
       // collegeInput has no required attribute in markup because it's an
       // optional per-field update once a profile already exists (see the
       // `if (collegeOrUnit)` truthy check server-side) — but it's mandatory
@@ -348,9 +294,9 @@
         lastName,
         emailAddress: $('emailInput').value.trim(),
         contactNumber: $('contactInput').value.trim() || null,
-        collegeOrUnit: $('collegeInput').value.trim()
+        collegeOrUnit: $('collegeInput').value.trim(),
+        borrowerCategory: $('categoryInput').value
       };
-      if (!hasBorrowerProfile) payload.borrowerCategory = $('categoryInput').value;
       apiFetch('/api/users/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         .then(user => {
           localStorage.setItem('rsuSdpoUser', JSON.stringify(user));

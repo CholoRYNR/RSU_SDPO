@@ -54,8 +54,8 @@
 </head>
 <body>
   <div id="app-root" data-page="transactions" data-title="Transaction Management" data-subtitle="Review, approve, release, and monitor equipment borrowing transactions">
-    <div class="heading-row"><button class="new-txn-btn" type="button" onclick="openNewTxnModal()">+ New Transaction</button><div class="counts"><div class="count pending"><b id="countPending">0</b>Pending Requests</div><div class="count"><b id="countOverdue">0</b>Overdue Due Today</div><div class="count"><b id="countReleased">0</b>Released Equipment</div><div class="count"><b id="countApprovedToday">0</b>Approved Today</div></div></div>
-    <div class="filters"><input id="search" class="search" placeholder="Search by name, ID, college, purpose..." aria-label="Search transactions"><select id="statusFilter"><option value="">All Statuses</option><option>Acknowledged</option><option>For Approval</option><option>Approved</option><option>Released</option><option>Overdue</option><option>For Resolution</option><option>Replacement</option><option>Resolved</option><option>Completed</option><option>Rejected</option><option>Cancelled</option></select><select id="borrowerTypeFilter"><option value="">All Borrower Types</option><option>Student</option><option>Faculty</option><option>Staff</option><option>Employee</option><option>External</option></select><select id="categoryFilter"><option value="">All Categories</option><option>Basketball</option><option>Badminton</option><option>Futsal</option><option>Football</option></select><button class="filter-button" id="overdueOnlyBtn" type="button" aria-pressed="false">☷ Overdue Only</button></div>
+    <div class="heading-row"><button class="new-txn-btn" type="button" onclick="openNewTxnModal()">+ New Transaction</button><div class="counts"><div class="count pending"><b id="countPending">0</b>Pending Requests</div><div class="count"><b id="countOverdue">0</b>Overdue</div><div class="count"><b id="countReleased">0</b>Released Equipment</div><div class="count"><b id="countApprovedToday">0</b>Approved Today</div></div></div>
+    <div class="filters"><input id="search" class="search" placeholder="Search by name, ID, college, purpose..." aria-label="Search transactions"><select id="statusFilter"><option value="">All Statuses</option><option>Acknowledged</option><option>For Approval</option><option>Approved</option><option>Released</option><option>Overdue</option><option>For Resolution</option><option>Replacement</option><option>Resolved</option><option>Completed</option><option>Rejected</option><option>Cancelled</option></select><select id="borrowerTypeFilter"><option value="">All Borrower Types</option><option>Student</option><option>Faculty</option><option>Staff</option><option>Employee</option><option>External</option></select><select id="categoryFilter"><option value="">All Categories</option></select><button class="filter-button" id="overdueOnlyBtn" type="button" aria-pressed="false">☷ Overdue Only</button></div>
     <section class="table-card"><div class="table-note">Showing <b id="shown">10</b> transactions</div><div class="scroll"><table class="txn-table"><thead><tr><th>Transaction No.</th><th>Request Date</th><th>Borrower</th><th>Type</th><th>College / Unit</th><th>Purpose</th><th>Equip.</th><th>Expected Return</th><th>Status</th><th>Reviewed By</th><th>Approved By</th><th>Actions</th></tr></thead><tbody id="transactions"></tbody></table></div><div class="pagination"><button>Prev</button><button>1</button><button>Next</button></div></section>
   </div>
   <div id="overlay" class="overlay" aria-hidden="true"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Transaction details"><div class="drawer-head"><div class="drawer-title"><div><div id="drawerBadges"></div><h2 id="drawerName"></h2><p id="drawerCollege"></p></div><button class="close" onclick="closeDrawer()" aria-label="Close">×</button></div><div class="drawer-actions" id="drawerActions"></div></div><div class="tabs"><button class="tab active" data-tab="overview">Overview</button><button class="tab" data-tab="workflow">Workflow &amp; QR</button><button class="tab" data-tab="activity">Activity &amp; Notifications</button></div><div id="overview" class="panel active"></div><div id="workflow" class="panel"></div><div id="activity" class="panel"></div></aside></div><div id="toast" class="toast"></div>
@@ -84,7 +84,7 @@
         <div class="item-list" id="newTxnItems"><p class="sub">Loading…</p></div>
         <label>Purpose</label>
         <textarea id="newTxnPurpose" rows="2" placeholder="e.g. Intramurals basketball match"></textarea>
-        <label>Expected Return</label>
+        <label>Expected Return (Philippine Time)</label>
         <input id="newTxnDue" type="datetime-local">
         <p class="form-error" id="newTxnError"></p>
       </div>
@@ -105,12 +105,27 @@
     const cls=s=>s.toLowerCase().replace(/\s+/g,'-'); let current=null;
     const myRole=()=>{try{return(currentUser()||{}).userRole}catch(e){return null}};
     const isDirector=()=>['Admin','Director'].includes(myRole());
+    // Document review/verification is Admin/Staff work (server: borrow.routes.js reviewerOnly).
+    const isReviewer=()=>['Admin','Staff'].includes(myRole());
+    // Guards every workflow action against double-clicks: one request at a time.
+    let actionBusy=false;
+    async function runAction(fn){
+      if(actionBusy)return;
+      actionBusy=true;
+      document.querySelectorAll('#drawerActions button,#workflow .btn').forEach(b=>b.disabled=true);
+      try{await fn()}finally{actionBusy=false;document.querySelectorAll('#drawerActions button,#workflow .btn').forEach(b=>b.disabled=false)}
+    }
+    // Philippine Time "today" key for the Approved Today counter.
+    const phDayKey=v=>new Date(v).toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
 
     async function loadTransactions(){
       try{
         txns=await apiFetch('/api/borrow');
         document.getElementById('countPending').textContent=txns.filter(t=>['Pending','Acknowledged'].includes(t.status)).length;
-        document.getElementById('countReleased').textContent=txns.filter(t=>t.status==='Released').length;
+        document.getElementById('countReleased').textContent=txns.filter(t=>['Released','Overdue'].includes(t.status)).length;
+        document.getElementById('countOverdue').textContent=txns.filter(t=>t.status==='Overdue').length;
+        const today=phDayKey(Date.now());
+        document.getElementById('countApprovedToday').textContent=txns.filter(t=>t.timestamps&&t.timestamps.approved&&phDayKey(t.timestamps.approved)===today).length;
         applyFilters();
         // Deep link from the Transaction Log Report calendar: ?open=<dbId>
         const openId=Number(new URLSearchParams(location.search).get('open'));
@@ -120,7 +135,7 @@
       }
     }
 
-    const ACTION_LABEL={Pending:'Review',Acknowledged:'Review','For Approval':isDirector()?'Approve':'',Approved:'Release',Released:'Return',Overdue:'Return','For Resolution':'Resolve',Replacement:'Resolve',Resolved:'Complete'};
+    const ACTION_LABEL={Pending:isReviewer()?'Review Documents':'',Acknowledged:isReviewer()?'Review Documents':'','For Approval':isDirector()?'Approve':'',Approved:'Release',Released:'Return',Overdue:'Return','For Resolution':'Resolve',Replacement:'Resolve',Resolved:'Complete'};
     function render(rows=txns){document.getElementById('shown').textContent=rows.length;document.getElementById('transactions').innerHTML=rows.map(t=>{const label=ACTION_LABEL[t.status];return `<tr><td><span class="txn-id">${esc(t.id)}</span></td><td>${esc(t.date)}<span class="sub">${esc(t.time)}</span></td><td><b>${esc(t.name)}</b><span class="sub">${esc(t.bsf)}</span></td><td><span class="badge type">${esc(t.type)}</span></td><td>${esc(t.college)}</td><td class="purpose">${esc(t.purpose)}</td><td>${t.items.length}</td><td>${esc(t.due)}</td><td><span class="badge ${cls(t.status)}">${esc(t.status)}</span></td><td>${esc(t.review)}</td><td>${esc(t.approve)}</td><td><div class="actions"><button class="link-btn" onclick="openDrawer(${t.dbId})">View</button>${label?`<button class="link-btn primary" onclick="openDrawer(${t.dbId})">${label}</button>`:''}</div></td></tr>`}).join('')};
     function section(title,body){return `<section class="section"><div class="section-title">${title}</div><div class="section-body">${body}</div></section>`}
     // Named timelineEvent, not event — a top-level `function event(...)`
@@ -136,39 +151,50 @@
       btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on','bad'));
       btn.classList.add('on');if(type!=='Good')btn.classList.add('bad');
     }
-    function equipment(t,returning=false){return t.items.map(it=>`<div class="equipment-row"><div class="qr">QR</div><div class="grow"><b>${esc(it.name)}</b><span class="sub">${esc(it.code)} · ${returning?'Released':'Available'}</span>${returning?`<div class="item-condition"><button class="on" onclick="chooseItemCondition(this,'${it.code}','Good')">Good</button><button onclick="chooseItemCondition(this,'${it.code}','Damaged')">Damaged</button><button onclick="chooseItemCondition(this,'${it.code}','Lost')">Lost</button></div>`:''}</div><button class="scan" data-code="${esc(it.code)}" data-name="${esc(it.name)}" onclick="scanItem(this)">Scan QR</button></div>`).join('')}
+    function equipment(t,returning=false){return t.items.map(it=>`<div class="equipment-row"><div class="qr">QR</div><div class="grow"><b>${esc(it.name)}</b><span class="sub">${esc(it.equipmentCode)} · Unit ${esc(it.code)} · ${returning?'Released':'Reserved'}</span>${returning?`<div class="item-condition"><button class="on" onclick="chooseItemCondition(this,'${it.code}','Good')">Good</button><button onclick="chooseItemCondition(this,'${it.code}','Damaged')">Damaged</button><button onclick="chooseItemCondition(this,'${it.code}','Lost')">Lost</button></div>`:''}</div><button class="scan" data-code="${esc(it.code)}" data-name="${esc(it.name)}" data-legacy="${esc(it.legacyCode||'')}" onclick="scanItem(this)">Scan QR</button></div>`).join('')}
     // Read-only listing for the Overview tab — just what was requested, no
     // scan control (scanning only happens during the actual Workflow step).
-    function equipmentDetails(t){return t.items.map(it=>`<div class="equipment-row"><div class="grow"><b>${esc(it.name)}</b><span class="sub">${esc(it.code)}</span></div></div>`).join('')}
+    function equipmentDetails(t){return t.items.map(it=>`<div class="equipment-row"><div class="grow"><b>${esc(it.name)}</b><span class="sub">Equipment ID ${esc(it.equipmentCode)} · Unit ${esc(it.code)}</span></div></div>`).join('')}
 
-    // --- Submitted documents (Valid ID / Authorization Document) — viewable once approved ---
-    const APPROVED_ONWARD=['Approved','Released','Returned','Overdue','For Resolution','Replacement','Resolved','Completed'];
+    // --- Submitted documents (Valid ID / Authorization Document) ---
+    // Viewable by Admin/Staff and the Director at every stage — including
+    // BEFORE approval, since Admin/Staff must review and verify them before
+    // a request can reach the Director, and the Director reviews them before
+    // approving. Access is enforced server-side (staff roles only).
     function documentsSection(t){
-      if(!APPROVED_ONWARD.includes(t.status)){
-        return section('Submitted Documents','<div class="ack">Documents become viewable once the request is approved.</div>');
-      }
-      // Borrower name/label are passed via data-* attributes (not embedded in the
-      // onclick string) so a name containing a quote can never break out of an
-      // inline JS string — HTML-escaping alone would not stop that, since the
-      // browser HTML-decodes attribute text before running it as script.
-      const row=(type,label)=>`<div class="equipment-row" id="docRow-${type}"><div class="grow"><b>${label}</b><span class="sub" id="docStatus-${type}">Checking…</span></div><button class="scan" id="docBtn-${type}" data-doc-type="${type}" data-doc-label="${esc(label+' — '+t.name)}">View Document</button></div>`;
-      return section('Submitted Documents',row('valid-id','Valid ID')+row('authorization-document','Authorization Document'));
+      // Borrower name/label go through data-* attributes (not an inline JS
+      // string) so a name containing a quote can never break out of it.
+      const row=(type,label)=>`<div class="equipment-row" id="docRow-${type}"><div class="grow"><b id="docLabel-${type}">${label}</b><span class="sub" id="docStatus-${type}">Checking…</span></div><button class="scan" id="docBtn-${type}" data-doc-type="${type}" data-doc-label="${esc(label+' — '+t.name)}">View Document</button></div>`;
+      const verified=t.documentsVerified
+        ?`<div class="ack">✓ Documents verified${t.documentsVerifiedBy?' by '+esc(t.documentsVerifiedBy):''}${t.timestamps&&t.timestamps.documentsVerified?' on '+esc(formatPHDateTime(t.timestamps.documentsVerified)):''}.</div>`
+        :['Pending','Acknowledged'].includes(t.status)?'<div class="damage-box show" id="docReviewNote">Review each submitted document, then use “Verify Documents &amp; Forward” to send this request to the Director.</div>':'';
+      return section('Submitted Documents',verified+row('valid-id','Valid ID')+row('authorization-document','Authorization Document'));
     }
     function loadDocumentStatus(t){
       document.querySelectorAll('#overview .scan[data-doc-type]').forEach(btn=>{
         btn.onclick=()=>viewDocument(t.borrowerId,btn.dataset.docType,btn.dataset.docLabel);
       });
-      if(!APPROVED_ONWARD.includes(t.status)||!t.borrowerId)return;
+      if(!t.borrowerId)return;
       apiFetch(`/api/borrowers/${t.borrowerId}/documents`).then(status=>{
-        updateDocRow('valid-id',status.validIdUploaded);
-        updateDocRow('authorization-document',status.authorizationDocumentUploaded);
-      }).catch(()=>{});
+        const authLabel=document.getElementById('docLabel-authorization-document');
+        if(authLabel&&status.authorizationDocumentLabel)authLabel.textContent=status.authorizationDocumentLabel;
+        updateDocRow('valid-id',status.validIdUploaded,status.validIdRequired);
+        updateDocRow('authorization-document',status.authorizationDocumentUploaded,true);
+        const verifyBtn=document.getElementById('verifyDocsBtn');
+        if(verifyBtn&&status.missing&&status.missing.length){
+          verifyBtn.disabled=true;verifyBtn.title='Missing: '+status.missing.join(', ');
+          const note=document.getElementById('docReviewNote');
+          if(note)note.textContent='Missing required document(s): '+status.missing.join(', ')+'. Return the request for correction.';
+        }
+      }).catch(e=>{
+        ['valid-id','authorization-document'].forEach(type=>{const el=document.getElementById('docStatus-'+type);if(el)el.textContent='Could not check: '+e.message;});
+      });
     }
-    function updateDocRow(type,uploaded){
+    function updateDocRow(type,uploaded,required){
       const btn=document.getElementById('docBtn-'+type),statusEl=document.getElementById('docStatus-'+type);
       if(!btn||!statusEl)return;
-      if(uploaded){statusEl.textContent='Submitted';}
-      else{statusEl.textContent='Not submitted';btn.disabled=true;btn.style.opacity=.5;btn.style.cursor='not-allowed';btn.removeAttribute('onclick');}
+      if(uploaded){statusEl.textContent='Submitted'+(required?'':' (optional for this borrower type)');}
+      else{statusEl.textContent=required?'Not submitted — required':'Not required for this borrower type';btn.disabled=true;btn.style.opacity=.5;btn.style.cursor='not-allowed';btn.onclick=null;}
     }
     async function viewDocument(borrowerId,type,label){
       const overlay=document.getElementById('docViewerOverlay'),body=document.getElementById('docViewerBody'),status=document.getElementById('docViewerStatus');
@@ -224,15 +250,18 @@
     // transaction that was actually clicked, even when the table is filtered/sorted.
     function drawerActionsHtml(t){
       if(['Pending','Acknowledged'].includes(t.status)){
-        return '<button class="btn green" onclick="reviewTxn(\'accept\')">Accept for Approval</button><button class="btn dark" onclick="reviewTxn(\'correction\')">Return for Correction</button><button class="btn red" onclick="reviewTxn(\'reject\')">Reject</button>';
+        // Step 2 — Admin/Staff document review. The Director only sees the
+        // request once documents are verified (For Approval).
+        if(!isReviewer())return '<span class="sub">Awaiting Admin/Staff document verification.</span>';
+        return '<button class="btn green" id="verifyDocsBtn" onclick="reviewTxn(\'accept\')">Verify Documents &amp; Forward to Director</button><button class="btn dark" onclick="reviewTxn(\'correction\')">Return for Correction</button><button class="btn red" onclick="reviewTxn(\'reject\')">Reject</button>';
       }
       if(t.status==='For Approval'){
-        return isDirector()?'<button class="btn green" onclick="approveTxn()">Approve</button><button class="btn red" onclick="rejectTxn()">Reject</button>':'<span class="sub">Only a Director can approve this request.</span>';
+        return isDirector()?'<button class="btn green" onclick="approveTxn()">Approve</button><button class="btn red" onclick="rejectTxn()">Reject</button>':'<span class="sub">Documents verified — awaiting Director approval.</span>';
       }
-      if(t.status==='Approved')return '<button class="btn dark" onclick="showTab(\'workflow\')">Release Equipment</button>';
-      if(['Released','Overdue'].includes(t.status))return '<button class="btn dark" onclick="showTab(\'workflow\')">Return Equipment</button>';
-      if(['For Resolution','Replacement'].includes(t.status))return '<button class="btn dark" onclick="showTab(\'workflow\')">Manage Resolution</button>';
-      if(t.status==='Resolved')return '<button class="btn green" onclick="completeTxn()">Mark Complete</button>';
+      if(t.status==='Approved')return isReviewer()?'<button class="btn dark" onclick="showTab(\'workflow\')">Release Equipment</button>':'<span class="sub">Approved — awaiting release by SDPO staff.</span>';
+      if(['Released','Overdue'].includes(t.status))return isReviewer()?'<button class="btn dark" onclick="showTab(\'workflow\')">Return Equipment</button>':'';
+      if(['For Resolution','Replacement'].includes(t.status))return isReviewer()?'<button class="btn dark" onclick="showTab(\'workflow\')">Manage Resolution</button>':'';
+      if(t.status==='Resolved')return isReviewer()?'<button class="btn green" onclick="completeTxn()">Mark Complete</button>':'';
       return '';
     }
     function workflowTimelineHtml(t){
@@ -240,16 +269,17 @@
       const approved=!['Pending','Acknowledged','For Review','For Approval'].includes(t.status)&&t.status!=='Rejected';
       const releasedOnward=['Released','Overdue','For Resolution','Replacement','Resolved','Completed'].includes(t.status);
       const returnedOnward=['For Resolution','Replacement','Resolved','Completed'].includes(t.status)||t.status==='Completed';
-      return `<div class="timeline">${timelineEvent('Request Submitted',esc(t.date)+' · '+esc(t.time))}${timelineEvent('Reviewed',t.status==='Rejected'&&!approved?'Rejected':t.review!=='—'?'Reviewed by '+esc(t.review):'Awaiting review',reviewed)}${timelineEvent('Approved',t.status==='Rejected'?'Rejected':approved?'Approved by '+esc(t.approve):'Awaiting approval',approved)}${timelineEvent('Released',releasedOnward?'Equipment released':'',releasedOnward)}${timelineEvent('Returned',returnedOnward?'Equipment returned':'',returnedOnward)}</div>`;
+      const ts=t.timestamps||{};const at=v=>v?' · '+esc(formatPHDateTime(v)):'';
+      return `<div class="timeline">${timelineEvent('Request Submitted',esc(t.date)+' · '+esc(t.time))}${timelineEvent('Documents Verified (Admin/Staff)',t.documentsVerified?'Verified by '+esc(t.documentsVerifiedBy||t.review)+at(ts.documentsVerified):t.status==='Rejected'&&!approved?'Rejected':'Awaiting document review',t.documentsVerified||reviewed)}${timelineEvent('Approved (Director)',t.status==='Rejected'?'Rejected':approved?'Approved by '+esc(t.approve)+at(ts.approved):'Awaiting approval',approved)}${timelineEvent('Released',releasedOnward?'Equipment released'+at(ts.released):'',releasedOnward)}${timelineEvent('Returned',returnedOnward?'Equipment returned'+at(ts.returned):'',returnedOnward)}${timelineEvent('Completed',t.status==='Completed'?'Transaction closed':'',t.status==='Completed')}</div>`;
     }
     function openDrawer(dbId){current=txns.find(t=>t.dbId===dbId);if(!current)return;const t=current;document.getElementById('drawerBadges').innerHTML=`<span class="badge ${cls(t.status)}">${esc(t.id)}</span> <span class="badge ${cls(t.status)}">${esc(t.status)}</span> <span class="badge type">${esc(t.type)}</span>`;document.getElementById('drawerName').textContent=t.name;document.getElementById('drawerCollege').textContent=`${t.college} · ${t.bsf}`;document.getElementById('drawerActions').innerHTML=drawerActionsHtml(t);
-      document.getElementById('overview').innerHTML=section('Borrower Information',`<div class="info-grid"><div class="info"><label>Transaction No.</label><div>${esc(t.id)}</div></div><div class="info"><label>BSF Number</label><div>${esc(t.bsf)}</div></div><div class="info"><label>Borrower Name</label><div>${esc(t.name)}</div></div><div class="info"><label>Borrower Type</label><div>${esc(t.type)}</div></div><div class="info"><label>College / Unit</label><div>${esc(t.college)}</div></div><div class="info"><label>Email</label><div>${esc(t.email)}</div></div></div>`)+section('Request Details',`<div class="info-grid"><div class="info"><label>Request Date</label><div>${esc(t.date)} ${esc(t.time)}</div></div><div class="info"><label>Expected Return</label><div>${esc(t.due)}</div></div><div class="info" style="grid-column:1/-1"><label>Purpose</label><div>${esc(t.purpose)}</div></div></div>`)+section(`Equipment Requested · ${t.items.length} items`,equipmentDetails(t))+documentsSection(t);
+      document.getElementById('overview').innerHTML=section('Borrower Information',`<div class="info-grid"><div class="info"><label>Transaction No.</label><div>${esc(t.id)}</div></div><div class="info"><label>BSF Number</label><div>${esc(t.bsf)}</div></div><div class="info"><label>Borrower Name</label><div>${esc(t.name)}</div></div><div class="info"><label>Borrower Type</label><div>${esc(t.type)}</div></div><div class="info"><label>College / Unit</label><div>${esc(t.college)}</div></div><div class="info"><label>Email</label><div>${esc(t.email)}</div></div></div>`)+section('Request Details',`<div class="info-grid"><div class="info"><label>Request Date (PHT)</label><div>${esc(t.date)} ${esc(t.time)}</div></div><div class="info"><label>Expected Return (PHT)</label><div>${esc(t.due)} ${esc(t.dueTime||'')}</div></div><div class="info" style="grid-column:1/-1"><label>Purpose</label><div>${esc(t.purpose)}</div></div></div>`)+section(`Equipment Requested · ${t.items.length} items`,equipmentDetails(t))+documentsSection(t);
       loadDocumentStatus(t);
       let workflowBody;
       if(t.status==='Approved'){
         const acknowledged=!!t.receivedByBorrowerDatetime;
         const ackNotice=acknowledged
-          ?`<div class="ack">✓ Borrower has electronically acknowledged receipt${t.receivedByBorrowerDatetime?' on '+esc(new Date(t.receivedByBorrowerDatetime).toLocaleString()):''}. Ready to release.</div>`
+          ?`<div class="ack">✓ Borrower has electronically acknowledged receipt${t.receivedByBorrowerDatetime?' on '+esc(formatPHDateTime(t.receivedByBorrowerDatetime)):''}. Ready to release.</div>`
           :`<div class="damage-box show">Waiting on the borrower's electronic acknowledgement of receipt — equipment cannot be released until they confirm from their account.</div>`;
         workflowBody=section('QR-Based Release Section',`${ackNotice}<h4>Equipment Scan Checklist</h4>${equipment(t)}<div style="text-align:right;margin-top:12px"><button class="btn green" onclick="confirmRelease()" ${acknowledged?'':'disabled'}>Confirm Release</button></div>`);
       }else if(['Released','Overdue'].includes(t.status)){
@@ -270,45 +300,47 @@
     document.querySelectorAll('.tab').forEach(x=>x.addEventListener('click',()=>showTab(x.dataset.tab)));document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')closeDrawer()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
 
     async function reviewTxn(action){
-      const labels={accept:'Accept for Approval',correction:'Return for Correction',reject:'Reject'};
+      const labels={accept:'Verify documents and forward to the Director',correction:'Return for Correction',reject:'Reject'};
       const remarks=action!=='accept'?(prompt('Remarks (optional):')||''):'';
       if(!confirm(`${labels[action]} — transaction ${current.id}?`))return;
-      try{
-        await apiFetch(`/api/borrow/${current.dbId}/review`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,remarks})});
-        closeDrawer();await loadTransactions();toast('Review recorded: '+labels[action])
-      }catch(e){alert(e.message)}
+      await runAction(async()=>{
+        try{
+          await apiFetch(`/api/borrow/${current.dbId}/review`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,remarks})});
+          closeDrawer();await loadTransactions();toast('Review recorded: '+labels[action])
+        }catch(e){alert(e.message);await loadTransactions()}
+      });
     }
     async function approveTxn(){
       if(!confirm(`Approve transaction ${current.id}?`))return;
-      try{await apiFetch(`/api/borrow/${current.dbId}/approve`,{method:'PATCH'});closeDrawer();await loadTransactions();toast('Transaction approved')}
-      catch(e){alert(e.message)}
+      await runAction(async()=>{try{await apiFetch(`/api/borrow/${current.dbId}/approve`,{method:'PATCH'});closeDrawer();await loadTransactions();toast('Transaction approved')}
+      catch(e){alert(e.message);await loadTransactions()}});
     }
     async function rejectTxn(){
       if(!confirm(`Reject transaction ${current.id}?`))return;
       const remarks=prompt('Reason for rejection (shown to the borrower):')||'';
-      try{await apiFetch(`/api/borrow/${current.dbId}/reject`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({remarks})});closeDrawer();await loadTransactions();toast('Transaction rejected')}
-      catch(e){alert(e.message)}
+      await runAction(async()=>{try{await apiFetch(`/api/borrow/${current.dbId}/reject`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({remarks})});closeDrawer();await loadTransactions();toast('Transaction rejected')}
+      catch(e){alert(e.message);await loadTransactions()}});
     }
     async function confirmRelease(){
       if(!current.receivedByBorrowerDatetime){toast("Borrower hasn't acknowledged receipt yet");return}
       if(document.querySelectorAll('#workflow .scan:not(.scanned)').length>0){toast('Scan every item before confirming release');return}
-      try{
+      await runAction(async()=>{try{
         await apiFetch(`/api/borrow/${current.dbId}/release`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({itemCodes:current.items.map(i=>i.code)})});
         closeDrawer();await loadTransactions();toast('Equipment released')
-      }catch(e){alert(e.message)}
+      }catch(e){alert(e.message);await loadTransactions()}});
     }
     async function confirmReturn(){
       if(document.querySelectorAll('#workflow .scan:not(.scanned)').length>0){toast('Scan every item before confirming return');return}
       const items=current.items.map(i=>({itemCode:i.code,condition:itemConditions[i.code]||'Good'}));
-      try{
+      await runAction(async()=>{try{
         await apiFetch(`/api/return/${current.dbId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
         closeDrawer();await loadTransactions();toast('Equipment returned')
-      }catch(e){alert(e.message)}
+      }catch(e){alert(e.message);await loadTransactions()}});
     }
     async function completeTxn(){
       if(!confirm(`Mark transaction ${current.id} as Completed?`))return;
-      try{await apiFetch(`/api/borrow/${current.dbId}/complete`,{method:'PATCH'});closeDrawer();await loadTransactions();toast('Transaction completed')}
-      catch(e){alert(e.message)}
+      await runAction(async()=>{try{await apiFetch(`/api/borrow/${current.dbId}/complete`,{method:'PATCH'});closeDrawer();await loadTransactions();toast('Transaction completed')}
+      catch(e){alert(e.message);await loadTransactions()}});
     }
 
     // --- Damage/Loss resolution panel (For Resolution / Replacement / Resolved) ---
@@ -363,7 +395,7 @@
       if(!el)return;
       try{
         const rows=await apiFetch(`/api/audit-logs?transactionId=${t.dbId}`);
-        el.innerHTML=rows.length?rows.map(r=>`<div class="activity-log-row"><b>${esc(r.oldStatus)}</b><span class="arrow">→</span><b>${esc(r.newStatus)}</b><span class="sub"> · by ${esc(r.changedBy)}</span>${r.remarks?`<div class="sub">${esc(r.remarks)}</div>`:''}<time>${new Date(r.changeDatetime).toLocaleString()}</time></div>`).join(''):'<div class="ack">No status changes recorded yet.</div>';
+        el.innerHTML=rows.length?rows.map(r=>`<div class="activity-log-row"><b>${esc(r.oldStatus)}</b><span class="arrow">→</span><b>${esc(r.newStatus)}</b><span class="sub"> · by ${esc(r.changedBy)}</span>${r.remarks?`<div class="sub">${esc(r.remarks)}</div>`:''}<time>${esc(formatPHDateTime(r.changeDatetime))}</time></div>`).join(''):'<div class="ack">No status changes recorded yet.</div>';
       }catch(e){el.textContent='Could not load activity: '+e.message}
     }
 
@@ -399,7 +431,7 @@
     // --- QR camera scanner: verifies the physically scanned item against the row it was opened from ---
 const scanOverlay=document.getElementById('scanOverlay'),scanVideo=document.getElementById('scanVideo'),scanStatus=document.getElementById('scanStatus'),scanTitle=document.getElementById('scanTitle'),scanCameraSelect=document.getElementById('scanCameraSelect'),scanCameraRow=document.querySelector('.scan-camera-row');
 const scanCanvas=document.createElement('canvas');const scanCtx=scanCanvas.getContext('2d',{willReadFrequently:true});
-let scanStream=null,scanRAF=null,scanTargetBtn=null,scanExpectedCode=null,scanLocked=false;
+let scanStream=null,scanRAF=null,scanTargetBtn=null,scanExpectedCode=null,scanLegacyCode=null,scanLocked=false;
 const SCAN_CAMERA_KEY='rsuSdpoScanCameraId';
 
 function extractScanCode(text){
@@ -439,7 +471,7 @@ async function populateScanCameras(){
 
 async function scanItem(btn){
   if(btn.classList.contains('scanned'))return;
-  scanTargetBtn=btn;scanExpectedCode=btn.dataset.code;scanLocked=false;
+  scanTargetBtn=btn;scanExpectedCode=btn.dataset.code;scanLegacyCode=btn.dataset.legacy||null;scanLocked=false;
   scanTitle.textContent=`Scan: ${btn.dataset.name} (${scanExpectedCode})`;
   scanStatus.className='scan-status';scanStatus.textContent='Requesting camera access…';
   scanOverlay.classList.add('show');scanOverlay.setAttribute('aria-hidden','false');
@@ -484,7 +516,8 @@ function scanTick(){
 
 function handleScanResult(rawText){
   const scanned=extractScanCode(rawText);
-  if(scanned===scanExpectedCode){
+  // A label printed before item codes were standardized still identifies the same unit.
+  if(scanned===scanExpectedCode||(scanLegacyCode&&scanned===scanLegacyCode)){
     scanLocked=true;
     scanStatus.className='scan-status ok';
     scanStatus.textContent=`✓ Match confirmed — ${scanned}`;
@@ -520,13 +553,15 @@ let toastTimer;function toast(msg){let el=document.getElementById('toast');el.te
         (!statusFilter.value||t.status===statusFilter.value)&&
         (!borrowerTypeFilter.value||t.type===borrowerTypeFilter.value)&&
         (!categoryFilter.value||t.category===categoryFilter.value)&&
-        (!overdueOnly||t.status==='Released')
+        (!overdueOnly||t.status==='Overdue')
       );
       render(rows);
     }
     [searchInput].forEach(el=>el.addEventListener('input',applyFilters));
     [statusFilter,borrowerTypeFilter,categoryFilter].forEach(el=>el.addEventListener('change',applyFilters));
     overdueBtn.addEventListener('click',()=>{overdueOnly=!overdueOnly;overdueBtn.classList.toggle('active',overdueOnly);overdueBtn.setAttribute('aria-pressed',String(overdueOnly));applyFilters()});
+    // Category filter options come from the real category list.
+    apiFetch('/api/categories').then(rows=>{categoryFilter.insertAdjacentHTML('beforeend',rows.map(c=>`<option>${esc(c.categoryName)}</option>`).join(''))}).catch(()=>{});
     loadTransactions();
   </script>
 </body>

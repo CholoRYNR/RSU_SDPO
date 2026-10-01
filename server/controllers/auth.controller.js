@@ -40,13 +40,35 @@ function serializeUser(user) {
 exports.signToken = signToken;
 exports.serializeUser = serializeUser;
 exports.issueVerificationCode = issueVerificationCode;
+exports.secondsUntilResendAllowed = secondsUntilResendAllowed;
+
+// Minimum gap between two verification emails to the same account. Repeated
+// clicks, page refreshes, or duplicate API calls inside this window reuse
+// the code already sent instead of mailing a new one each time.
+const RESEND_COOLDOWN_SECONDS = 60;
+
+// When the current verification code was issued (codes are stored with a
+// fixed lifetime, so issue time = expiry - lifetime). null if none pending.
+function verificationIssuedAt(user) {
+  if (!user.verificationCodeExpiresAt) return null;
+  return new Date(new Date(user.verificationCodeExpiresAt).getTime() - CODE_EXPIRY_MINUTES * 60 * 1000);
+}
+
+function secondsUntilResendAllowed(user) {
+  const issuedAt = verificationIssuedAt(user);
+  if (!issuedAt) return 0;
+  const elapsed = (Date.now() - issuedAt.getTime()) / 1000;
+  return Math.max(Math.ceil(RESEND_COOLDOWN_SECONDS - elapsed), 0);
+}
 
 // Generates a fresh 6-digit code, stores only its bcrypt hash (plus a
 // CODE_EXPIRY_MINUTES expiry and a reset attempts counter) on the given
-// User instance, saves it, and emails the plaintext code once. Shared by
-// register() (both the brand-new-signup and the resend-on-re-registration
-// branches) and resendVerification() so all three stay identical.
-async function issueVerificationCode(user) {
+// User instance, saves it, and emails the plaintext code once. Unless
+// { force: true }, does nothing (returns false) while a code sent less than
+// RESEND_COOLDOWN_SECONDS ago is still pending — this is what prevents
+// duplicate verification emails. Returns true when a new code was sent.
+async function issueVerificationCode(user, { force = false } = {}) {
+  if (!force && secondsUntilResendAllowed(user) > 0) return false;
   const code = generateCode();
   user.verificationCodeHash = await hashCode(code);
   user.verificationCodeExpiresAt = new Date(Date.now() + CODE_EXPIRY_MINUTES * 60 * 1000);
@@ -62,6 +84,7 @@ async function issueVerificationCode(user) {
     'RSU SDPO - Verify Your Email',
     `Your RSU SDPO email verification code is ${code}. This code expires in ${CODE_EXPIRY_MINUTES} minutes. If you did not request this, you can safely ignore this email.`
   );
+  return true;
 }
 
 // Same pattern as issueVerificationCode, but for the separate reset_code_*
@@ -166,7 +189,7 @@ exports.register = async (req, res) => {
       }
     });
 
-    await issueVerificationCode(existingByEmail);
+    await issueVerificationCode(existingByEmail, { force: true });
 
     return res.status(201).json({ success: true, data: { email: existingByEmail.emailAddress } });
   }
@@ -197,7 +220,7 @@ exports.register = async (req, res) => {
   // Registration no longer means "logged in" — it means "check your email".
   // No token is issued and no full user object is serialized here; the
   // account only becomes usable once verifyRegistration() confirms the code.
-  await issueVerificationCode(user);
+  await issueVerificationCode(user, { force: true });
 
   res.status(201).json({ success: true, data: { email: user.emailAddress } });
 };
@@ -225,13 +248,21 @@ exports.login = async (req, res) => {
   // who is both unverified and would-be-restricted should see the
   // verification message first.
   if (!user.emailVerified) {
+    // The password was correct, so it's safe to tell the client which email
+    // to verify — the login page uses it to open the code screen directly.
     const err = new Error('Please verify your email before signing in. Check your inbox for the verification code.');
     err.statusCode = 403;
+    err.code = 'EMAIL_NOT_VERIFIED';
+    err.details = { email: user.emailAddress };
     throw err;
   }
-  if (user.accountStatus !== 'Active') {
-    const err = new Error(`This account is ${user.accountStatus.toLowerCase()}`);
+  // 'Restricted' (flagged for a damaged/lost item) may still sign in to see
+  // their records; new borrowing requests are refused server-side in
+  // borrow.controller.js. Only 'Blocked' locks the account out entirely.
+  if (user.accountStatus === 'Blocked') {
+    const err = new Error('This account is blocked. Please contact the SDPO office.');
     err.statusCode = 403;
+    err.code = 'ACCOUNT_BLOCKED';
     throw err;
   }
 
@@ -298,7 +329,10 @@ exports.resendVerification = async (req, res) => {
     }
   }
 
-  res.json(genericResponse);
+  // Same response whether or not a new email actually went out (cooldown,
+  // unknown or already-verified address) — no account enumeration. The
+  // client enforces the same cooldown on its Resend button.
+  res.json({ ...genericResponse, data: { cooldownSeconds: RESEND_COOLDOWN_SECONDS } });
 };
 
 exports.forgotPassword = async (req, res) => {

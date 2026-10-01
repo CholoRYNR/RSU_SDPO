@@ -6,41 +6,15 @@
 (function () {
   "use strict";
 
-  var FALLBACK_IMAGE = "../../assets/images/icon-basketball.png";
-
-  // Real product photography for the categories we have shots of — everything
-  // else falls back to the generic equipment icon so the catalog never shows
-  // a broken image for a category we haven't photographed yet.
-  //
-  // Futsal intentionally points at the soccer-ball photo, not a dedicated
-  // "equipment-futsal-ball.png": that file turned out to be a saved
-  // screenshot of the equipment card itself (photo + the "Available" badge
-  // + the EQ-#### id strip baked into the picture), not a plain product
-  // photo, so every Futsal card was compositing a second, fake badge/id
-  // strip on top of the real one. Swap this back to a proper futsal-ball
-  // photo once real equipment photography is in (see the Google Drive photo
-  // set) — asset file itself is untouched, just no longer referenced here.
-  var CATEGORY_PHOTO = {
-    Basketball: "equipment-basketball.png",
-    Volleyball: "equipment-volleyball.png",
-    Football: "equipment-soccer-ball.png",
-    Futsal: "equipment-soccer-ball.png",
-    Badminton: "equipment-badminton-shuttlecock.png",
-    Boxing: "equipment-boxing-gloves.png",
-    Chess: "equipment-chess-clock.png",
-  };
-
-  function categoryImage(category) {
-    return CATEGORY_PHOTO[category]
-      ? "../../assets/images/" + CATEGORY_PHOTO[category]
-      : FALLBACK_IMAGE;
-  }
+  // Images, stock badges and the borrowing cap come from the shared
+  // client/js/shared/equipment-ui.js so this page and the Borrower showroom
+  // always show the same thing for the same equipment.
+  var UI = window.EquipmentUI;
 
   /* ---------- State ---------- */
   var state = {
     equipment: [],
     categories: [], // [{id, categoryName}]
-    qrItems: [], // [{id, code, status, equipmentId, ...}] — from /api/qr/items
     search: "",
     category: "All Categories",
     formMode: "add", // 'add' | 'edit'
@@ -133,33 +107,21 @@
     return item.availableQty > 0 ? item.availableQty : 0;
   }
 
+  // Units actually out with borrowers (each unit's own status — reserved
+  // units awaiting release are not "borrowed").
   function borrowedQty(item) {
-    return Math.max(item.totalQty - item.availableQty, 0);
+    return item.borrowedQty;
   }
 
+  // The canonical Equipment ID comes from the server (helpers/equipmentCode.js)
+  // — the same ID that prefixes every QR item code for this equipment.
   function displayId(item) {
-    return "EQ-" + String(item.id).padStart(3, "0");
+    return item.code;
   }
 
-  // Stock-level warning tier — the approved RSU SDPO Availability Indicator
-  // uses fixed absolute thresholds (not scaled off each equipment's own
-  // total quantity, which is what this used to do — a 20-unit item was
-  // showing "red" at 6 available and "yellow" at 10, well outside the
-  // approved rule below):
-  //   > 5 available = Green  = up to 2 units may be borrowed
-  //   4-5 available = Yellow = only 1 unit may be borrowed
-  //   1-3 available = Red    = borrowing not allowed
-  // Matches the server-side cap in server/controllers/borrow.controller.js
-  // (maxBorrowableUnits) — this function only drives the badge/label shown
-  // here; the server is what actually enforces the cap.
-  function stockLevel(available, total) {
-    if (available <= 0) return "low";
-    if (available <= 3) return "low";
-    if (available <= 5) return "limited";
-    return "available";
+  function stockLevel(available) {
+    return UI.stockLevel(available);
   }
-
-  var STOCK_LABEL = { available: "In Stock", limited: "Low Stock", low: "Critical Stock" };
 
   /* ---------- API ---------- */
   /* apiFetch() comes from client/js/shared/api.js, loaded before this file. */
@@ -175,24 +137,19 @@
       state.equipment = rows.map(function (e) {
         return {
           id: e.id,
+          code: e.equipmentCode,
           name: e.equipmentName,
           categoryId: e.categoryId,
           category: e.category ? e.category.categoryName : "",
           totalQty: e.totalQuantity,
           availableQty: e.availableQuantity,
+          borrowedQty: e.borrowedQuantity || 0,
+          reservedQty: e.reservedQuantity || 0,
+          itemCodes: e.itemCodes || [],
           description: e.description || "",
           photoUrl: e.photoUrl || null,
         };
       });
-    });
-  }
-
-  // QR codes are generated per-equipment from the QR Management page; loading
-  // them here lets the Details modal show how many of this equipment's units
-  // already have a permanent QR/Item Code, without duplicating that logic.
-  function loadQrItems() {
-    return apiFetch("/api/qr/items").then(function (rows) {
-      state.qrItems = rows;
     });
   }
 
@@ -333,35 +290,31 @@
     });
   }
 
+  // One management entry point per card: "View Details" opens stock, QR
+  // codes, photo, Edit and Delete. (A second edit button on the card itself
+  // duplicated the Edit action inside View Details and was removed.)
   function cardTemplate(item) {
     var avail = availableQty(item);
-    var level = stockLevel(avail, item.totalQty);
-    var statusClass = level === "available" ? "available" : level;
-    var statusLabel = avail <= 0 ? "Out of Stock" : STOCK_LABEL[level];
+    var level = stockLevel(avail);
     return (
       '<div class="equipment-card" data-id="' + item.id + '">' +
         '<div class="equipment-card__media">' +
-          '<img src="' + escapeHtml(item.photoUrl || categoryImage(item.category)) + '" alt="' + escapeHtml(item.name) + '" onerror="this.onerror=null;this.src=\'' + FALLBACK_IMAGE + '\'" />' +
-          '<span class="equipment-card__badge equipment-card__badge--' + statusClass + '">' + statusLabel + "</span>" +
-          '<div class="equipment-card__id-strip"><span class="equipment-card__id">' + displayId(item) + "</span></div>" +
+          '<img src="' + escapeHtml(UI.equipmentImage(item)) + '" alt="' + escapeHtml(item.name) + '" loading="lazy" onerror="' + UI.imageFallbackAttr(item.category) + '" />' +
+          '<span class="equipment-card__badge equipment-card__badge--' + level + '">' + UI.stockLabel(avail) + "</span>" +
+          '<div class="equipment-card__id-strip"><span class="equipment-card__id">' + escapeHtml(displayId(item)) + "</span></div>" +
         "</div>" +
         '<div class="equipment-card__body">' +
-          "<h3>" + escapeHtml(item.name) + "</h3>" +
+          '<h3 title="' + escapeHtml(item.name) + '">' + escapeHtml(item.name) + "</h3>" +
           '<div class="equipment-card__tags">' +
             '<span class="chip chip--neutral">' + escapeHtml(item.category) + "</span>" +
           "</div>" +
           '<div class="equipment-card__stock-row' + (level !== "available" ? " equipment-card__stock-row--" + level : "") + '">' +
-            "<span>Stock</span>" +
+            "<span>Available</span>" +
             "<span>" + avail + " / " + item.totalQty + "</span>" +
           "</div>" +
+          '<div class="equipment-card__stock-row"><span>Borrowed</span><span>' + borrowedQty(item) + "</span></div>" +
           '<div class="equipment-card__actions">' +
             '<button type="button" class="btn-details" data-action="details" data-id="' + item.id + '">View Details</button>' +
-            '<button type="button" class="btn-icon-outline" data-action="edit" data-id="' + item.id + '" title="Edit" aria-label="Edit ' + escapeHtml(item.name) + '">' +
-              '<img src="../../assets/icons/icon-filter.svg" alt="" />' +
-            "</button>" +
-            '<button type="button" class="btn-icon-outline" data-action="delete" data-id="' + item.id + '" title="Delete" aria-label="Delete ' + escapeHtml(item.name) + '">' +
-              '<img src="../../assets/icons/icon-trash.svg" alt="" />' +
-            "</button>" +
           "</div>" +
         "</div>" +
       "</div>"
@@ -395,8 +348,6 @@
     var id = Number(btn.getAttribute("data-id"));
     var action = btn.getAttribute("data-action");
     if (action === "details") openDetailsModal(id);
-    else if (action === "edit") openEditModal(id);
-    else if (action === "delete") confirmDelete(id);
   });
 
   searchInput.addEventListener("input", function () {
@@ -412,23 +363,23 @@
     if (!item) return;
     state.detailsId = id;
 
-    detailsHeroImg.src = item.photoUrl || categoryImage(item.category);
+    detailsHeroImg.src = UI.equipmentImage(item);
     detailsHeroImg.onerror = function () {
       detailsHeroImg.onerror = null;
-      detailsHeroImg.src = FALLBACK_IMAGE;
+      detailsHeroImg.src = UI.iconTile(item.category);
     };
     detailsHeroImg.alt = item.name;
     detailsHeroId.textContent = displayId(item);
     detailsName.textContent = item.name;
 
     var avail = availableQty(item);
-    var level = stockLevel(avail, item.totalQty);
+    var level = stockLevel(avail);
     detailsStockTotal.textContent = item.totalQty + " total";
     detailsStockBar.style.width =
       item.totalQty > 0 ? (avail / item.totalQty) * 100 + "%" : "0%";
     detailsStockBar.className =
       "stock-overview__bar-fill" + (level !== "available" ? " stock-overview__bar-fill--" + level : "");
-    detailsStockPill.textContent = avail <= 0 ? "Out of Stock" : STOCK_LABEL[level];
+    detailsStockPill.textContent = UI.stockLabel(avail);
     detailsStockPill.className = "stock-pill stock-pill--" + (level === "available" ? "available" : level);
     detailsStatTotal.textContent = item.totalQty;
     detailsStatAvailable.textContent = avail;
@@ -438,16 +389,10 @@
       '<span class="chip chip--neutral">' + escapeHtml(item.category) + "</span>";
     detailsDescriptionWrap.textContent = item.description || "—";
 
-    var qrForItem = state.qrItems.filter(function (q) {
-      return q.equipmentId === item.id;
-    });
-    if (qrForItem.length === 0) {
-      detailsQrWrap.textContent = "None generated yet";
-    } else {
-      var qrCodes = qrForItem.map(function (q) { return q.code; }).join(", ");
-      detailsQrWrap.textContent =
-        qrForItem.length + " / " + item.totalQty + " — " + qrCodes;
-    }
+    // Unit QR codes all start with this equipment's ID (e.g. EQ-005-001).
+    detailsQrWrap.textContent = item.itemCodes.length
+      ? item.itemCodes.length + " unit(s) — " + item.itemCodes.join(", ")
+      : "No units registered";
 
     openModal(detailsModalOverlay);
   }
@@ -489,7 +434,7 @@
           return e.id === id ? Object.assign({}, e, { photoUrl: updated.photoUrl }) : e;
         });
         detailsHeroImg.onerror = null;
-        detailsHeroImg.src = updated.photoUrl + "?t=" + Date.now(); // cache-bust this view immediately
+        detailsHeroImg.src = updated.photoUrl; // versioned URL — changes only when the photo does
         renderGrid();
         showToast("Photo updated");
       })
@@ -555,7 +500,7 @@
     state.editingId = null;
 
     formModalTitle.textContent = "Add Equipment";
-    formModalSubtitle.textContent = "A new equipment ID will be assigned automatically";
+    formModalSubtitle.textContent = "An Equipment ID and one QR item code per unit are assigned automatically";
 
     equipmentForm.reset();
     fieldName.value = "";
@@ -740,6 +685,7 @@
               body: JSON.stringify(data),
             });
 
+        formSubmitBtn.disabled = true;
         request
           .then(function () {
             return loadEquipment();
@@ -754,6 +700,9 @@
           })
           .catch(function (err) {
             showToast(err.message, "danger");
+          })
+          .then(function () {
+            formSubmitBtn.disabled = false;
           });
       }
     );
@@ -763,7 +712,7 @@
   // Sidebar/topbar chrome (clock, Settings, Sign Out, logged-in user card) is
   // owned by app-shell.js now, not duplicated here.
   function init() {
-    Promise.all([loadCategories(), loadEquipment(), loadQrItems()])
+    Promise.all([loadCategories(), loadEquipment()])
       .then(function () {
         populateCategoryOptions();
         renderCategoryPanel();

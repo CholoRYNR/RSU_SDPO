@@ -8,5 +8,6 @@ const router = express.Router();
 const staffOnly = roleMiddleware(['Admin', 'Director', 'Staff']);
 
 router.get('/summary', authMiddleware, staffOnly, catchAsync(ctrl.summary));
+router.get('/me', authMiddleware, roleMiddleware(['Borrower']), catchAsync(ctrl.mine));
 
 module.exports = router;

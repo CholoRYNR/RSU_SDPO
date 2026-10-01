@@ -111,6 +111,13 @@ app.use('/api/auth/verify-registration', makeCodeRateLimiter());
 app.use('/api/auth/resend-verification', makeCodeRateLimiter());
 app.use('/api/auth/forgot-password', makeCodeRateLimiter());
 app.use('/api/auth/reset-password', makeCodeRateLimiter());
+// API responses are live data (stock, statuses, dashboards) — never let a
+// browser or proxy serve a cached copy. Routes that are safe to cache (the
+// versioned equipment photo) override this header themselves.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api', routes);
 
 // Static client (optional, adjust if serving client separately)

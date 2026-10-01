@@ -60,6 +60,9 @@ async function generateUniqueUsername(email) {
 async function handleGoogleProfile(profile) {
   const existingByGoogleId = await User.findOne({ where: { googleId: profile.id } });
   if (existingByGoogleId) {
+    if (existingByGoogleId.userRole !== 'Borrower') {
+      throw new Error('This Google account is linked to a staff account. Please sign in with your username and password.');
+    }
     return existingByGoogleId;
   }
 
@@ -78,6 +81,10 @@ async function handleGoogleProfile(profile) {
     if (existingByEmail.userRole !== 'Borrower') {
       const err = new Error('This email belongs to a staff account. Please sign in with your username and password.');
       throw err;
+    }
+    // Never silently re-point an account to a different Google identity.
+    if (existingByEmail.googleId && existingByEmail.googleId !== profile.id) {
+      throw new Error('This email is already linked to a different Google account. Please sign in with your username and password.');
     }
     existingByEmail.googleId = profile.id;
     await existingByEmail.save();
@@ -101,13 +108,18 @@ async function handleGoogleProfile(profile) {
   const randomPassword = crypto.randomBytes(32).toString('hex');
   const passwordHash = await bcrypt.hash(randomPassword, 10);
 
+  // Starts unverified: like a password sign-up, a Google sign-up must
+  // confirm the emailed code before it can access the system. The OAuth
+  // callback (routes/auth.routes.js) sends the code and refuses to issue a
+  // session while emailVerified is false.
   const created = await User.create({
     username,
     emailAddress: email,
     password: passwordHash,
     userRole: 'Borrower',
     googleId: profile.id,
-    accountStatus: 'Active'
+    accountStatus: 'Active',
+    emailVerified: false
   });
 
   return created;

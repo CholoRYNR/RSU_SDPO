@@ -72,6 +72,18 @@ describe('config/passport.js#handleGoogleProfile', () => {
     expect(User.create).not.toHaveBeenCalled();
   });
 
+  test('branch 2b: never re-points an account already linked to a different Google identity', async () => {
+    const existing = { id: 2, userRole: 'Borrower', googleId: 'google-OTHER', save: jest.fn() };
+    User.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(existing);
+    await expect(handleGoogleProfile(makeProfile())).rejects.toThrow(/different Google account/i);
+    expect(existing.save).not.toHaveBeenCalled();
+  });
+
+  test('branch 1b: a googleId linked to a staff account is refused', async () => {
+    User.findOne.mockResolvedValueOnce({ id: 1, googleId: 'google-123', userRole: 'Director' });
+    await expect(handleGoogleProfile(makeProfile())).rejects.toThrow(/staff account/i);
+  });
+
   test('branch 3: rejects (never links, never creates) when the matched email belongs to a non-Borrower account', async () => {
     const existing = { id: 3, userRole: 'Admin', save: jest.fn() };
     User.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(existing);
@@ -115,6 +127,8 @@ describe('config/passport.js#handleGoogleProfile', () => {
         userRole: 'Borrower',
         googleId: 'google-999',
         accountStatus: 'Active',
+        // Must verify the emailed code before any session is issued.
+        emailVerified: false,
         password: 'hashed-random-password'
       })
     );

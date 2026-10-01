@@ -6,7 +6,6 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       Borrower.belongsTo(models.User, { foreignKey: 'userId', as: 'user' });
       Borrower.hasMany(models.Item, { foreignKey: 'currentBorrowerId', as: 'currentItems' });
-      Borrower.hasMany(models.MaintenanceFee, { foreignKey: 'borrowerId', as: 'maintenanceFees' });
       Borrower.hasMany(models.Transaction, { foreignKey: 'borrowerId', as: 'transactions' });
     }
   }

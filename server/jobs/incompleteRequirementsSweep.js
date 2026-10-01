@@ -3,6 +3,7 @@
 const { Transaction, Borrower, User } = require('../models');
 const { Op } = require('sequelize');
 const { notifyBorrower } = require('../helpers/notify');
+const { missingDocuments } = require('../constants/borrowerCategories');
 
 // Reminds a borrower with an active, not-yet-approved request that a
 // required document is missing, so the request doesn't silently stall at
@@ -33,23 +34,14 @@ async function runIncompleteRequirementsSweep() {
       const borrower = txn.borrower;
 
       if (borrower && borrower.user) {
-        const missingId = !borrower.validIdPath;
-        const missingAuth = !borrower.authorizationDocumentPath;
-
-        if (missingId || missingAuth) {
-          let missingText;
-          if (missingId && missingAuth) {
-            missingText = 'your Valid ID and your Authorization Document';
-          } else if (missingId) {
-            missingText = 'your Valid ID';
-          } else {
-            missingText = 'your Authorization Document';
-          }
-
+        // Same per-borrower-type rules the request wizard and staff review use.
+        const missing = missingDocuments(borrower);
+        if (missing.length) {
           await notifyBorrower(
             borrower.user.id,
-            `Your borrowing request (Transaction #${txn.id}) is missing ${missingText}. Please upload it as soon as possible so your request isn't delayed.`,
-            'Incomplete Requirements'
+            `Your borrowing request (Transaction #${txn.id}) is missing: ${missing.join(', ')}. Please upload it as soon as possible so your request isn't delayed.`,
+            'Incomplete Requirements',
+            `txn-${txn.id}-incomplete-requirements`
           );
           sentCount += 1;
         }

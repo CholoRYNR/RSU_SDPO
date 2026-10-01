@@ -3,6 +3,7 @@
 const { Transaction, Borrower, User } = require('../models');
 const { Op } = require('sequelize');
 const { notifyBorrower } = require('../helpers/notify');
+const { formatDateTime } = require('../helpers/dateHelper');
 
 // Reminds a borrower their equipment is due back soon, BEFORE it becomes
 // overdue (overdueSweep.js only fires AFTER the due date passes). Matches
@@ -34,12 +35,13 @@ async function runDueDateReminderSweep() {
     try {
       if (txn.borrower && txn.borrower.user) {
         const dueText = txn.expectedReturnDatetime
-          ? new Date(txn.expectedReturnDatetime).toLocaleString()
+          ? formatDateTime(txn.expectedReturnDatetime)
           : 'soon';
         await notifyBorrower(
           txn.borrower.user.id,
           `Reminder: your borrowed equipment (Transaction #${txn.id}) is due back on ${dueText}. Please return it to the SDPO office on time.`,
-          'Due Date Reminder'
+          'Due Date Reminder',
+          `txn-${txn.id}-due-reminder`
         );
       }
 

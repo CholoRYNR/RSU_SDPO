@@ -45,6 +45,22 @@ router.get(
     const withBorrower = await User.findByPk(req.user.id, {
       include: [{ model: Borrower, as: 'borrowerProfile' }]
     });
+
+    if (withBorrower.accountStatus === 'Blocked') {
+      return res.redirect(
+        `/pages/auth/user-login.html?oauth_error=${encodeURIComponent('This account is blocked. Please contact the SDPO office.')}`
+      );
+    }
+
+    // No session for an unverified account — same rule as password login.
+    // A verification code is emailed (subject to the resend cooldown, so
+    // repeated Google attempts don't flood the inbox) and the login page
+    // opens its code screen for this email. The email travels in the URL
+    // fragment, which never reaches server logs.
+    if (!withBorrower.emailVerified) {
+      await ctrl.issueVerificationCode(withBorrower);
+      return res.redirect(`/pages/auth/user-login.html#verify=${encodeURIComponent(withBorrower.emailAddress)}`);
+    }
     const token = ctrl.signToken(withBorrower);
     const serialized = ctrl.serializeUser(withBorrower);
     // A URL fragment (#), not a query string: fragments never leave the

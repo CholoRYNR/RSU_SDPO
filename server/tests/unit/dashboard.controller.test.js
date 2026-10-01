@@ -14,10 +14,13 @@ jest.mock('../../models', () => ({
   Equipment: { findAll: jest.fn() },
   Category: {},
   Item: {},
-  Transaction: { findAll: jest.fn() }
+  TransactionDetail: {},
+  Transaction: { findAll: jest.fn(), min: jest.fn() },
+  Borrower: { count: jest.fn(), findOne: jest.fn() },
+  User: { count: jest.fn() }
 }));
 
-const { Equipment, Transaction } = require('../../models');
+const { Equipment, Transaction, Borrower, User } = require('../../models');
 const ctrl = require('../../controllers/dashboard.controller');
 
 function mockRes() {
@@ -41,13 +44,18 @@ function makeEquipment(overrides = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  Transaction.min.mockResolvedValue(null);
+  Borrower.count.mockResolvedValue(0);
+  User.count.mockResolvedValue(0);
 });
 
 describe('GET /api/dashboard/summary — equipment stats', () => {
-  test('sums totalQuantity/availableQuantity across all equipment, and computes availablePercent', async () => {
+  // "Available" is counted from each unit's own status (same source as
+  // "Borrowed"), so the two figures can never disagree with the units.
+  test('sums totalQuantity and Available units across all equipment, and computes availablePercent', async () => {
     Equipment.findAll.mockResolvedValue([
-      makeEquipment({ totalQuantity: 10, availableQuantity: 5 }),
-      makeEquipment({ totalQuantity: 10, availableQuantity: 5 })
+      makeEquipment({ totalQuantity: 10, availableQuantity: 5, items: [...Array.from({ length: 5 }, () => ({ availabilityStatus: 'Available' })), ...Array.from({ length: 5 }, () => ({ availabilityStatus: 'Borrowed' }))] }),
+      makeEquipment({ totalQuantity: 10, availableQuantity: 5, items: Array.from({ length: 5 }, () => ({ availabilityStatus: 'Available' })) })
     ]);
     Transaction.findAll.mockResolvedValue([]);
 
@@ -110,33 +118,35 @@ describe('GET /api/dashboard/summary — equipment stats', () => {
 });
 
 describe('GET /api/dashboard/summary — overdueCount', () => {
-  test('counts only Released transactions whose expected return date has passed', async () => {
+  // Transactions the hourly sweep has already flipped to 'Overdue' are
+  // still overdue — they used to drop out of this count entirely.
+  test('counts Overdue transactions plus Released ones whose expected return date has passed', async () => {
     Equipment.findAll.mockResolvedValue([]);
     const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
     Transaction.findAll.mockResolvedValue([
       { transactionStatus: 'Released', expectedReturnDatetime: past }, // overdue
       { transactionStatus: 'Released', expectedReturnDatetime: future }, // not yet due
-      { transactionStatus: 'Overdue', expectedReturnDatetime: past }, // already flipped by the sweep, not "Released" anymore
+      { transactionStatus: 'Overdue', expectedReturnDatetime: past }, // flipped by the sweep — still overdue
       { transactionStatus: 'Completed', expectedReturnDatetime: past }
     ]);
 
     const res = mockRes();
     await ctrl.summary({ query: {} }, res);
 
-    expect(res.json.mock.calls[0][0].data.overdueCount).toBe(1);
+    expect(res.json.mock.calls[0][0].data.overdueCount).toBe(2);
   });
 });
 
 describe('GET /api/dashboard/summary — usage trend', () => {
-  test('buckets releaseDatetime/returnDatetime into 7 daily labels, most recent last', async () => {
+  // Counts units (transaction details), bucketed by Philippine calendar day.
+  test('buckets released/returned units into 7 PHT daily labels, most recent last', async () => {
     Equipment.findAll.mockResolvedValue([]);
-    const today = new Date();
-    today.setHours(12, 0, 0, 0);
+    const now = new Date();
     Transaction.findAll.mockResolvedValue([
-      { releaseDatetime: today, returnDatetime: null },
-      { releaseDatetime: today, returnDatetime: null },
-      { releaseDatetime: null, returnDatetime: today }
+      { releaseDatetime: now, returnDatetime: null, details: [{ id: 1 }] },
+      { releaseDatetime: now, returnDatetime: null, details: [{ id: 2 }] },
+      { releaseDatetime: null, returnDatetime: now, details: [{ id: 3 }] }
     ]);
 
     const res = mockRes();
@@ -213,5 +223,75 @@ describe('GET /api/dashboard/summary — category distribution', () => {
 
     const dist = res.json.mock.calls[0][0].data.categoryDistribution;
     expect(dist.find((d) => d.categoryName === 'Other')).toBeUndefined();
+  });
+});
+
+describe('GET /api/dashboard/summary — semester selection', () => {
+  test('requests made in the selected semester are counted; the term is reported back', async () => {
+    Equipment.findAll.mockResolvedValue([]);
+    Transaction.findAll.mockResolvedValue([]);
+    const res = mockRes();
+    await ctrl.summary({ query: { academicYear: '2025', semester: '2' } }, res);
+
+    const data = res.json.mock.calls[0][0].data;
+    expect(data.term).toMatchObject({ academicYear: '2025-2026', semester: 2, semesterLabel: '2nd Semester' });
+    // 2nd Semester 2025-2026 = Jan 1 – Jul 31 2026, bounded at 00:00 PHT.
+    expect(data.term.start.toISOString()).toBe('2025-12-31T16:00:00.000Z');
+    expect(data.term.end.toISOString()).toBe('2026-07-31T16:00:00.000Z');
+    const termQuery = Transaction.findAll.mock.calls.find((c) => c[0].where && c[0].where.requestDatetime)[0];
+    const { Op } = require('sequelize');
+    expect(termQuery.where.requestDatetime[Op.gte].toISOString()).toBe('2025-12-31T16:00:00.000Z');
+    expect(termQuery.where.requestDatetime[Op.lt].toISOString()).toBe('2026-07-31T16:00:00.000Z');
+  });
+
+  test('switching semesters changes the query window (1st Semester = Aug–Dec)', async () => {
+    Equipment.findAll.mockResolvedValue([]);
+    Transaction.findAll.mockResolvedValue([]);
+    const res = mockRes();
+    await ctrl.summary({ query: { academicYear: '2025', semester: '1' } }, res);
+    const term = res.json.mock.calls[0][0].data.term;
+    expect(term.start.toISOString()).toBe('2025-07-31T16:00:00.000Z');
+    expect(term.end.toISOString()).toBe('2025-12-31T16:00:00.000Z');
+  });
+
+  test('request outcome counts come from the term\'s transactions', async () => {
+    Equipment.findAll.mockResolvedValue([]);
+    Transaction.findAll.mockImplementation(async (opts) =>
+      opts.where && opts.where.requestDatetime
+        ? [
+            { borrowerId: 1, transactionStatus: 'Acknowledged', details: [] },
+            { borrowerId: 1, transactionStatus: 'For Approval', details: [] },
+            { borrowerId: 2, transactionStatus: 'Approved', details: [] },
+            { borrowerId: 2, transactionStatus: 'Completed', returnDatetime: new Date('2026-02-01T00:00:00Z'), details: [{}, {}] },
+            { borrowerId: 3, transactionStatus: 'Rejected', details: [] }
+          ]
+        : []
+    );
+    const res = mockRes();
+    await ctrl.summary({ query: { academicYear: '2025', semester: '2' } }, res);
+    const d = res.json.mock.calls[0][0].data;
+    expect(d).toMatchObject({
+      totalTransactions: 5,
+      pendingRequests: 2,
+      awaitingReview: 1,
+      awaitingApproval: 1,
+      approvedRequests: 2,
+      rejectedRequests: 1,
+      returnedEquipment: 2,
+      activeBorrowers: 3
+    });
+  });
+});
+
+describe('GET /api/dashboard/me — borrower dashboard', () => {
+  test('only counts the signed-in borrower\'s own transactions', async () => {
+    Equipment.findAll.mockResolvedValue([]);
+    Borrower.findOne.mockResolvedValue({ id: 44 });
+    Transaction.findAll.mockResolvedValue([]);
+    const res = mockRes();
+    await ctrl.mine({ user: { id: 9 }, query: {} }, res);
+    expect(Borrower.findOne).toHaveBeenCalledWith({ where: { userId: 9 } });
+    Transaction.findAll.mock.calls.forEach(([opts]) => expect(opts.where.borrowerId).toBe(44));
+    expect(res.json.mock.calls[0][0].data.mine).toMatchObject({ pendingRequests: 0, borrowedUnits: 0 });
   });
 });

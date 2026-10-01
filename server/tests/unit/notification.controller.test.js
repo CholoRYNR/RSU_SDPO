@@ -60,14 +60,15 @@ describe('GET /api/notifications (list)', () => {
     await ctrl.list(req, res);
 
     expect(Notification.findAll).toHaveBeenCalledWith({
-      where: { userId: 7 },
+      // Only in-app rows; legacy per-channel Email/SMS copies are not notifications.
+      where: { userId: 7, deliveryChannel: 'System' },
       order: [['id', 'DESC']]
     });
     const payload = res.json.mock.calls[0][0];
     expect(payload.success).toBe(true);
     expect(payload.data).toEqual([
-      { id: 2, type: 'Approval', message: 'Approved', deliveryChannel: 'In-App', isRead: false, sentAt: '2026-01-02' },
-      { id: 1, type: 'Release', message: 'Released', deliveryChannel: 'Email', isRead: true, sentAt: '2026-01-01' }
+      { id: 2, type: 'Approval', message: 'Approved', isRead: false, sentAt: '2026-01-02' },
+      { id: 1, type: 'Release', message: 'Released', isRead: true, sentAt: '2026-01-01' }
     ]);
   });
 });

@@ -93,8 +93,9 @@
     // here or a borrower's own in-flight request is invisible to them.
     const REQUEST_STATUSES=['Acknowledged','For Approval','Approved','Rejected','Cancelled'];
     const NOTE_BY_STATUS={
-      Acknowledged:'Your request is awaiting staff review.',
-      'For Approval':'Your request passed staff review and is awaiting Director approval.',
+      Pending:'Your request is awaiting SDPO staff review of your submitted documents.',
+      Acknowledged:'Your request is awaiting SDPO staff review of your submitted documents.',
+      'For Approval':'Your documents were verified. The request is awaiting Director approval.',
       Approved:'Please present your student ID when claiming the equipment.',
       Cancelled:'This request was cancelled.'
     };
@@ -119,7 +120,7 @@
         cancelled:t.cancelledAt||null,
         items:groupItems(t.items),
         total:t.items.length,
-        returnDate:t.due,
+        returnDate:t.due+(t.dueTime?' '+t.dueTime:''),
         purpose:t.purpose,
         note:t.status==='Approved'?(acknowledged?AWAITING_RELEASE_NOTE:ACK_NOTE):NOTE_BY_STATUS[t.status]
       };
@@ -134,7 +135,10 @@
 
     const filterList=['All','Acknowledged','For Approval','Approved','Rejected','Cancelled'];
     let active='All',term='';
-    const icon={Acknowledged:'◷','For Approval':'◷',Approved:'✓',Rejected:'⊗',Cancelled:'⊘',Completed:'✓'};
+    const ICONS={Pending:'◷',Acknowledged:'◷','For Approval':'◷',Approved:'✓',Rejected:'⊗',Cancelled:'⊘',Completed:'✓'};
+    const icon=new Proxy(ICONS,{get:(o,k)=>o[k]||'•'});
+    // Borrower-facing label: 'Acknowledged' means submitted, awaiting document review.
+    const statusLabel=s=>s==='Acknowledged'?'Awaiting Document Review':s==='For Approval'?'Awaiting Director Approval':s;
     const classFor=s=>s.toLowerCase().replace(/\s+/g,'-');
     const countFor=s=>s==='All'?requests.length:requests.filter(r=>r.status===s).length;
 
@@ -144,7 +148,7 @@
     const detailModalOverlay=$('detailModalOverlay'),detailModalTitle=$('detailModalTitle'),detailModalSub=$('detailModalSub'),detailModalBody=$('detailModalBody'),detailModalFoot=$('detailModalFoot');
 
     function renderFilters(){
-      filtersEl.innerHTML=filterList.map(s=>`<button type="button" class="filter-pill ${s===active?'active':''}" data-filter="${s}">${s}<span class="count">${countFor(s)}</span></button>`).join('');
+      filtersEl.innerHTML=filterList.map(s=>`<button type="button" class="filter-pill ${s===active?'active':''}" data-filter="${s}">${s==='All'?s:statusLabel(s)}<span class="count">${countFor(s)}</span></button>`).join('');
     }
 
     function renderCards(){
@@ -152,7 +156,7 @@
       cards.innerHTML=rows.length?rows.map(r=>`<article class="request-card">
         <div class="request-card__head">
           <div><div class="request-id">Request #${esc(r.id)}</div><div class="requested-on">Requested: ${esc(r.date)}</div></div>
-          <span class="badge ${classFor(r.status)}">${icon[r.status]} ${esc(r.status)}</span>
+          <span class="badge ${classFor(r.status)}">${icon[r.status]} ${esc(statusLabel(r.status))}</span>
         </div>
         <div class="request-card__body">
           <div class="field-label">Equipment Requested</div>
@@ -166,7 +170,7 @@
           </div>
           <div class="actions">
             <button type="button" class="btn btn-secondary detail-btn" data-id="${esc(r.id)}">View Details</button>
-            ${r.status==='Pending'?`<button type="button" class="btn btn-outline-danger cancel-btn" data-id="${esc(r.id)}">Cancel Request</button>`:''}
+            ${['Pending','Acknowledged'].includes(r.status)?`<button type="button" class="btn btn-outline-danger cancel-btn" data-id="${esc(r.id)}">Cancel Request</button>`:''}
             ${r.status==='Approved'&&!r.acknowledged?`<button type="button" class="btn btn-primary ack-btn" data-id="${esc(r.id)}">Acknowledge Receipt</button>`:''}
           </div>
         </div>
@@ -178,7 +182,7 @@
       detailModalTitle.textContent=`Request #${r.id}`;
       detailModalSub.textContent=`Requested: ${r.date}`;
       detailModalBody.innerHTML=`<div class="detail-grid">
-        <div class="detail-field"><small>Status</small><span class="badge ${classFor(r.status)}">${icon[r.status]} ${esc(r.status)}</span></div>
+        <div class="detail-field"><small>Status</small><span class="badge ${classFor(r.status)}">${icon[r.status]} ${esc(statusLabel(r.status))}</span></div>
         <div class="detail-field"><small>Expected return</small><b>${esc(r.returnDate)}</b></div>
         <div class="detail-field"><small>Purpose</small><b>${esc(r.purpose)}</b></div>
         <div class="detail-field"><small>Total requested</small><b>${r.total} units</b></div>
@@ -186,7 +190,7 @@
       <h3>Equipment requested</h3>
       <ul class="detail-items">${r.items.map(([n,q])=>`<li><span>${esc(n)}</span><b>${q} ${q===1?'unit':'units'}</b></li>`).join('')}</ul>
       <div class="modal-note ${r.reason?'reject':''}">${r.reason?'Reason for rejection: '+esc(r.reason):esc(r.note||'')}</div>`;
-      detailModalFoot.innerHTML=`<button type="button" class="btn btn-secondary" id="modalCloseBtn">Close</button>${r.status==='Pending'?'<button type="button" class="btn btn-outline-danger" id="modalCancelBtn">Cancel Request</button>':''}${r.status==='Approved'&&!r.acknowledged?'<button type="button" class="btn btn-primary" id="modalAckBtn">Acknowledge Receipt</button>':''}`;
+      detailModalFoot.innerHTML=`<button type="button" class="btn btn-secondary" id="modalCloseBtn">Close</button>${['Pending','Acknowledged'].includes(r.status)?'<button type="button" class="btn btn-outline-danger" id="modalCancelBtn">Cancel Request</button>':''}${r.status==='Approved'&&!r.acknowledged?'<button type="button" class="btn btn-primary" id="modalAckBtn">Acknowledge Receipt</button>':''}`;
       detailModalOverlay.hidden=false;
       $('modalCloseBtn').addEventListener('click',closeDetails);
       const cancelBtn=$('modalCancelBtn');
@@ -197,6 +201,7 @@
     function closeDetails(){detailModalOverlay.hidden=true;}
     function cancelRequest(id){
       const r=requests.find(x=>x.id===id);
+      if(!confirm('Cancel request '+r.id+'?'))return;
       apiFetch('/api/borrow/'+r.dbId+'/cancel',{method:'PATCH'})
         .then(()=>loadRequests())
         .then(()=>{

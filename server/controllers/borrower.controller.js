@@ -1,7 +1,9 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { Borrower, User } = require('../models');
+const { requirementsFor, missingDocuments } = require('../constants/borrowerCategories');
 const { getClient } = require('../config/supabase');
 
 const DOCUMENTS_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'borrower-documents';
@@ -29,10 +31,17 @@ exports.list = async (req, res) => {
   res.json({ success: true, data: rows.map(serialize) });
 };
 
+// Upload state plus what this borrower's type requires, so every screen
+// (borrower wizard, staff review drawer) uses the same server-side rules.
 function documentStatus(borrower) {
+  const requirements = requirementsFor(borrower && borrower.borrowerCategory);
   return {
+    borrowerCategory: borrower ? borrower.borrowerCategory : null,
     validIdUploaded: !!(borrower && borrower.validIdPath),
-    authorizationDocumentUploaded: !!(borrower && borrower.authorizationDocumentPath)
+    authorizationDocumentUploaded: !!(borrower && borrower.authorizationDocumentPath),
+    validIdRequired: requirements.needsValidId,
+    authorizationDocumentLabel: requirements.documentLabel,
+    missing: borrower ? missingDocuments(borrower) : []
   };
 }
 
@@ -124,10 +133,53 @@ exports.downloadDocument = async (req, res) => {
     throw err;
   }
 
-  const { data, error } = await getClient().storage.from(DOCUMENTS_BUCKET).download(borrower[field]);
-  if (error || !data) {
+  const file = await readDocument(borrower[field]);
+  if (!file) {
     return res.status(404).json({ success: false, message: 'Document file is missing in storage' });
   }
-  res.set('Content-Type', data.type || 'application/octet-stream');
-  res.send(Buffer.from(await data.arrayBuffer()));
+  // Private, per-user content: never cache, and never let the browser guess
+  // a different content type than the one stored.
+  res.set('Content-Type', file.contentType);
+  res.set('Cache-Control', 'private, no-store');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.send(file.buffer);
 };
+
+// Documents live in the private Supabase Storage bucket. Uploads made
+// before the move to Supabase were written to server/uploads/<folder>/ with
+// the same relative key, so those are served from disk when the bucket
+// doesn't have them — previously they returned "missing" and could never
+// be reviewed. The key comes from the database (never the request), and is
+// still confined to the uploads directory.
+const LOCAL_UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+const CONTENT_TYPES = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+};
+
+async function readDocument(key) {
+  try {
+    const { data, error } = await getClient().storage.from(DOCUMENTS_BUCKET).download(key);
+    if (!error && data) {
+      return {
+        buffer: Buffer.from(await data.arrayBuffer()),
+        contentType: data.type || CONTENT_TYPES[path.extname(key).toLowerCase()] || 'application/octet-stream'
+      };
+    }
+  } catch (err) {
+    console.error('[documents] Storage download failed:', err.message);
+  }
+
+  const resolved = path.resolve(LOCAL_UPLOADS_DIR, String(key).replace(/^[/\\]+/, ''));
+  if (!resolved.startsWith(LOCAL_UPLOADS_DIR + path.sep)) return null;
+  try {
+    const buffer = await fs.promises.readFile(resolved);
+    return { buffer, contentType: CONTENT_TYPES[path.extname(resolved).toLowerCase()] || 'application/octet-stream' };
+  } catch (e) {
+    return null;
+  }
+}

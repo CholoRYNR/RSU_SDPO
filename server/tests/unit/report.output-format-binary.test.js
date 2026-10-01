@@ -196,8 +196,11 @@ describe('?format=excel on every /api/reports/* endpoint (empty dataset)', () =>
     const wb = await readXlsx(buf);
     expect(wb.worksheets.length).toBeGreaterThanOrEqual(1);
     const sheet = wb.worksheets[0];
-    // Row 1 = "RSU SDPO - <title>" banner, always present.
-    expect(String(sheet.getCell(1, 1).value)).toMatch(/^RSU SDPO -/);
+    // Rows 1-5 = the same letterhead as the PDF (one template for every report).
+    expect(String(sheet.getCell(1, 1).value)).toBe('Republic of the Philippines');
+    expect(String(sheet.getCell(2, 1).value)).toBe('ROMBLON STATE UNIVERSITY');
+    expect(String(sheet.getCell(4, 1).value)).toBe('SPORTS DEVELOPMENT PROGRAM OFFICE');
+    expect(String(sheet.getCell(6, sheet.getRow(6).cellCount).value || '')).toMatch(/Generated On: .*\(PHT\)/);
   });
 });
 

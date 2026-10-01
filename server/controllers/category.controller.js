@@ -14,13 +14,10 @@ exports.list = async (req, res) => {
 // Lets Admin/Director/Staff add a new equipment category from the Equipment
 // Showroom's Add/Edit form, instead of being limited to the 14 categories
 // seeded when this system launched (server/database/seeders/001_seed_categories.js).
-// No abbreviation needs to be registered anywhere for the new category to
-// work end to end: item-code generation (qr.controller.js#generate) already
-// falls back to the category name's first 3 letters, uppercased, for any
-// name not in server/constants/categoryAbbreviations.js, and the Equipment
-// Showroom's product-photo lookup (client/js/equipment/equipment.js#categoryImage)
-// already falls back to a generic icon for any category without a photo —
-// both were designed for exactly this.
+// Nothing else needs registering for a new category to work end to end:
+// unit/QR codes derive from the equipment's own ID (helpers/equipmentCode.js),
+// and the shared image lookup (client/js/shared/equipment-ui.js) falls back
+// to a neutral sport tile for any category without a product photo.
 exports.create = async (req, res) => {
   const categoryName = String(req.body.categoryName || '').trim();
   const description = String(req.body.description || '').trim() || null;

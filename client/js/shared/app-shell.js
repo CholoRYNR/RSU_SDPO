@@ -124,7 +124,7 @@
     var days = Math.round(hours / 24);
     if (days === 1) return 'Yesterday';
     if (days < 7) return days + ' days ago';
-    return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    return new Date(iso).toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   function notifTypeClass(backendType) {
@@ -390,8 +390,9 @@
     var dateEl = document.getElementById('shellClockDate');
     function tick() {
       var now = new Date();
-      if (timeEl) timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      if (dateEl) dateEl.textContent = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      // Always Philippine Time, matching every recorded timestamp.
+      if (timeEl) timeEl.textContent = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' });
+      if (dateEl) dateEl.textContent = now.toLocaleDateString('en-US', { timeZone: 'Asia/Manila', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     }
     tick();
     setInterval(tick, 1000);
@@ -413,6 +414,21 @@
         window.location.href = base + (role === 'user' ? 'pages/auth/user-login.html' : 'pages/auth/admin-login.html');
       });
     });
+  }
+
+  // Keeps the cached signed-in user (name, Borrower Type, college, account
+  // status) identical to the database on every page load, so a profile or
+  // Borrower Type change made on another page/device shows up everywhere.
+  // The server also re-validates the account on every API call, so an
+  // unverified/blocked account is signed out here (AUTH_EXPIRED).
+  function syncSessionUser() {
+    if (!localStorage.getItem('rsuSdpoToken')) return;
+    shellApiFetch('/api/auth/me').then(function (user) {
+      var before = localStorage.getItem('rsuSdpoUser');
+      var after = JSON.stringify(user);
+      localStorage.setItem('rsuSdpoUser', after);
+      if (before !== after) document.dispatchEvent(new CustomEvent('appshell:user-updated', { detail: user }));
+    }).catch(function () { /* expired sessions are handled in shellApiFetch */ });
   }
 
   // --- Assemble shell ---
@@ -444,6 +460,7 @@
   updateBellState();
   wireUtility();
   loadRealNotifications(refreshNotifPanel);
+  syncSessionUser();
 
   document.dispatchEvent(new Event('appshell:ready'));
 })();

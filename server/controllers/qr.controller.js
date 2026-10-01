@@ -1,20 +1,32 @@
 'use strict';
 
+const { Op } = require('sequelize');
 const { Item, Equipment, Category, Borrower, TransactionDetail, Transaction, sequelize } = require('../models');
-const categoryAbbreviations = require('../constants/categoryAbbreviations');
+const { formatEquipmentCode } = require('../helpers/equipmentCode');
+const { createUnits } = require('./equipment.controller');
 
 function serializeItem(item) {
   return {
     id: item.id,
     code: item.itemCode,
+    legacyCode: item.legacyItemCode || null,
     condition: item.itemCondition,
     status: item.availabilityStatus,
     engravingStatus: item.engravingStatus,
     createdAt: item.createdAt,
     equipmentId: item.equipmentId,
+    equipmentCode: formatEquipmentCode(item.equipmentId),
     equipmentName: item.equipment ? item.equipment.equipmentName : null,
     category: item.equipment && item.equipment.category ? item.equipment.category.categoryName : null
   };
+}
+
+// Resolves a scanned/entered code to its unit. Canonical codes are tried
+// first; a code printed before codes were standardized (migration 023)
+// still resolves to the same unit through legacyItemCode.
+function whereCode(code) {
+  const value = String(code || '').trim();
+  return { [Op.or]: [{ itemCode: value }, { legacyItemCode: value }] };
 }
 
 exports.listItems = async (req, res) => {
@@ -34,43 +46,31 @@ exports.generate = async (req, res) => {
     throw err;
   }
 
-  const equipment = await Equipment.findByPk(equipmentId, { include: [{ model: Category, as: 'category' }] });
-  if (!equipment) {
-    const err = new Error('Equipment not found');
-    err.statusCode = 404;
-    throw err;
-  }
-
+  // Equipment created through Equipment Management already gets one unit
+  // per unit of stock. This only registers units an equipment record is
+  // still missing (total quantity not yet backed by unit records), using
+  // the same canonical "<Equipment ID>-<sequence>" codes.
   const createdIds = await sequelize.transaction(async (t) => {
+    const equipment = await Equipment.findByPk(equipmentId, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!equipment) {
+      const err = new Error('Equipment not found');
+      err.statusCode = 404;
+      throw err;
+    }
     const existingCount = await Item.count({ where: { equipmentId }, transaction: t });
     const remaining = equipment.totalQuantity - existingCount;
     if (qty > remaining) {
       const err = new Error(
-        `Only ${remaining} more item(s) can be generated for "${equipment.equipmentName}" ` +
+        `Only ${Math.max(remaining, 0)} more item(s) can be generated for "${equipment.equipmentName}" ` +
           `(total quantity is ${equipment.totalQuantity}, ${existingCount} already exist)`
       );
       err.statusCode = 400;
       throw err;
     }
 
-    const abbr =
-      categoryAbbreviations[equipment.category.categoryName] || equipment.category.categoryName.slice(0, 3).toUpperCase();
-    const rows = [];
-    for (let i = 1; i <= qty; i += 1) {
-      const sequence = String(existingCount + i).padStart(3, '0');
-      rows.push({
-        equipmentId,
-        itemCode: `${abbr}-${equipmentId}-${sequence}`,
-        itemCondition: 'Good',
-        availabilityStatus: 'Available',
-        engravingStatus: 'Not Engraved'
-      });
-    }
-    const created = await Item.bulkCreate(rows, { transaction: t });
-    // These items are created as 'Available', so they need to actually count
-    // toward the equipment's available stock — otherwise the Showroom shows
-    // stock that no borrow request can ever actually claim.
-    await Equipment.increment('availableQuantity', { by: qty, where: { id: equipmentId }, transaction: t });
+    const created = await createUnits(equipment.id, qty, t);
+    // New units are Available, so they count toward available stock.
+    await Equipment.increment('availableQuantity', { by: qty, where: { id: equipment.id }, transaction: t });
     return created.map((i) => i.id);
   });
 
@@ -106,7 +106,7 @@ function maskBorrowerName(firstName, lastName) {
 
 exports.lookup = async (req, res) => {
   const item = await Item.findOne({
-    where: { itemCode: req.params.itemCode },
+    where: whereCode(req.params.itemCode),
     include: [
       { model: Equipment, as: 'equipment', include: [{ model: Category, as: 'category' }] },
       { model: Borrower, as: 'currentBorrower' },
@@ -130,6 +130,9 @@ exports.lookup = async (req, res) => {
     success: true,
     data: {
       code: item.itemCode,
+      scannedCode: String(req.params.itemCode),
+      equipmentId: item.equipmentId,
+      equipmentCode: formatEquipmentCode(item.equipmentId),
       name: item.equipment.equipmentName,
       category: item.equipment.category ? item.equipment.category.categoryName : null,
       condition: item.itemCondition,

@@ -11,24 +11,65 @@
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-for-authMiddleware-spec';
 
+jest.mock('../../models', () => ({ User: { findByPk: jest.fn() } }));
+
 const jwt = require('jsonwebtoken');
+const { User } = require('../../models');
 const authMiddleware = require('../../middlewares/authMiddleware');
 
 function mockRes() {
   return {};
 }
 
+function bearer(payload) {
+  return { headers: { authorization: `Bearer ${jwt.sign(payload, process.env.JWT_SECRET)}` } };
+}
+
 describe('middlewares/authMiddleware.js', () => {
-  test('calls next() with req.user set from a valid Bearer token', () => {
-    const token = jwt.sign({ id: 1, userRole: 'Admin' }, process.env.JWT_SECRET);
-    const req = { headers: { authorization: `Bearer ${token}` } };
+  beforeEach(() => jest.clearAllMocks());
+
+  test('calls next() with req.user set from a valid Bearer token and the current account', async () => {
+    User.findByPk.mockResolvedValue({ id: 1, userRole: 'Admin', accountStatus: 'Active', emailVerified: true });
+    const req = bearer({ id: 1, userRole: 'Admin' });
     const next = jest.fn();
 
-    authMiddleware(req, mockRes(), next);
+    await authMiddleware(req, mockRes(), next);
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(next).toHaveBeenCalledWith(); // no error argument
     expect(req.user).toMatchObject({ id: 1, userRole: 'Admin' });
+  });
+
+  test('the role always comes from the database, not the (possibly stale) token', async () => {
+    User.findByPk.mockResolvedValue({ id: 1, userRole: 'Borrower', accountStatus: 'Active', emailVerified: true });
+    const req = bearer({ id: 1, userRole: 'Admin' });
+    const next = jest.fn();
+    await authMiddleware(req, mockRes(), next);
+    expect(req.user.userRole).toBe('Borrower');
+  });
+
+  test.each([
+    ['the account no longer exists', null],
+    ['the email is not verified', { id: 1, userRole: 'Borrower', accountStatus: 'Active', emailVerified: false }],
+    ['the account is blocked', { id: 1, userRole: 'Borrower', accountStatus: 'Blocked', emailVerified: true }]
+  ])('rejects a validly-signed token with AUTH_EXPIRED when %s', async (_label, dbUser) => {
+    User.findByPk.mockResolvedValue(dbUser);
+    const req = bearer({ id: 1, userRole: 'Borrower' });
+    const next = jest.fn();
+    await authMiddleware(req, mockRes(), next);
+    const err = next.mock.calls[0][0];
+    expect(err.statusCode).toBe(401);
+    expect(err.code).toBe('AUTH_EXPIRED');
+    expect(req.user).toBeUndefined();
+  });
+
+  test('a flagged (Restricted) borrower keeps their session', async () => {
+    User.findByPk.mockResolvedValue({ id: 1, userRole: 'Borrower', accountStatus: 'Restricted', emailVerified: true });
+    const req = bearer({ id: 1, userRole: 'Borrower' });
+    const next = jest.fn();
+    await authMiddleware(req, mockRes(), next);
+    expect(next).toHaveBeenCalledWith();
+    expect(req.user.accountStatus).toBe('Restricted');
   });
 
   test('rejects with 401 + code AUTH_EXPIRED when no Authorization header is present at all', () => {

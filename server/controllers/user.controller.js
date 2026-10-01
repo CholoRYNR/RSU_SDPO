@@ -2,27 +2,8 @@
 
 const bcrypt = require('bcrypt');
 const { User, Borrower } = require('../models');
-const { issueVerificationCode } = require('./auth.controller');
-
-function serializeUser(user) {
-  return {
-    id: user.id,
-    username: user.username,
-    userRole: user.userRole,
-    emailAddress: user.emailAddress,
-    contactNumber: user.contactNumber,
-    accountStatus: user.accountStatus,
-    borrowerProfile: user.borrowerProfile
-      ? {
-          id: user.borrowerProfile.id,
-          firstName: user.borrowerProfile.firstName,
-          lastName: user.borrowerProfile.lastName,
-          collegeOrUnit: user.borrowerProfile.collegeOrUnit,
-          borrowerCategory: user.borrowerProfile.borrowerCategory
-        }
-      : null
-  };
-}
+const { issueVerificationCode, serializeUser } = require('./auth.controller');
+const { BORROWER_CATEGORIES } = require('../constants/borrowerCategories');
 
 exports.updateProfile = async (req, res) => {
   const { contactNumber, emailAddress, firstName, lastName, collegeOrUnit, borrowerCategory } = req.body;
@@ -48,6 +29,11 @@ exports.updateProfile = async (req, res) => {
   // lastName is deliberately not required — see auth.controller.js#register
   // for why a single-word name should never be forced into duplicating
   // itself as a fake last name.
+  if (borrowerCategory !== undefined && borrowerCategory !== null && borrowerCategory !== '' && !BORROWER_CATEGORIES.includes(borrowerCategory)) {
+    const err = new Error(`Borrower Type must be one of: ${BORROWER_CATEGORIES.join(', ')}`);
+    err.statusCode = 400;
+    throw err;
+  }
   if (!user.borrowerProfile && user.userRole === 'Borrower') {
     if (!firstName || !collegeOrUnit || !borrowerCategory) {
       const err = new Error(
@@ -82,7 +68,7 @@ exports.updateProfile = async (req, res) => {
   }
 
   if (emailChanged) {
-    await issueVerificationCode(user);
+    await issueVerificationCode(user, { force: true });
   }
 
   if (user.borrowerProfile) {
@@ -92,16 +78,15 @@ exports.updateProfile = async (req, res) => {
     // which a plain `if (lastName)` check would silently refuse to save.
     if (lastName !== undefined) user.borrowerProfile.lastName = lastName || '';
     if (collegeOrUnit) user.borrowerProfile.collegeOrUnit = collegeOrUnit;
+    // Borrower Type is editable. Transactions, reports and the staff views
+    // read it live through the borrower relation (never a copied value), so
+    // a change here is reflected everywhere on the next load.
+    if (borrowerCategory) user.borrowerProfile.borrowerCategory = borrowerCategory;
     await user.borrowerProfile.save();
   } else if (user.userRole === 'Borrower') {
     // Validated above: firstName/collegeOrUnit/borrowerCategory are all
     // present; lastName is optional (see the check above) and normalized
     // to '' rather than left undefined/null, since the column is NOT NULL.
-    // borrowerCategory is intentionally set only here, at first-time
-    // creation — an existing profile's category is never overwritten by
-    // this endpoint (see the `if (user.borrowerProfile)` branch above,
-    // which never touches it), since it's an eligibility classification
-    // set once at signup, not a casual profile edit.
     await Borrower.create({ userId: user.id, firstName, lastName: lastName || '', collegeOrUnit, borrowerCategory });
   }
 
@@ -134,4 +119,3 @@ exports.changePassword = async (req, res) => {
   res.json({ success: true, data: { message: 'Password updated successfully.' } });
 };
 
-exports.serializeUser = serializeUser;

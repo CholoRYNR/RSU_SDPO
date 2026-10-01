@@ -72,7 +72,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 function formatDate(iso){
   if(!iso) return '—';
   const d=new Date(iso);
-  return isNaN(d) ? '—' : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  return isNaN(d) ? '—' : d.toLocaleDateString('en-US',{timeZone:'Asia/Manila',month:'short',day:'numeric',year:'numeric'});
 }
 
 function showNotFound(){
@@ -113,7 +113,7 @@ async function render(){
   // the only statuses that can occur now, so any other value falls through
   // to the 'unknown' badge/no-availability-text case below, same as before
   // these two statuses ever existed.
-  const BADGE_CLASS={Available:'available',Borrowed:'borrowed'};
+  const BADGE_CLASS={Available:'available',Borrowed:'borrowed',Reserved:'borrowed'};
   const badgeClass=BADGE_CLASS[item.status]||'unknown';
   // The top badge already names the exact status, but a staff member
   // glancing at the rows below it (not just the badge) had no plain-text
@@ -132,6 +132,7 @@ async function render(){
     <h1>${esc(item.name)}</h1>
     <span class="code">${esc(item.code)}</span>
     <div class="rows">
+      <div class="row"><span>Equipment ID</span><span>${esc(item.equipmentCode||'—')}</span></div>
       <div class="row"><span>Category</span><span>${esc(item.category||'—')}</span></div>
       <div class="row"><span>Availability</span><span>${esc(AVAILABILITY_TEXT[item.status]||item.status)}</span></div>
       <div class="row"><span>Condition</span><span class="${condClass}">${esc(item.condition||'—')}</span></div>

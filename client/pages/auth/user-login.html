@@ -346,10 +346,17 @@
         // Only route to the verify screen when we actually know their email
         // (they logged in with it, not a bare username) — verify-registration
         // and resend-verification both look accounts up by email address.
-        if (err.message && err.message.toLowerCase().includes('verify your email') && username.includes('@')) {
-          verifyContext = { mode: 'register', email: username };
-          $('verifyEmailTarget').textContent = maskEmail(username);
+        // The server identifies this case with code EMAIL_NOT_VERIFIED and,
+        // since the password was correct, returns the account's email — so
+        // the code screen works even when signing in with a username.
+        const unverifiedEmail = err.code === 'EMAIL_NOT_VERIFIED'
+          ? ((err.details && err.details.email) || (username.includes('@') ? username : null))
+          : null;
+        if (unverifiedEmail) {
+          verifyContext = { mode: 'register', email: unverifiedEmail };
+          $('verifyEmailTarget').textContent = maskEmail(unverifiedEmail);
           showVerify();
+          startResendCooldown(60);
         } else {
           showLogin(err.message, true);
         }
@@ -405,6 +412,7 @@
         verifyContext = { mode: 'register', email };
         $('verifyEmailTarget').textContent = maskEmail(email);
         showVerify();
+        startResendCooldown(60);
       } catch (err) {
         $('signupFormError').textContent = err.message;
       } finally {
@@ -489,9 +497,32 @@
     });
 
     // --- Resend code ---
+    // The button is disabled for the server's cooldown after every send, so
+    // repeated clicks can't trigger repeated emails (the server enforces the
+    // same cooldown — see auth.controller.js#issueVerificationCode).
+    let resendTimer = null;
+    function startResendCooldown(seconds) {
+      const btn = $('resendCodeButton');
+      clearInterval(resendTimer);
+      let left = seconds;
+      btn.disabled = true;
+      btn.textContent = `Resend (${left}s)`;
+      resendTimer = setInterval(() => {
+        left -= 1;
+        if (left <= 0) {
+          clearInterval(resendTimer);
+          btn.disabled = false;
+          btn.textContent = 'Resend';
+        } else {
+          btn.textContent = `Resend (${left}s)`;
+        }
+      }, 1000);
+    }
+
     $('resendCodeButton').addEventListener('click', async () => {
-      if (!verifyContext) return;
+      if (!verifyContext || $('resendCodeButton').disabled) return;
       const note = $('resendVerifyNote');
+      startResendCooldown(60);
       try {
         if (verifyContext.mode === 'register') {
           await apiFetch('/api/auth/resend-verification', {
@@ -559,6 +590,21 @@
     // complete (consent denied, or a rejection such as "this email belongs
     // to a staff account"). Surface it through the same showLogin() error
     // path used for every other login error.
+    // --- Google sign-up/sign-in that still needs email verification ---
+    // The OAuth callback never issues a session for an unverified account;
+    // it emails a code and returns here with #verify=<email> (a fragment, so
+    // the address never reaches server logs).
+    (function showOAuthVerificationIfAny() {
+      const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : '';
+      const email = new URLSearchParams(hash).get('verify');
+      if (!email) return;
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      verifyContext = { mode: 'register', email };
+      $('verifyEmailTarget').textContent = maskEmail(email);
+      showVerify();
+      startResendCooldown(60);
+    })();
+
     (function showOAuthErrorIfAny() {
       const params = new URLSearchParams(window.location.search);
       if (!params.has('oauth_error')) return;

@@ -21,14 +21,19 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'Pending'
       },
       sentAt: { type: DataTypes.DATE, allowNull: true },
-      isRead: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: false }
+      isRead: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: false },
+      // Identifies the workflow event this notification is for (e.g.
+      // "txn-12-approved"); unique per user (migration 023) so the same
+      // event can never notify the same person twice.
+      dedupeKey: { type: DataTypes.STRING(120), allowNull: true }
     },
     {
       sequelize,
       modelName: 'Notification',
       tableName: 'notification',
       underscored: true,
-      timestamps: false
+      timestamps: false,
+      indexes: [{ unique: true, fields: ['user_id', 'dedupe_key'] }]
     }
   );
 

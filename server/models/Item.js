@@ -14,7 +14,13 @@ module.exports = (sequelize, DataTypes) => {
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true, field: 'item_id' },
       equipmentId: { type: DataTypes.INTEGER, allowNull: false },
+      // Canonical code, "<Equipment ID>-<unit sequence>" (e.g. EQ-005-001) —
+      // see helpers/equipmentCode.js. This is what the QR label encodes.
       itemCode: { type: DataTypes.STRING(100), allowNull: false, unique: true },
+      // The code this unit had before codes were standardized (migration
+      // 023). Kept only so a QR label printed under the old scheme still
+      // resolves to the same unit; never shown or generated going forward.
+      legacyItemCode: { type: DataTypes.STRING(100), allowNull: true, unique: true },
       qrCodePath: { type: DataTypes.STRING(255), allowNull: true },
       itemCondition: {
         type: DataTypes.ENUM('Good', 'Damaged', 'Under Repair', 'Lost'),
