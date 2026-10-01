@@ -1,13 +1,12 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { DamageLossRecord, Transaction, Borrower, User, Item, Equipment, Category, MaintenanceFee, sequelize } = require('../models');
+const { DamageLossRecord, Transaction, Borrower, User, Item, Equipment, Category, sequelize } = require('../models');
 const { notifyBorrower } = require('../helpers/notify');
 const { logStatusChange } = require('../helpers/transactionLog');
 
-function fmtDate(d) {
-  return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
-}
+const { formatDate: fmtDate } = require('../helpers/dateHelper');
+const { txnCode } = require('./borrow.controller');
 
 const INCLUDE = [
   { model: Transaction, as: 'transaction' },
@@ -23,7 +22,7 @@ function serialize(record) {
   return {
     id: record.id,
     transactionId: txn ? txn.id : record.transactionId,
-    transactionCode: txn ? `TXN-${new Date(txn.requestDatetime || txn.createdAt).getFullYear()}-${String(txn.id).padStart(4, '0')}` : '—',
+    transactionCode: txn ? txnCode(txn) : '—',
     borrowerName: borrower ? `${borrower.firstName} ${borrower.lastName}` : 'Unknown Borrower',
     borrowerMeta: borrower ? `${borrower.borrowerCategory} • ${borrower.collegeOrUnit}` : '—',
     equipmentName: record.item && record.item.equipment ? record.item.equipment.equipmentName : '—',
@@ -42,59 +41,9 @@ function serialize(record) {
   };
 }
 
-// MaintenanceFee has no direct foreign key back to a specific
-// DamageLossRecord — it's keyed by (transactionId, borrowerId, feeType)
-// only, set by flag() below. That's the closest unambiguous match back to
-// "the fee for this incident" the current schema supports; if the same
-// borrower ever has two records of the same incident type on the same
-// transaction, this intentionally can't tell them apart (a real schema gap,
-// flagged separately — not something this lookup can paper over).
-async function findFeeForRecord(record) {
-  return MaintenanceFee.findOne({
-    where: {
-      transactionId: record.transactionId,
-      borrowerId: record.borrowerId,
-      feeType: record.incidentType === 'Lost' ? 'Loss' : 'Damage'
-    },
-    order: [['id', 'DESC']]
-  });
-}
-
-async function serializeWithFee(record) {
-  const fee = await findFeeForRecord(record);
-  return {
-    ...serialize(record),
-    fee: fee ? { id: fee.id, amount: fee.feeAmount, status: fee.feeStatus, paymentDate: fee.paymentDate } : null
-  };
-}
-
 exports.list = async (req, res) => {
   const rows = await DamageLossRecord.findAll({ include: INCLUDE, order: [['id', 'DESC']] });
-  res.json({ success: true, data: await Promise.all(rows.map(serializeWithFee)) });
-};
-
-// Lets staff mark a previously-assessed fee as settled (paid in person at
-// the SDPO office, per the notification text already sent when the fee was
-// assessed) or waived — previously feeStatus was set once at creation and
-// never touched again anywhere in the codebase, so an assessed fee had no
-// way to ever be recorded as resolved.
-exports.updateFeeStatus = async (req, res) => {
-  const fee = await MaintenanceFee.findByPk(req.params.feeId);
-  if (!fee) {
-    const err = new Error('Fee record not found');
-    err.statusCode = 404;
-    throw err;
-  }
-  const { status } = req.body;
-  if (!['Paid', 'Waived', 'Unpaid'].includes(status)) {
-    const err = new Error('status must be one of: Paid, Waived, Unpaid');
-    err.statusCode = 400;
-    throw err;
-  }
-  fee.feeStatus = status;
-  fee.paymentDate = status === 'Paid' ? new Date() : null;
-  await fee.save();
-  res.json({ success: true, data: { id: fee.id, status: fee.feeStatus, paymentDate: fee.paymentDate } });
+  res.json({ success: true, data: rows.map(serialize) });
 };
 
 async function loadRecordOr404(id) {
@@ -129,14 +78,17 @@ exports.submitReplacement = async (req, res) => {
   await record.save();
 
   const txn = record.transaction;
-  if (txn && txn.transactionStatus !== 'Replacement') {
-    const oldStatus = txn.transactionStatus;
-    txn.transactionStatus = 'Replacement';
-    await txn.save();
-    await logStatusChange(txn.id, req.user.id, oldStatus, 'Replacement', `Replacement submitted for item #${record.itemId}`);
+  if (txn && txn.transactionStatus === 'For Resolution') {
+    const [moved] = await Transaction.update(
+      { transactionStatus: 'Replacement' },
+      { where: { id: txn.id, transactionStatus: 'For Resolution' } }
+    );
+    if (moved) {
+      await logStatusChange(txn.id, req.user.id, 'For Resolution', 'Replacement', `Replacement submitted for item #${record.itemId}`);
+    }
   }
 
-  res.json({ success: true, data: await serializeWithFee(await loadRecordOr404(record.id)) });
+  res.json({ success: true, data: serialize(await loadRecordOr404(record.id)) });
 };
 
 exports.verifyReplacement = async (req, res) => {
@@ -151,7 +103,7 @@ exports.verifyReplacement = async (req, res) => {
   record.resolutionStatus = 'Replacement Verified';
   await record.save();
 
-  res.json({ success: true, data: await serializeWithFee(await loadRecordOr404(record.id)) });
+  res.json({ success: true, data: serialize(await loadRecordOr404(record.id)) });
 };
 
 // The key rule: a record cannot become Resolved until its replacement has
@@ -164,15 +116,18 @@ exports.resolve = async (req, res) => {
     throw err;
   }
 
-  record.resolutionStatus = 'Resolved';
-  record.resolutionDate = new Date();
-
-  // A verified replacement means the affected item is physically back in
-  // SDPO's hands in good condition — restore it to the lending pool and give
-  // the equipment's available count back the unit that return.controller.js
-  // deliberately withheld when the damage/loss was first reported.
+  // Restores the unit to the lending pool. The conditional update makes a
+  // repeated click a no-op 409 instead of crediting the stock twice.
   await sequelize.transaction(async (t) => {
-    await record.save({ transaction: t });
+    const [count] = await DamageLossRecord.update(
+      { resolutionStatus: 'Resolved', resolutionDate: new Date() },
+      { where: { id: record.id, resolutionStatus: 'Replacement Verified' }, transaction: t }
+    );
+    if (!count) {
+      const err = new Error('This record was already resolved');
+      err.statusCode = 409;
+      throw err;
+    }
 
     const item = await Item.findByPk(record.itemId, { transaction: t });
     if (item) {
@@ -191,11 +146,13 @@ exports.resolve = async (req, res) => {
     where: { transactionId: record.transactionId, resolutionStatus: { [Op.ne]: 'Resolved' } }
   });
   const txn = await Transaction.findByPk(record.transactionId);
-  if (outstandingForTxn === 0 && txn && txn.transactionStatus !== 'Completed') {
+  if (outstandingForTxn === 0 && txn && ['For Resolution', 'Replacement'].includes(txn.transactionStatus)) {
     const oldStatus = txn.transactionStatus;
-    txn.transactionStatus = 'Resolved';
-    await txn.save();
-    await logStatusChange(txn.id, req.user.id, oldStatus, 'Resolved', 'All damage/loss records resolved');
+    const [moved] = await Transaction.update(
+      { transactionStatus: 'Resolved' },
+      { where: { id: txn.id, transactionStatus: ['For Resolution', 'Replacement'] } }
+    );
+    if (moved) await logStatusChange(txn.id, req.user.id, oldStatus, 'Resolved', 'All damage/loss records resolved');
   }
 
   // Likewise only lift the account restriction once the borrower has no
@@ -211,12 +168,13 @@ exports.resolve = async (req, res) => {
       await notifyBorrower(
         borrower.user.id,
         `Your replacement for Transaction #${record.transactionId} has been verified and the incident is resolved. Your account restriction has been lifted.`,
-        'Account Restored'
+        'Account Restored',
+        `borrower-${borrower.id}-restored-record-${record.id}`
       );
     }
   }
 
-  res.json({ success: true, data: await serializeWithFee(await loadRecordOr404(record.id)) });
+  res.json({ success: true, data: serialize(await loadRecordOr404(record.id)) });
 };
 
 // --- Manual override (independent of the replacement workflow above) ---
@@ -232,27 +190,13 @@ exports.flag = async (req, res) => {
   user.accountStatus = 'Restricted';
   await user.save();
 
-  const feeAmount = Number(req.body.feeAmount);
-  let fee = null;
-  if (feeAmount > 0) {
-    fee = await MaintenanceFee.create({
-      transactionId: record.transactionId,
-      borrowerId: record.borrowerId,
-      feeType: record.incidentType === 'Lost' ? 'Loss' : 'Damage',
-      feeAmount,
-      feeStatus: 'Unpaid'
-    });
-  }
-
   await notifyBorrower(
     user.id,
-    fee
-      ? `Your account has been restricted due to a ${record.incidentType.toLowerCase()} item report on Transaction #${record.transactionId}. A fee of ₱${feeAmount.toFixed(2)} has been assessed. Please visit the SDPO office to resolve this.`
-      : `Your account has been restricted due to a ${record.incidentType.toLowerCase()} item report on Transaction #${record.transactionId}. Please visit the SDPO office to resolve this.`,
+    `Your account has been flagged due to a ${record.incidentType.toLowerCase()} item report on Transaction #${record.transactionId}. You can still sign in, but new borrowing requests are blocked until the SDPO lifts the flag. Please visit the SDPO office to resolve this.`,
     'Account Restricted'
   );
 
-  res.json({ success: true, data: await serializeWithFee(await loadRecordOr404(record.id)) });
+  res.json({ success: true, data: serialize(await loadRecordOr404(record.id)) });
 };
 
 exports.unflag = async (req, res) => {
@@ -268,9 +212,9 @@ exports.unflag = async (req, res) => {
 
   await notifyBorrower(
     user.id,
-    `Your account restriction related to Transaction #${record.transactionId} has been lifted. You may now log in and borrow equipment again.`,
+    `Your account restriction related to Transaction #${record.transactionId} has been lifted. You may borrow equipment again.`,
     'Account Restored'
   );
 
-  res.json({ success: true, data: await serializeWithFee(await loadRecordOr404(record.id)) });
+  res.json({ success: true, data: serialize(await loadRecordOr404(record.id)) });
 };

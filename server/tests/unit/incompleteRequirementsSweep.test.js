@@ -65,9 +65,10 @@ describe('jobs/incompleteRequirementsSweep.js', () => {
     expect(notifyBorrower).toHaveBeenCalledWith(
       5,
       expect.stringContaining('Valid ID'),
-      'Incomplete Requirements'
+      'Incomplete Requirements',
+      'txn-7-incomplete-requirements'
     );
-    expect(notifyBorrower.mock.calls[0][1]).not.toContain('Authorization Document');
+    expect(notifyBorrower.mock.calls[0][1]).not.toContain('Authorization');
     expect(txn.incompleteReqReminderSentDatetime).toBeInstanceOf(Date);
     expect(txn.save).toHaveBeenCalledTimes(1);
   });
@@ -83,8 +84,9 @@ describe('jobs/incompleteRequirementsSweep.js', () => {
 
     expect(notifyBorrower).toHaveBeenCalledWith(
       5,
-      expect.stringContaining('Authorization Document'),
-      'Incomplete Requirements'
+      expect.stringContaining('Authorization'),
+      'Incomplete Requirements',
+      'txn-8-incomplete-requirements'
     );
   });
 
@@ -96,7 +98,19 @@ describe('jobs/incompleteRequirementsSweep.js', () => {
 
     const message = notifyBorrower.mock.calls[0][1];
     expect(message).toContain('Valid ID');
-    expect(message).toContain('Authorization Document');
+    expect(message).toContain('Authorization');
+  });
+
+  test('uses the borrower type\'s own rules: a Student needs only the authorization letter', async () => {
+    const txn = makeTxn({
+      id: 11,
+      borrower: { borrowerCategory: 'Student', validIdPath: null, authorizationDocumentPath: '/docs/letter.pdf', user: { id: 5 } }
+    });
+    Transaction.findAll.mockResolvedValue([txn]);
+
+    await runIncompleteRequirementsSweep();
+
+    expect(notifyBorrower).not.toHaveBeenCalled();
   });
 
   test('a borrower with both documents present is marked sent but does NOT get notified', async () => {

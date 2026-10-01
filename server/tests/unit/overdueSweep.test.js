@@ -40,7 +40,11 @@ describe('jobs/overdueSweep.js', () => {
     notifyBorrower.mockResolvedValue({ id: 100 });
     notifyStaff.mockResolvedValue(undefined);
     TransactionLog.create.mockResolvedValue({ id: 1 });
+    // The status flip is a conditional UPDATE (only while still Released).
+    Transaction.update = jest.fn().mockResolvedValue([1]);
   });
+
+  const flippedIds = () => Transaction.update.mock.calls.map((c) => c[1].where.id);
 
   afterEach(() => {
     logSpy.mockRestore();
@@ -53,13 +57,12 @@ describe('jobs/overdueSweep.js', () => {
 
     await runOverdueSweep();
 
-    expect(txn.transactionStatus).toBe('Overdue');
-    expect(txn.save).toHaveBeenCalledTimes(1);
+    expect(Transaction.update).toHaveBeenCalledWith({ transactionStatus: 'Overdue' }, { where: { id: 42, transactionStatus: 'Released' } });
     expect(TransactionLog.create).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: 42, oldStatus: 'Released', newStatus: 'Overdue' })
     );
-    expect(notifyBorrower).toHaveBeenCalledWith(5, expect.stringContaining('Transaction #42'), 'Overdue');
-    expect(notifyStaff).toHaveBeenCalledWith(expect.stringContaining('Transaction #42'), 'Overdue');
+    expect(notifyBorrower).toHaveBeenCalledWith(5, expect.stringContaining('Transaction #42'), 'Overdue', 'txn-42-overdue');
+    expect(notifyStaff).toHaveBeenCalledWith(expect.stringContaining('Transaction #42'), 'Overdue', 'txn-42-overdue');
   });
 
   test('queries only Released transactions whose expected return date has already passed', async () => {
@@ -73,23 +76,23 @@ describe('jobs/overdueSweep.js', () => {
   });
 
   test('a failure processing one transaction does not stop the others from being flagged (per-row try/catch)', async () => {
-    const failing = makeTxn({ id: 1, save: jest.fn().mockRejectedValue(new Error('DB write failed')) });
+    const failing = makeTxn({ id: 1 });
+    Transaction.update.mockRejectedValueOnce(new Error('DB write failed'));
     const ok = makeTxn({ id: 2 });
     Transaction.findAll.mockResolvedValue([failing, ok]);
 
     await runOverdueSweep();
 
     expect(errorSpy).toHaveBeenCalled();
-    // The failing row's save() rejected, so nothing after it in its own
+    // The failing row's update rejected, so nothing after it in its own
     // try block ran (no log entry, no notifications) — but the loop moved
     // on to the next transaction instead of throwing out entirely.
     expect(TransactionLog.create).not.toHaveBeenCalledWith(expect.objectContaining({ transactionId: 1 }));
     // The good row right after it still went through, instead of the whole
     // batch being abandoned.
-    expect(ok.transactionStatus).toBe('Overdue');
-    expect(ok.save).toHaveBeenCalledTimes(1);
-    expect(notifyBorrower).toHaveBeenCalledWith(5, expect.stringContaining('Transaction #2'), 'Overdue');
-    expect(notifyBorrower).not.toHaveBeenCalledWith(5, expect.stringContaining('Transaction #1'), 'Overdue');
+    expect(flippedIds()).toContain(2);
+    expect(notifyBorrower).toHaveBeenCalledWith(5, expect.stringContaining('Transaction #2'), 'Overdue', 'txn-2-overdue');
+    expect(notifyBorrower).not.toHaveBeenCalledWith(5, expect.stringContaining('Transaction #1'), 'Overdue', expect.anything());
   });
 
   test('a notifyStaff failure for one transaction does not stop the next transaction from being processed', async () => {
@@ -101,9 +104,7 @@ describe('jobs/overdueSweep.js', () => {
     await runOverdueSweep();
 
     expect(errorSpy).toHaveBeenCalled();
-    expect(first.transactionStatus).toBe('Overdue');
-    expect(second.transactionStatus).toBe('Overdue');
-    expect(second.save).toHaveBeenCalledTimes(1);
+    expect(flippedIds()).toEqual([1, 2]);
   });
 
   test('skips notifying a borrower with no linked user, but still flags the transaction', async () => {
@@ -113,8 +114,19 @@ describe('jobs/overdueSweep.js', () => {
     await runOverdueSweep();
 
     expect(notifyBorrower).not.toHaveBeenCalled();
-    expect(txn.transactionStatus).toBe('Overdue');
-    expect(notifyStaff).toHaveBeenCalledWith(expect.stringContaining('Transaction #7'), 'Overdue');
+    expect(flippedIds()).toEqual([7]);
+    expect(notifyStaff).toHaveBeenCalledWith(expect.stringContaining('Transaction #7'), 'Overdue', 'txn-7-overdue');
+  });
+
+  test('a transaction returned between the query and the update is skipped (no duplicate overdue notice)', async () => {
+    Transaction.findAll.mockResolvedValue([makeTxn({ id: 3 })]);
+    Transaction.update.mockResolvedValueOnce([0]);
+
+    await runOverdueSweep();
+
+    expect(TransactionLog.create).not.toHaveBeenCalled();
+    expect(notifyBorrower).not.toHaveBeenCalled();
+    expect(notifyStaff).not.toHaveBeenCalled();
   });
 
   test('does nothing when no transactions qualify', async () => {

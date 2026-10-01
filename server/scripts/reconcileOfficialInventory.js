@@ -14,7 +14,7 @@
 
 require('dotenv').config();
 const { Equipment, Category, Item, sequelize } = require('../models');
-const categoryAbbreviations = require('../constants/categoryAbbreviations');
+const { createUnits } = require('../controllers/equipment.controller');
 
 // Sustainable (usable/available) count per equipment id, parsed from the
 // report's Quantity/Sustainable columns. Ids 22/23/24 are the post-merge
@@ -28,21 +28,10 @@ const SUSTAINABLE_BY_ID = {
 };
 const DUPLICATE_IDS_TO_DELETE = [37, 38, 39]; // Sports Training copies of 22/23/24
 
+// Same canonical "<Equipment ID>-<sequence>" unit codes as Equipment
+// Management (helpers/equipmentCode.js).
 async function generateItemsFor(equipment, qty, t) {
-  const existingCount = await Item.count({ where: { equipmentId: equipment.id }, transaction: t });
-  const abbr = categoryAbbreviations[equipment.category.categoryName] || equipment.category.categoryName.slice(0, 3).toUpperCase();
-  const rows = [];
-  for (let i = 1; i <= qty; i += 1) {
-    const sequence = String(existingCount + i).padStart(3, '0');
-    rows.push({
-      equipmentId: equipment.id,
-      itemCode: `${abbr}-${equipment.id}-${sequence}`,
-      itemCondition: 'Good',
-      availabilityStatus: 'Available',
-      engravingStatus: 'Not Engraved'
-    });
-  }
-  await Item.bulkCreate(rows, { transaction: t });
+  await createUnits(equipment.id, qty, t);
   await Equipment.increment('availableQuantity', { by: qty, where: { id: equipment.id }, transaction: t });
 }
 

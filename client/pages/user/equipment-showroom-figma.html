@@ -34,6 +34,26 @@
     .yellow{background:#fef3c7;color:#d97706}
     .stat-value{font-size:24px;line-height:36px;font-weight:700;margin-top:6px}
 
+    /* ---------- My Activity (semester-scoped) ---------- */
+    .my-activity{margin-top:12px;border:1px solid var(--softline);border-radius:14px;background:var(--page);padding:14px 16px}
+    .my-activity__head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    .my-activity__head b{font-size:13px;margin-right:8px}
+    .my-activity__head span{font-size:11px;color:var(--muted)}
+    .my-activity__filters{display:flex;gap:8px}
+    .my-activity__filters select{height:30px;border:1px solid var(--line);border-radius:8px;background:var(--page);color:var(--ink);font-size:12px;padding:0 8px}
+    .my-activity__grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:12px}
+    .mini-stat{border:1px solid var(--softline);border-radius:10px;padding:10px 12px;display:grid;gap:2px}
+    .mini-stat span{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+    .mini-stat b{font-size:18px;color:var(--ink)}
+    @media(max-width:760px){.my-activity__grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+    /* ---------- Borrowing restriction banner (flagged / pending replacement / late return) ---------- */
+    .late-block-banner ul{margin:4px 0 0;padding-left:18px}
+    .late-block-banner li+li{margin-top:4px}
+
+    /* ---------- Review step: same equipment image as the catalog card ---------- */
+    .review-item__thumb{width:32px;height:32px;object-fit:contain;border-radius:6px;background:#eef3f6;vertical-align:middle;margin-right:8px}
+
     /* ---------- Toolbar / catalog ---------- */
     .toolbar{margin-top:16px}
     .equipment-grid{margin-top:16px}
@@ -78,7 +98,23 @@
        background and the text color already come from the same theme pair
        (e.g. readonly inputs, the review-qty pill) were left alone — those
        already flip together correctly and were never actually broken. */
-    .borrow-flow{display:none;position:fixed;inset:0;z-index:1000;overflow:auto;background:#f9fafb}
+    .borrow-flow{
+      display:none;position:fixed;inset:0;z-index:1000;overflow:auto;
+      background-color:#f9fafb;
+      /* Same auth-hero-background.png wallpaper as the rest of the app
+         (see .content in app-shell.css), at the same ~25% visibility —
+         pinned to its light-mode tint (not var(--hero-overlay), which
+         flips in dark mode) since this form is deliberately always-light
+         per the note above. background-attachment:fixed because, unlike
+         main/.content elsewhere, THIS element is itself the scrolling
+         container for a tall multi-step form, so a plain background would
+         otherwise scroll away with the content. */
+      background-image:linear-gradient(rgba(249,250,251,.75),rgba(249,250,251,.75)),url("../../assets/images/auth-hero-background.png");
+      background-size:cover;
+      background-position:center;
+      background-attachment:fixed;
+      background-repeat:no-repeat;
+    }
     .borrow-flow.open{display:block}
     .close-flow{position:fixed;top:16px;right:18px;border:0;border-radius:50%;height:34px;width:34px;background:#fff;color:#344054;font-size:22px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:5;cursor:pointer}
     .wizard-shell{max-width:900px;margin:0 auto;padding:56px 24px 48px}
@@ -137,6 +173,18 @@
     .equip-badge--available{background:#ecfdf5;color:#00865d}
     .equip-badge--limited{background:#fef3c7;color:var(--amber)}
     .equip-badge--low{background:#fef2f2;color:#c10007}
+    /* Minimum-stock warning note — separate from the available/limited/low
+       color badges above, which stay exactly as they were. This only
+       appears once stock is at or below the SDPO's 25% minimum-stock floor,
+       where borrowing is blocked outright (see minStockFloor() below and
+       its server-side counterpart, maxBorrowableUnits() in
+       borrow.controller.js). */
+    .equip-min-stock-note{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#c10007;margin-top:6px}
+    /* Quiet informational note (not a warning) showing the per-request cap
+       from maxBorrowableUnits() — e.g. "Max 1 per request" — so it's clear
+       why the + stepper stops where it does instead of it just going dim
+       with no explanation. */
+    .equip-cap-note{font-size:11px;font-weight:500;color:var(--muted)}
     .equip-row__stepper{display:flex;align-items:center;gap:6px;flex-shrink:0;padding-top:2px}
     .equip-row__stepper button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px;line-height:1;cursor:pointer;color:#1d293d}
     .equip-row__stepper button:disabled{opacity:.4;cursor:not-allowed}
@@ -217,9 +265,28 @@
     <div class="late-block-banner" id="lateBlockBanner" hidden></div>
 
     <section class="stats">
-      <article class="stat-card"><div class="stat-head"><span class="stat-label">TOTAL EQUIPMENT</span><span class="metric-icon mint">▣</span></div><div class="stat-value" id="statTotal">0</div></article>
-      <article class="stat-card"><div class="stat-head"><span class="stat-label">AVAILABLE NOW</span><span class="metric-icon blue">✓</span></div><div class="stat-value" id="statAvailable">0</div></article>
-      <article class="stat-card"><div class="stat-head"><span class="stat-label">CATEGORIES</span><span class="metric-icon yellow">▤</span></div><div class="stat-value" id="statCategories">0</div></article>
+      <article class="stat-card"><div class="stat-head"><span class="stat-label">TOTAL EQUIPMENT (UNITS)</span><span class="metric-icon mint">▣</span></div><div class="stat-value" id="statTotal">—</div></article>
+      <article class="stat-card"><div class="stat-head"><span class="stat-label">AVAILABLE NOW</span><span class="metric-icon blue">✓</span></div><div class="stat-value" id="statAvailable">—</div></article>
+      <article class="stat-card"><div class="stat-head"><span class="stat-label">CATEGORIES</span><span class="metric-icon yellow">▤</span></div><div class="stat-value" id="statCategories">—</div></article>
+    </section>
+
+    <!-- My Activity: this borrower's own figures for the selected semester,
+         from GET /api/dashboard/me (computed from the database). -->
+    <section class="my-activity" aria-label="My activity this semester">
+      <div class="my-activity__head">
+        <div><b>My Activity</b><span id="myTermLabel">—</span></div>
+        <div class="my-activity__filters">
+          <select id="myYearSelect" aria-label="Academic year"></select>
+          <select id="mySemesterSelect" aria-label="Semester"><option value="1">1st Semester</option><option value="2">2nd Semester</option></select>
+        </div>
+      </div>
+      <div class="my-activity__grid">
+        <div class="mini-stat"><span>Pending</span><b id="myPending">—</b></div>
+        <div class="mini-stat"><span>Approved</span><b id="myApproved">—</b></div>
+        <div class="mini-stat"><span>Rejected</span><b id="myRejected">—</b></div>
+        <div class="mini-stat"><span>Returned (units)</span><b id="myReturned">—</b></div>
+        <div class="mini-stat"><span>Currently Borrowed</span><b id="myActive">—</b></div>
+      </div>
     </section>
 
     <section class="toolbar" aria-label="Equipment filters">
@@ -435,32 +502,21 @@
   <div class="toast-stack" id="toastStack"></div>
 
   <script src="../../js/shared/api.js"></script>
+  <script src="../../js/shared/equipment-ui.js"></script>
   <script src="../../js/shared/app-shell.js"></script>
   <script>
     /* Backed by the real database via /api/equipment and /api/categories — no more hardcoded catalog. */
     let products=[];
 
-    const icon={Badminton:'🏸',Baseball:'⚾',Basketball:'🏀',Boxing:'🥊',Chess:'♟',Football:'🏈',Futsal:'🥅',Volleyball:'🏐','Lawn Tennis':'🎾','Sports Training':'🏃','Sepak Takraw':'🟤',Softball:'🥎','Table Tennis':'🏓',Taekwondo:'🥋'};
-    /* Real product photography for the categories we have shots of — everything
-       else falls back to the generated emoji tile so the catalog never shows a
-       broken image for a category we haven't photographed yet. */
-    const categoryPhoto={Basketball:'equipment-basketball.png',Volleyball:'equipment-volleyball.png',Football:'equipment-soccer-ball.png',Futsal:'equipment-futsal-ball.png',Badminton:'equipment-badminton-shuttlecock.png',Boxing:'equipment-boxing-gloves.png',Chess:'equipment-chess-clock.png'};
-    const productSvg=(emoji)=>`data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="90" height="90"><rect width="90" height="90" rx="16" fill="#eef3f6"/><text x="45" y="61" text-anchor="middle" font-size="52">${emoji}</text></svg>`)}`;
-    const productImage=(category)=>categoryPhoto[category]?`../../assets/images/${categoryPhoto[category]}`:productSvg(icon[category]||'🏅');
-    const displayId=(p)=>'EQ-'+String(p.id).padStart(3,'0');
-
-    /* Stock-level warning tier — thresholds scale off each equipment's own total
-       quantity rather than a fixed number, so a 10-unit item turns amber at 5 left /
-       red at 3 left, while a 3-unit item turns amber at 2 left / red at 1 left. */
-    function stockLevel(available,total){
-      if(!total||total<=0||available<=0)return'low';
-      const redMax=Math.max(1,Math.round(total*0.3));
-      const yellowMax=Math.max(redMax+1,Math.round(total*0.5));
-      if(available<=redMax)return'low';
-      if(available<=yellowMax)return'limited';
-      return'available';
-    }
-    const STOCK_LABEL={available:'Available',limited:'Low Stock',low:'Critical Stock'};
+    /* Images, Equipment IDs, stock badges and the per-request cap all come
+       from the shared client/js/shared/equipment-ui.js and the server's own
+       equipmentCode — the same values the Admin/Staff/Director equipment
+       pages, the QR labels and the transaction records use. */
+    const UI=window.EquipmentUI;
+    const displayId=(p)=>p.code;
+    const stockLevel=(available)=>UI.stockLevel(available);
+    const maxBorrowableUnits=(available,total)=>UI.maxBorrowableUnits(available,total);
+    const productThumb=(p)=>UI.equipmentImage(p);
 
     const $=id=>document.getElementById(id);
     const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -472,9 +528,10 @@
     let category='All Categories',current=null;
 
     /* ---------- Stats ---------- */
+    // Catalog totals in units (same definition as the admin dashboard).
     function renderStats(){
-      $('statTotal').textContent=products.length;
-      $('statAvailable').textContent=products.filter(p=>p.available>0).length;
+      $('statTotal').textContent=products.reduce((n,p)=>n+p.total,0);
+      $('statAvailable').textContent=products.reduce((n,p)=>n+Math.max(p.available,0),0);
       $('statCategories').textContent=new Set(products.map(p=>p.category)).size;
     }
 
@@ -482,6 +539,7 @@
       return apiFetch('/api/equipment').then(rows=>{
         products=rows.map(e=>({
           id:e.id,
+          code:e.equipmentCode,
           name:e.equipmentName,
           category:e.category?e.category.categoryName:'',
           available:e.availableQuantity,
@@ -515,21 +573,26 @@
 
     /* ---------- Catalog grid ---------- */
     function cardTemplate(p){
-      const level=stockLevel(p.available,p.total);
-      const badgeClass=level==='available'?'available':level;
-      const badgeLabel=p.available<=0?'Unavailable':level==='available'?'Available':`${STOCK_LABEL[level]} — ${p.available} left`;
+      const level=stockLevel(p.available);
+      const badgeClass=level;
+      const badgeLabel=UI.stockLabel(p.available);
+      const cap=maxBorrowableUnits(p.available,p.total);
+      const minStockBlocked=p.available>0&&cap===0;
+      const canBorrow=p.available>0&&!minStockBlocked;
+      const btnLabel=p.available<=0?'Unavailable':minStockBlocked?'Not Available to Borrow':'Request to Borrow';
       return `<article class="equipment-card" data-id="${p.id}">
         <div class="equipment-card__media">
-          <img src="${p.photoUrl||productImage(p.category)}" alt="${esc(p.category)}" onerror="this.onerror=null;this.src='${productSvg(icon[p.category]||'🏅')}'">
+          <img src="${esc(productThumb(p))}" alt="${esc(p.name)}" loading="lazy" onerror="${UI.imageFallbackAttr(p.category)}">
           <span class="equipment-card__badge equipment-card__badge--${badgeClass}">${badgeLabel}</span>
           <div class="equipment-card__id-strip"><span class="equipment-card__id">${displayId(p)}</span></div>
         </div>
         <div class="equipment-card__body">
-          <h3>${esc(p.name)}</h3>
-          <div class="equipment-card__tags"><span class="chip chip--neutral">${esc(p.category)}</span><span class="chip chip--good">Good</span></div>
+          <h3 title="${esc(p.name)}">${esc(p.name)}</h3>
+          <div class="equipment-card__tags"><span class="chip chip--neutral">${esc(p.category)}</span></div>
           <div class="equipment-card__stock-row${level!=='available'?' equipment-card__stock-row--'+level:''}"><span>Available</span><span>${p.available} / ${p.total}</span></div>
+          ${minStockBlocked?'<div class="equip-min-stock-note">⚠ Warning: stock is too low to borrow right now — you can\'t borrow this at this moment.</div>':''}
           <div class="equipment-card__actions">
-            <button type="button" class="btn-details" data-id="${p.id}" ${p.available?'':'disabled'}>${p.available?'Request to Borrow':'Unavailable'}</button>
+            <button type="button" class="btn-details" data-id="${p.id}" ${canBorrow?'':'disabled'}>${btnLabel}</button>
           </div>
         </div>
       </article>`;
@@ -542,15 +605,27 @@
       grid.innerHTML=shown.length?shown.map(cardTemplate).join(''):'<div class="empty-state"><img src="../../assets/icons/icon-search.svg" alt="" style="width:32px;height:32px;opacity:.5"><p class="empty-state__title">No equipment found</p><p>Try adjusting your search term or category filter.</p></div>';
     }
     searchInput.addEventListener('input',render);
-    // Set once the late-return-status check resolves at init (see below) —
-    // blocks opening a new request while a prior overdue item hasn't been
-    // returned, per the Late Return Policy.
-    let lateBlock=null;
+    // Borrowing restrictions from GET /api/borrow/eligibility — a flagged
+    // account, an item still pending replacement, or an overdue return.
+    // Shown as a warning and enforced again by the server on submit, so
+    // neither refreshing nor calling the API directly can bypass them.
+    let restrictions=[];
+    function renderRestrictions(list){
+      restrictions=list||[];
+      const banner=$('lateBlockBanner');
+      if(!restrictions.length){banner.hidden=true;banner.innerHTML='';return;}
+      banner.hidden=false;
+      banner.innerHTML=`<span>⚠</span><div><b>You can't submit a new borrowing request right now</b><ul>${restrictions.map(r=>`<li>${esc(r.message)}</li>`).join('')}</ul></div>`;
+    }
+    function loadEligibility(){
+      return apiFetch('/api/borrow/eligibility').then(d=>renderRestrictions(d.restrictions)).catch(()=>{});
+    }
     grid.addEventListener('click',e=>{
       const btn=e.target.closest('[data-id]');
       if(!btn||btn.disabled)return;
-      if(lateBlock){
-        showToast(`New requests are blocked until your overdue equipment is returned (Transaction #${lateBlock.oldestTransactionId}).`,'danger');
+      if(restrictions.length){
+        showToast(restrictions[0].message,'danger');
+        $('lateBlockBanner').scrollIntoView({behavior:'smooth',block:'center'});
         return;
       }
       current=products.find(p=>p.id===Number(btn.dataset.id));
@@ -611,6 +686,11 @@
 
     function checkExistingDocuments(){
       return apiFetch('/api/borrowers/me/documents').then(status=>{
+        // The server's rule for this borrower type is authoritative.
+        if(status.borrowerCategory)applyDocRequirements(status.borrowerCategory);
+        docReq=Object.assign({},docReq,{needsValidId:status.validIdRequired,docLabel:status.authorizationDocumentLabel||docReq.docLabel});
+        $('validIdCard').hidden=!docReq.needsValidId;
+        $('reviewValidIdRow').style.display=docReq.needsValidId?'':'none';
         uploadedValidId=status.validIdUploaded;
         uploadedAuthDoc=status.authorizationDocumentUploaded;
         if(uploadedValidId)markZoneUploaded('validIdZone','validIdZoneTitle','On file');
@@ -642,7 +722,13 @@
     const productById=id=>products.find(p=>p.id===id);
 
     function equipmentOptionsHtml(selectedId){
-      const opts=products.map(p=>`<option value="${p.id}" ${p.id===selectedId?'selected':''} ${p.available?'':'disabled'}>${esc(p.name)} (Available: ${p.available})</option>`).join('');
+      const opts=products.map(p=>{
+        const cap=maxBorrowableUnits(p.available,p.total);
+        const blocked=p.available>0&&cap===0;
+        const disabled=!p.available||blocked;
+        const suffix=blocked?' — below minimum stock':cap>0?` — max ${cap} per request`:'';
+        return `<option value="${p.id}" ${p.id===selectedId?'selected':''} ${disabled?'disabled':''}>${esc(p.name)} (Available: ${p.available})${suffix}</option>`;
+      }).join('');
       return `<option value="">Select equipment...</option>${opts}`;
     }
 
@@ -651,16 +737,26 @@
       list.innerHTML=equipmentRows.length?equipmentRows.map(row=>{
         const product=productById(row.equipmentId);
         const available=product?product.available:0;
-        const level=product?stockLevel(available,product.total):'available';
+        const level=product?stockLevel(available):'available';
+        const cap=product?maxBorrowableUnits(available,product.total):0;
+        const minBlocked=product&&cap===0;
+        // Clamp here too, not just at the +/- buttons: if the equipment
+        // list refreshes (e.g. someone else's request just got approved
+        // and ate the remaining stock) while a row already holds more than
+        // the new cap allows, silently capping it keeps what's on screen
+        // submittable instead of letting a stale quantity slip through to
+        // a 409 at Continue.
+        if(product&&row.quantity>cap&&cap>0)row.quantity=cap;
         return `<div class="equip-row" data-row="${row.rowId}">
           <div class="equip-row__main">
             <select class="equip-row__select">${equipmentOptionsHtml(row.equipmentId)}</select>
-            <div class="equip-row__meta">${product?`<span class="equip-badge equip-badge--${level}">${available} left</span>`:''}</div>
+            <div class="equip-row__meta">${product?`<span class="equip-badge equip-badge--${level}">${available} left</span>${cap>0?`<span class="equip-cap-note">Max ${cap} per request</span>`:''}`:''}</div>
+            ${minBlocked?'<div class="equip-min-stock-note">⚠ Warning: stock is too low to borrow right now — choose a different item.</div>':''}
           </div>
           <div class="equip-row__stepper">
             <button type="button" class="equip-row__dec" ${row.quantity<=1?'disabled':''}>−</button>
             <span>${row.quantity}</span>
-            <button type="button" class="equip-row__inc" ${!product||row.quantity>=available?'disabled':''}>+</button>
+            <button type="button" class="equip-row__inc" ${!product||cap<=0||row.quantity>=cap?'disabled':''}>+</button>
           </div>
           <button type="button" class="equip-row__remove" title="Remove equipment"><img src="../../assets/icons/icon-trash.svg" alt="" style="width:12px;height:12px"></button>
         </div>`;
@@ -679,7 +775,7 @@
       const rowId=Number(rowEl.dataset.row);
       const row=equipmentRows.find(r=>r.rowId===rowId);
       if(e.target.closest('.equip-row__remove')){equipmentRows=equipmentRows.filter(r=>r.rowId!==rowId);renderEquipmentList();return;}
-      if(e.target.closest('.equip-row__inc')){const p=productById(row.equipmentId);if(p&&row.quantity<p.available)row.quantity++;renderEquipmentList();return;}
+      if(e.target.closest('.equip-row__inc')){const p=productById(row.equipmentId);if(p&&row.quantity<maxBorrowableUnits(p.available,p.total))row.quantity++;renderEquipmentList();return;}
       if(e.target.closest('.equip-row__dec')){if(row.quantity>1)row.quantity--;renderEquipmentList();}
     });
     $('equipmentList').addEventListener('change',e=>{
@@ -710,9 +806,10 @@
     // "event date" field to anchor a 2–5-day rule against, and picking an
     // exact number of required lead days is a policy call for SDPO, not
     // something to invent unilaterally.
+    // "Today" in Philippine Time — the server interprets the chosen
+    // date/time as PHT too (dateHelper.parsePhtDateTime).
     function todayLocalDateStr(){
-      const d=new Date();
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      return todayPHDateString();
     }
     $('returnDateInput').min=todayLocalDateStr();
 
@@ -761,11 +858,11 @@
       $('reviewCollege').textContent=$('slipCollege').value;
       $('reviewEquipment').innerHTML=equipmentRows.map(r=>{
         const p=productById(r.equipmentId);
-        return `<div class="review-item"><span class="review-item__name">${icon[p&&p.category]||'🏅'}&nbsp; ${p?esc(p.name):''}</span><span class="review-qty">${r.quantity} unit${r.quantity>1?'s':''}</span></div>`;
+        return `<div class="review-item"><span class="review-item__name">${p?`<img class="review-item__thumb" src="${esc(productThumb(p))}" alt="" onerror="${UI.imageFallbackAttr(p.category)}">${esc(p.name)} <small>(${esc(p.code)})</small>`:''}</span><span class="review-qty">${r.quantity} unit${r.quantity>1?'s':''}</span></div>`;
       }).join('');
       $('reviewTotal').textContent=equipmentRows.reduce((s,r)=>s+r.quantity,0)+' unit(s)';
       $('reviewPurpose').textContent=$('purposeInput').value.trim();
-      $('reviewDate').textContent=$('returnDateInput').value?new Date($('returnDateInput').value+'T00:00').toLocaleDateString([],{month:'long',day:'numeric',year:'numeric'}):'—';
+      $('reviewDate').textContent=$('returnDateInput').value?new Date($('returnDateInput').value+'T00:00:00+08:00').toLocaleDateString('en-US',{timeZone:'Asia/Manila',month:'long',day:'numeric',year:'numeric'}):'—';
       $('reviewTime').textContent=$('returnTimeInput').value?formatTime($('returnTimeInput').value):'—';
       $('reviewValidIdPill').textContent=uploadedValidId?'Uploaded':'Missing';
       $('reviewValidIdPill').className='doc-pill '+(uploadedValidId?'doc-pill--ok':'doc-pill--missing');
@@ -773,8 +870,12 @@
       $('reviewAuthDocPill').className='doc-pill '+(uploadedAuthDoc?'doc-pill--ok':'doc-pill--missing');
     }
 
+    // One idempotency key per filled-in request: resubmitting the same form
+    // (double-click, retry after a network error) can't create a duplicate.
+    let requestKey=null;
     reqContinueBtn.addEventListener('click',()=>{
       reqModalOverlay.hidden=true;
+      requestKey=newRequestKey();
       equipmentRows=[];
       addEquipmentRow(current.id);
       $('purposeInput').value='';
@@ -802,14 +903,24 @@
       apiFetch('/api/borrow/request',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({items,purpose:$('purposeInput').value.trim()||null,expectedReturnDatetime,acknowledged:$('acknowledge').checked})
+        body:JSON.stringify({items,purpose:$('purposeInput').value.trim()||null,expectedReturnDatetime,acknowledged:$('acknowledge').checked,requestKey})
       })
         .then(data=>{
           $('successReqId').textContent=data.id;
           showWizardStep(4);
+          // Stock and my-activity figures changed — refresh them from the server.
+          refreshCatalog();
+          loadMyActivity();
+          btn.disabled=false;
         })
-        .catch(err=>showToast(err.message,'danger'))
-        .then(()=>{btn.disabled=false;});
+        .catch(err=>{
+          if(err.details&&err.details.restrictions){
+            renderRestrictions(err.details.restrictions);
+            borrowFlow.classList.remove('open');
+          }
+          showToast(err.message,'danger');
+          btn.disabled=false;
+        });
     });
 
     /* ---------- Toast (shared toast-stack markup) ---------- */
@@ -836,27 +947,53 @@
     apiFetch('/api/borrow/mine').then(rows=>{
       if(rows.length)$('welcomeName').textContent=`Welcome back, ${firstName}.`;
     }).catch(()=>{});
-    // Late Return Policy: a borrower with equipment overdue past the grace
-    // period is blocked from submitting new requests server-side (see
-    // createSelfRequest in borrow.controller.js) — this just surfaces that
-    // clearly up front instead of only as a rejected-submission error.
-    apiFetch('/api/borrow/late-return-status').then(status=>{
-      if(!status.blocked)return;
-      lateBlock=status;
-      const banner=$('lateBlockBanner');
-      banner.hidden=false;
-      banner.innerHTML=`<span>⚠</span><div><b>New borrowing requests are blocked</b>You have equipment overdue by ${status.daysOverdue} day(s) (Transaction #${status.oldestTransactionId}). Please return it to the SDPO office — borrowing privileges are restored once all overdue equipment is returned and any applicable penalties are settled.</div>`;
-    }).catch(()=>{});
+    loadEligibility();
     $('slipBorrowerName').value=displayName;
     $('slipBorrowerType').value=(borrowerProfile&&borrowerProfile.borrowerCategory)||'—';
     $('slipCollege').value=(borrowerProfile&&borrowerProfile.collegeOrUnit)||'—';
     applyDocRequirements(borrowerProfile&&borrowerProfile.borrowerCategory);
 
-    loadEquipment().then(()=>{
-      renderStats();
-      renderCategoryPanel();
-      render();
-    }).catch(err=>showToast('Could not load equipment: '+err.message,'danger'));
+    function refreshCatalog(){
+      return loadEquipment().then(()=>{
+        renderStats();
+        renderCategoryPanel();
+        render();
+      }).catch(err=>showToast('Could not load equipment: '+err.message,'danger'));
+    }
+
+    /* ---------- My Activity (semester-scoped, from the database) ---------- */
+    const myYearSelect=$('myYearSelect'),mySemesterSelect=$('mySemesterSelect');
+    let myTermInitialized=false;
+    function loadMyActivity(){
+      const params=myTermInitialized?`?academicYear=${encodeURIComponent(myYearSelect.value)}&semester=${encodeURIComponent(mySemesterSelect.value)}`:'';
+      return apiFetch('/api/dashboard/me'+params).then(d=>{
+        if(!myTermInitialized){
+          myYearSelect.innerHTML=d.academicYears.map(y=>`<option value="${y.value}">A.Y. ${esc(y.label)}</option>`).join('');
+          myTermInitialized=true;
+        }
+        myYearSelect.value=String(d.term.academicYearStart);
+        mySemesterSelect.value=String(d.term.semester);
+        $('myTermLabel').textContent=`${d.term.semesterLabel}, A.Y. ${d.term.academicYear} · ${d.term.rangeLabel}`;
+        $('myPending').textContent=d.mine.pendingRequests;
+        $('myApproved').textContent=d.mine.approvedRequests;
+        $('myRejected').textContent=d.mine.rejectedRequests;
+        $('myReturned').textContent=d.mine.returnedEquipment;
+        $('myActive').textContent=d.mine.borrowedUnits;
+      }).catch(err=>showToast('Could not load your activity: '+err.message,'danger'));
+    }
+    [myYearSelect,mySemesterSelect].forEach(el=>el.addEventListener('change',loadMyActivity));
+
+    // Profile/Borrower Type changed elsewhere — refresh the borrowing slip.
+    document.addEventListener('appshell:user-updated',e=>{
+      const bp=e.detail&&e.detail.borrowerProfile;
+      if(!bp)return;
+      $('slipBorrowerType').value=bp.borrowerCategory||'—';
+      $('slipCollege').value=bp.collegeOrUnit||'—';
+      applyDocRequirements(bp.borrowerCategory);
+    });
+
+    refreshCatalog();
+    loadMyActivity();
   </script>
 </body>
 </html>

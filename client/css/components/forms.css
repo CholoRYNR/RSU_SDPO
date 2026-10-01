@@ -15,6 +15,25 @@
   margin-left: 2px;
 }
 
+/* A .field__label paired with an inline action (e.g. "+ Add New" next to
+   the Equipment form's Category label, to add a category the seeded list
+   doesn't cover) — wraps both so the label keeps its own styling above. */
+.field__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.field__label-action {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-accent-green);
+}
+
+.field__label-action:hover {
+  text-decoration: underline;
+}
+
 .field__control {
   height: 44px;
   border: 0.8px solid var(--color-border);

@@ -15,13 +15,16 @@ jest.mock('../../models', () => ({
 jest.mock('../../controllers/borrow.controller', () => ({
   serialize: jest.fn((t) => ({ serialized: true, id: t.id })),
   loadTransactionOr404: jest.fn(),
-  assertStatusIn: jest.fn()
+  assertStatusIn: jest.fn(),
+  // Mirrors the real atomic transition: applies the new status/fields to the txn.
+  transition: jest.fn(async (txn, from, to, fields) => Object.assign(txn, { transactionStatus: to }, fields || {})),
+  codeMatchesItem: (code, item) => code === item.itemCode || (!!item.legacyItemCode && code === item.legacyItemCode)
 }));
 jest.mock('../../helpers/notify', () => ({ notifyBorrower: jest.fn() }));
 jest.mock('../../helpers/transactionLog', () => ({ logStatusChange: jest.fn() }));
 
 const { Equipment, User, DamageLossRecord, sequelize } = require('../../models');
-const { serialize, loadTransactionOr404, assertStatusIn } = require('../../controllers/borrow.controller');
+const { serialize, loadTransactionOr404, assertStatusIn, transition } = require('../../controllers/borrow.controller');
 const { notifyBorrower } = require('../../helpers/notify');
 const { logStatusChange } = require('../../helpers/transactionLog');
 const ctrl = require('../../controllers/return.controller');
@@ -140,11 +143,12 @@ describe('POST /api/borrow/:id/return — all items returned Good', () => {
 
     expect(txn.transactionStatus).toBe('Completed');
     expect(txn.returnedBy).toBe(9);
-    expect(txn.save).toHaveBeenCalledTimes(1);
+    // Status change goes through the atomic transition (no plain save()).
+    expect(transition).toHaveBeenCalledWith(txn, ['Released', 'Overdue'], 'Completed', expect.objectContaining({ returnedBy: 9 }), expect.anything());
     expect(logStatusChange).toHaveBeenCalledWith(7, 9, 'Released', 'Completed', 'Returned in good condition');
 
     expect(User.findByPk).not.toHaveBeenCalled(); // no restriction path taken
-    expect(notifyBorrower).toHaveBeenCalledWith(5, expect.stringContaining('good condition'), 'Return');
+    expect(notifyBorrower).toHaveBeenCalledWith(5, expect.stringContaining('good condition'), 'Return', 'txn-7-returned');
     expect(res.json).toHaveBeenCalledWith({ success: true, data: { serialized: true, id: 7 } });
   });
 
@@ -235,7 +239,7 @@ describe('POST /api/borrow/:id/return — Damaged/Lost items', () => {
 
     await ctrl.returnTransaction(req([{ itemCode: 'BB-1-0001', condition: 'Lost' }]), mockRes());
 
-    expect(notifyBorrower).toHaveBeenCalledWith(5, expect.stringContaining('restricted'), 'Return');
+    expect(notifyBorrower).toHaveBeenCalledWith(5, expect.stringContaining('flagged'), 'Return', 'txn-7-returned');
   });
 
   test('a mixed return (one Good, one Damaged) still overall counts as For Resolution, but the Good item is still restored', async () => {
@@ -272,5 +276,29 @@ describe('POST /api/borrow/:id/return — no linked borrower/user', () => {
 
     expect(notifyBorrower).not.toHaveBeenCalled();
     expect(txn.transactionStatus).toBe('Completed');
+  });
+});
+
+describe('POST /api/borrow/:id/return — duplicate submission', () => {
+  test('a second return of the same transaction fails before any unit or stock is touched', async () => {
+    const txn = makeTxn();
+    loadTransactionOr404.mockResolvedValue(txn);
+    const conflict = Object.assign(new Error('already updated'), { statusCode: 409 });
+    transition.mockRejectedValueOnce(conflict);
+
+    await expect(ctrl.returnTransaction(req([{ itemCode: 'BB-1-0001', condition: 'Good' }]), mockRes())).rejects.toMatchObject({
+      statusCode: 409
+    });
+    expect(txn.details[0].item.update).not.toHaveBeenCalled();
+    expect(Equipment.increment).not.toHaveBeenCalled();
+    expect(notifyBorrower).not.toHaveBeenCalled();
+  });
+
+  test('a unit can be identified by its pre-standardization label code', async () => {
+    const detail = makeDetail({ itemCode: 'EQ-010-001' });
+    detail.item.legacyItemCode = 'BB-1-0001';
+    loadTransactionOr404.mockResolvedValue(makeTxn({ details: [detail] }));
+    await ctrl.returnTransaction(req([{ itemCode: 'BB-1-0001', condition: 'Good' }]), mockRes());
+    expect(detail.item.update).toHaveBeenCalled();
   });
 });

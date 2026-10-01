@@ -86,18 +86,6 @@
             <div class="stock-stat__label">Borrowed</div>
           </div>
         </div>
-        <!-- Only shown when this equipment actually has units under repair or
-             retired — see openDetailsModal() in equipment.js. -->
-        <div class="stock-overview__stats stock-overview__stats--extra" id="detailsStatusExtra" hidden>
-          <div class="stock-stat stock-stat--maintenance">
-            <div class="stock-stat__value" id="detailsStatMaintenance">0</div>
-            <div class="stock-stat__label">Maintenance</div>
-          </div>
-          <div class="stock-stat stock-stat--decommissioned">
-            <div class="stock-stat__value" id="detailsStatDecommissioned">0</div>
-            <div class="stock-stat__label">Decommissioned</div>
-          </div>
-        </div>
       </div>
 
       <div class="details-info-grid">
@@ -110,7 +98,7 @@
           <span class="info-row__value" id="detailsDescriptionWrap">—</span>
         </div>
         <div class="info-row" style="grid-column:1/-1">
-          <span class="info-row__label">QR Codes Generated</span>
+          <span class="info-row__label">Unit QR Codes</span>
           <span class="info-row__value" id="detailsQrWrap">—</span>
         </div>
       </div>
@@ -131,7 +119,7 @@
       <div class="modal__header">
         <div>
           <p class="modal__title" id="formModalTitle">Add Equipment</p>
-          <p class="modal__subtitle" id="formModalSubtitle">ID will be assigned: EQ-2026-001</p>
+          <p class="modal__subtitle" id="formModalSubtitle"></p>
         </div>
         <button type="button" class="modal__close" data-close-modal="formModalOverlay" aria-label="Close">
           <img src="../../assets/icons/icon-close.svg" alt="" />
@@ -147,7 +135,10 @@
               <p class="field__error" id="fieldNameError">Equipment name is required.</p>
             </div>
             <div class="field">
-              <label class="field__label" for="fieldCategory">Category<span class="required">*</span></label>
+              <div class="field__label-row">
+                <label class="field__label" for="fieldCategory">Category<span class="required">*</span></label>
+                <button type="button" class="field__label-action" id="openAddCategoryBtn">+ Add New</button>
+              </div>
               <div class="select">
                 <select class="field__control" id="fieldCategory">
                   <option value="">Select category</option>
@@ -160,7 +151,7 @@
 
           <div class="field-row">
             <div class="field">
-              <label class="field__label" for="fieldQuantity">Total Quantity<span class="required">*</span></label>
+              <label class="field__label" for="fieldQuantity">Total Quantity (stock)<span class="required">*</span></label>
               <input class="field__control" type="number" min="1" step="1" id="fieldQuantity" value="1" />
               <p class="field__error" id="fieldQuantityError">Enter a valid quantity (at least 1).</p>
             </div>
@@ -177,6 +168,42 @@
         <button type="button" class="btn btn-success" id="formSubmitBtn">
           <img src="../../assets/icons/icon-plus.svg" alt="" id="formSubmitIcon" />
           <span id="formSubmitLabel">Add Equipment</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Add Category modal (opened from the Category field above,
+       for a category the seeded list at server/database/seeders/001_seed_categories.js
+       doesn't cover) ---------- -->
+  <div class="modal-overlay" id="addCategoryModalOverlay" hidden>
+    <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="addCategoryModalTitle">
+      <div class="modal__header">
+        <p class="modal__title" id="addCategoryModalTitle">Add Category</p>
+        <button type="button" class="modal__close" data-close-modal="addCategoryModalOverlay" aria-label="Close">
+          <img src="../../assets/icons/icon-close.svg" alt="" />
+        </button>
+      </div>
+
+      <div class="modal__body">
+        <form id="addCategoryForm" novalidate>
+          <div class="field">
+            <label class="field__label" for="fieldNewCategoryName">Category Name<span class="required">*</span></label>
+            <input class="field__control" type="text" id="fieldNewCategoryName" placeholder="e.g. Track &amp; Field" maxlength="150" />
+            <p class="field__error" id="fieldNewCategoryNameError">Category name is required.</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="fieldNewCategoryDescription">Description</label>
+            <textarea class="field__control" id="fieldNewCategoryDescription" rows="2" placeholder="Optional notes"></textarea>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal__footer">
+        <button type="button" class="btn btn-secondary" id="addCategoryCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-success" id="addCategorySubmitBtn">
+          <img src="../../assets/icons/icon-plus.svg" alt="" />
+          <span>Add Category</span>
         </button>
       </div>
     </div>
@@ -202,6 +229,7 @@
 
   <script src="../../js/shared/app-shell.js"></script>
   <script src="../../js/shared/api.js"></script>
+  <script src="../../js/shared/equipment-ui.js"></script>
   <script src="../../js/equipment/equipment.js"></script>
 </body>
 </html>

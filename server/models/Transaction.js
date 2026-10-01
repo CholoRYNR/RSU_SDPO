@@ -7,12 +7,12 @@ module.exports = (sequelize, DataTypes) => {
       Transaction.belongsTo(models.Borrower, { foreignKey: 'borrowerId', as: 'borrower' });
       Transaction.belongsTo(models.User, { foreignKey: 'reviewedBy', as: 'reviewer' });
       Transaction.belongsTo(models.User, { foreignKey: 'approvedBy', as: 'approver' });
+      Transaction.belongsTo(models.User, { foreignKey: 'documentsVerifiedBy', as: 'documentsVerifier' });
       Transaction.belongsTo(models.User, { foreignKey: 'releasedBy', as: 'releaser' });
       Transaction.belongsTo(models.User, { foreignKey: 'returnedBy', as: 'returner' });
       Transaction.belongsTo(models.User, { foreignKey: 'receivedByStaff', as: 'receivingStaff' });
       Transaction.hasMany(models.TransactionDetail, { foreignKey: 'transactionId', as: 'details' });
       Transaction.hasMany(models.TransactionLog, { foreignKey: 'transactionId', as: 'logs' });
-      Transaction.hasMany(models.MaintenanceFee, { foreignKey: 'transactionId', as: 'maintenanceFees' });
       Transaction.hasMany(models.DamageLossRecord, { foreignKey: 'transactionId', as: 'damageLossRecords' });
     }
   }
@@ -26,6 +26,14 @@ module.exports = (sequelize, DataTypes) => {
       requestDatetime: { type: DataTypes.DATE, allowNull: true, defaultValue: DataTypes.NOW },
       reviewedBy: { type: DataTypes.INTEGER, allowNull: true },
       reviewDatetime: { type: DataTypes.DATE, allowNull: true },
+      // Set when Admin/Staff accept the borrower's submitted documents —
+      // the gate a request must pass before it can reach the Director.
+      documentsVerifiedBy: { type: DataTypes.INTEGER, allowNull: true },
+      documentsVerifiedDatetime: { type: DataTypes.DATE, allowNull: true },
+      // Client-generated idempotency key for self-service submissions, unique
+      // per borrower (migration 023), so a double-click/retry can never
+      // create the same request twice.
+      requestKey: { type: DataTypes.STRING(64), allowNull: true },
       approvalDatetime: { type: DataTypes.DATE, allowNull: true },
       approvedBy: { type: DataTypes.INTEGER, allowNull: true },
       releaseDatetime: { type: DataTypes.DATE, allowNull: true },
@@ -65,7 +73,8 @@ module.exports = (sequelize, DataTypes) => {
       modelName: 'Transaction',
       tableName: 'transaction',
       underscored: true,
-      timestamps: true
+      timestamps: true,
+      indexes: [{ unique: true, fields: ['borrower_id', 'request_key'] }]
     }
   );
 

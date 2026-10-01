@@ -9,6 +9,8 @@
 // re-tested here — only the new behavior and the one modified branch of
 // login() that this feature touches.
 
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-for-auth-controller-spec';
+
 jest.mock('../../models', () => ({
   User: {
     findOne: jest.fn(),
@@ -306,11 +308,12 @@ describe('auth.controller.js#login (email verification gate)', () => {
     expect(accountStatusReads).toBe(0);
   });
 
-  test('a verified user with a restricted accountStatus still gets the accountStatus message (unchanged behavior)', async () => {
+  test('a flagged (Restricted) borrower can still sign in — new requests are blocked elsewhere', async () => {
     const user = {
       id: 10,
-      username: 'restricted',
+      username: 'flagged',
       password: 'hashed-pw',
+      userRole: 'Borrower',
       emailVerified: true,
       accountStatus: 'Restricted'
     };
@@ -318,9 +321,57 @@ describe('auth.controller.js#login (email verification gate)', () => {
     bcrypt.compare.mockResolvedValueOnce(true);
     const res = makeRes();
 
+    await authController.login({ body: { username: 'flagged', password: 'correct-password' } }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+  });
+
+  test('a Blocked account is refused with ACCOUNT_BLOCKED', async () => {
+    const user = { id: 11, username: 'blocked', password: 'hashed-pw', emailVerified: true, accountStatus: 'Blocked' };
+    User.findOne.mockResolvedValueOnce(user);
+    bcrypt.compare.mockResolvedValueOnce(true);
+
     await expect(
-      authController.login({ body: { username: 'restricted', password: 'correct-password' } }, res)
-    ).rejects.toThrow('This account is restricted');
+      authController.login({ body: { username: 'blocked', password: 'correct-password' } }, makeRes())
+    ).rejects.toMatchObject({ statusCode: 403, code: 'ACCOUNT_BLOCKED' });
+  });
+
+  test('an unverified account is refused with EMAIL_NOT_VERIFIED and the email to verify', async () => {
+    const user = { id: 12, username: 'newbie', emailAddress: 'newbie@example.com', password: 'hashed-pw', emailVerified: false, accountStatus: 'Active' };
+    User.findOne.mockResolvedValueOnce(user);
+    bcrypt.compare.mockResolvedValueOnce(true);
+
+    await expect(
+      authController.login({ body: { username: 'newbie', password: 'correct-password' } }, makeRes())
+    ).rejects.toMatchObject({ statusCode: 403, code: 'EMAIL_NOT_VERIFIED', details: { email: 'newbie@example.com' } });
+  });
+});
+
+describe('auth.controller.js#resendVerification (duplicate-email protection)', () => {
+  test('does not send another email while the previous code is inside the cooldown', async () => {
+    const user = {
+      emailAddress: 'a@example.com',
+      emailVerified: false,
+      // issued 10 seconds ago (codes expire 10 minutes after issue)
+      verificationCodeExpiresAt: new Date(Date.now() + 10 * 60 * 1000 - 10 * 1000),
+      save: jest.fn()
+    };
+    User.findOne.mockResolvedValueOnce(user);
+    const res = makeRes();
+    await authController.resendVerification({ body: { email: 'a@example.com' } }, res);
+    expect(user.save).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+  });
+
+  test('sends a fresh code once the cooldown has passed', async () => {
+    const user = {
+      emailAddress: 'a@example.com',
+      emailVerified: false,
+      verificationCodeExpiresAt: new Date(Date.now() + 10 * 60 * 1000 - 120 * 1000),
+      save: jest.fn()
+    };
+    User.findOne.mockResolvedValueOnce(user);
+    await authController.resendVerification({ body: { email: 'a@example.com' } }, makeRes());
+    expect(user.save).toHaveBeenCalled();
   });
 });
 

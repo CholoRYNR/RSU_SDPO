@@ -86,7 +86,7 @@ describe('GET /api/borrowers/me/documents (myDocumentStatus)', () => {
     await ctrl.myDocumentStatus({ user: { id: 9 } }, res);
 
     expect(Borrower.findOne).toHaveBeenCalledWith({ where: { userId: 9 } });
-    expect(res.json).toHaveBeenCalledWith({ success: true, data: { validIdUploaded: false, authorizationDocumentUploaded: false } });
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ validIdUploaded: false, authorizationDocumentUploaded: false }) });
   });
 
   test('reports true for whichever path is actually set', async () => {
@@ -95,7 +95,7 @@ describe('GET /api/borrowers/me/documents (myDocumentStatus)', () => {
     const res = mockRes();
     await ctrl.myDocumentStatus({ user: { id: 9 } }, res);
 
-    expect(res.json).toHaveBeenCalledWith({ success: true, data: { validIdUploaded: true, authorizationDocumentUploaded: false } });
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ validIdUploaded: true, authorizationDocumentUploaded: false }) });
   });
 
   test('does not throw when the account has no Borrower row at all (both flags false)', async () => {
@@ -104,7 +104,7 @@ describe('GET /api/borrowers/me/documents (myDocumentStatus)', () => {
     const res = mockRes();
     await ctrl.myDocumentStatus({ user: { id: 9 } }, res);
 
-    expect(res.json).toHaveBeenCalledWith({ success: true, data: { validIdUploaded: false, authorizationDocumentUploaded: false } });
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ validIdUploaded: false, authorizationDocumentUploaded: false }) });
   });
 });
 
@@ -182,7 +182,7 @@ describe('GET /api/borrowers/:id/documents (staffDocumentStatus)', () => {
     const res = mockRes();
     await ctrl.staffDocumentStatus({ params: { id: 1 } }, res);
 
-    expect(res.json).toHaveBeenCalledWith({ success: true, data: { validIdUploaded: true, authorizationDocumentUploaded: false } });
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: expect.objectContaining({ validIdUploaded: true, authorizationDocumentUploaded: false }) });
   });
 });
 

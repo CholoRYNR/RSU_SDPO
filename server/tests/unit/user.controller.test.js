@@ -13,7 +13,10 @@ jest.mock('../../models', () => ({
   User: { findByPk: jest.fn() },
   Borrower: { create: jest.fn() }
 }));
-jest.mock('../../controllers/auth.controller', () => ({ issueVerificationCode: jest.fn().mockResolvedValue() }));
+jest.mock('../../controllers/auth.controller', () => ({
+  issueVerificationCode: jest.fn().mockResolvedValue(),
+  serializeUser: jest.requireActual('../../controllers/auth.controller').serializeUser
+}));
 
 const { User, Borrower } = require('../../models');
 const { issueVerificationCode } = require('../../controllers/auth.controller');
@@ -247,7 +250,7 @@ describe('PUT /api/users/profile (updateProfile)', () => {
 
       expect(user.emailAddress).toBe('new@example.com');
       expect(user.emailVerified).toBe(false);
-      expect(issueVerificationCode).toHaveBeenCalledWith(user);
+      expect(issueVerificationCode).toHaveBeenCalledWith(user, { force: true });
     });
 
     test('emailVerified is left untouched when the submitted email is unchanged', async () => {
@@ -287,5 +290,30 @@ describe('PUT /api/users/profile (updateProfile)', () => {
       expect(user.emailVerified).toBe(true);
       expect(issueVerificationCode).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('PUT /api/users/profile — Borrower Type', () => {
+  function borrowerUser(category) {
+    const borrowerProfile = { id: 3, firstName: 'Ana', lastName: 'Cruz', collegeOrUnit: 'CET', borrowerCategory: category, save: jest.fn().mockResolvedValue() };
+    return { id: 9, userRole: 'Borrower', emailAddress: 'ana@example.com', borrowerProfile, save: jest.fn().mockResolvedValue() };
+  }
+
+  test('an existing borrower can change their Borrower Type', async () => {
+    const user = borrowerUser('Student');
+    User.findByPk.mockResolvedValueOnce(user).mockResolvedValueOnce(user);
+    await ctrl.updateProfile({ user: { id: 9 }, body: { borrowerCategory: 'Faculty' } }, mockRes());
+    expect(user.borrowerProfile.borrowerCategory).toBe('Faculty');
+    expect(user.borrowerProfile.save).toHaveBeenCalled();
+  });
+
+  test('an invalid Borrower Type is rejected with 400 and nothing is saved', async () => {
+    const user = borrowerUser('Student');
+    User.findByPk.mockResolvedValueOnce(user);
+    await expect(
+      ctrl.updateProfile({ user: { id: 9 }, body: { borrowerCategory: 'Alumni' } }, mockRes())
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(user.borrowerProfile.save).not.toHaveBeenCalled();
+    expect(user.save).not.toHaveBeenCalled();
   });
 });

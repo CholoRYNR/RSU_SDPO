@@ -17,5 +17,8 @@ module.exports = (err, req, res, next) => {
     // session apart from an ordinary business-logic 401 (wrong password,
     // etc.) without guessing from message text.
     ...(err.code ? { code: err.code } : {}),
+    // Structured context for a business-rule error (e.g. which documents
+    // are missing, which restriction blocked a request).
+    ...(err.details ? { data: err.details } : {}),
   });
 };

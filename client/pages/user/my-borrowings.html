@@ -96,7 +96,8 @@
     function statusFor(t){
       if(['For Resolution','Replacement'].includes(t.status))return'resolution';
       const now=new Date();
-      const due=new Date(t.due);
+      // Exact due instant (the display string is a PHT date only).
+      const due=new Date((t.timestamps&&t.timestamps.expectedReturn)||t.due);
       const daysLeft=(due-now)/86400000;
       if(daysLeft<0)return'overdue';
       if(daysLeft<=2)return'due';
@@ -114,7 +115,7 @@
         label:statusLabel[status],
         items:groupItems(t.items),
         total:totalQty+' unit'+(totalQty===1?'':'s'),
-        returnDate:t.due
+        returnDate:t.due+(t.dueTime?' '+t.dueTime:'')
       };
       if(status==='due')b.message='Return by '+t.due;
       if(status==='overdue')b.attention='Action Required — Please return the overdue equipment to the SDPO office.';

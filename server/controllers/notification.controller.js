@@ -7,15 +7,18 @@ function serialize(n) {
     id: n.id,
     type: n.notificationType,
     message: n.message,
-    deliveryChannel: n.deliveryChannel,
     isRead: !!n.isRead,
     sentAt: n.sentAt
   };
 }
 
+// Only the in-app ('System') row is a notification the user sees. Older
+// rows written per delivery channel ('Email'/'SMS' copies of the same
+// event, from before helpers/notify.js was fixed) are delivery records,
+// not separate notifications, so they're excluded here.
 exports.list = async (req, res) => {
   const rows = await Notification.findAll({
-    where: { userId: req.user.id },
+    where: { userId: req.user.id, deliveryChannel: 'System' },
     order: [['id', 'DESC']]
   });
   res.json({ success: true, data: rows.map(serialize) });

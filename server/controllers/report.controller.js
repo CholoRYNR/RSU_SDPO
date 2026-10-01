@@ -2,7 +2,9 @@
 
 const { Op } = require('sequelize');
 const { Transaction, TransactionDetail, Equipment, Category, Item, Borrower, User } = require('../models');
-const { INCLUDE, serialize } = require('./borrow.controller');
+const { INCLUDE, serialize, txnCode } = require('./borrow.controller');
+const { formatDate: fmtDate, nowInPht, startOfPhtDate, phtDayOfMonth } = require('../helpers/dateHelper');
+const { POST_APPROVAL } = require('../constants/transactionStatus');
 const borrowingReportTemplate = require('../reports/templates/borrowingReportTemplate');
 const overdueReportTemplate = require('../reports/templates/overdueReportTemplate');
 const utilizationReportTemplate = require('../reports/templates/utilizationReportTemplate');
@@ -38,30 +40,8 @@ function renderFormat(req, res, template, reportData) {
   return false;
 }
 
-function fmtDate(d) {
-  return d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
-}
-
-// Philippine Time is a fixed UTC+8 offset (no DST), so "the start of Q1
-// 2026 in PHT" can be computed directly as a UTC instant without needing a
-// timezone database — Date.UTC(year, month, day, hour) with the hour
-// shifted back by 8 lands exactly on 00:00 PHT.
-const PHT_OFFSET_MINUTES = 8 * 60;
-function startOfPhtDate(year, monthIndex0, day) {
-  return new Date(Date.UTC(year, monthIndex0, day, 0, 0, 0) - PHT_OFFSET_MINUTES * 60 * 1000);
-}
-// "Right now, as a PHT wall-clock reading" — used only to pick the default
-// year/quarter when the caller doesn't specify one. Shifting the instant
-// forward by the PHT offset and then reading it with the UTC getters is the
-// standard fixed-offset-timezone trick; it keeps the *default quarter
-// selection* correct near a quarter boundary too, not just the range math
-// below (a request made at, say, 2:00 AM PHT on Jan 1 is 6:00 PM UTC Dec 31
-// on a UTC-configured server — without this it would default to Q4 of the
-// old year instead of Q1 of the new one).
-function nowInPht() {
-  return new Date(Date.now() + PHT_OFFSET_MINUTES * 60 * 1000);
-}
-
+// Report periods are bounded at 00:00 Philippine Time (helpers/dateHelper.js),
+// independent of the server process timezone.
 // Every report is filtered to a quarter+year window over requestDatetime,
 // same convention as the existing transactionLog calendar report below.
 //
@@ -86,6 +66,24 @@ function quarterRange(req) {
   return { year, quarter, start, end };
 }
 
+// "Report Period: January – March 2024" / "Quarter: Q1 2024 (January –
+// March)" — the two lines under the letterhead on the official report
+// format (2026-09-13 redesign). Derived from the same {year, quarter}
+// quarterRange() already computes for the 4 quarter-bound reports below, so
+// this never drifts out of sync with the actual query range those reports
+// are filtered to.
+const QUARTER_MONTHS = [
+  ['January', 'February', 'March'],
+  ['April', 'May', 'June'],
+  ['July', 'August', 'September'],
+  ['October', 'November', 'December']
+];
+function periodLabel(year, quarter) {
+  const months = QUARTER_MONTHS[quarter - 1] || QUARTER_MONTHS[0];
+  const range = `${months[0]} – ${months[2]} ${year}`;
+  return { range, quarterLabel: `Q${quarter} ${year} (${months[0]} – ${months[2]})` };
+}
+
 const TXN_INCLUDE_FOR_REPORTS = [
   { model: Borrower, as: 'borrower' },
   {
@@ -95,10 +93,6 @@ const TXN_INCLUDE_FOR_REPORTS = [
   }
 ];
 
-function txnCode(t) {
-  return `TXN-${new Date(t.requestDatetime || t.createdAt).getFullYear()}-${String(t.id).padStart(4, '0')}`;
-}
-
 // Statuses a transaction only ever reaches once the Director has actually
 // approved it (transactionStatus is set to 'Approved' in exactly one place,
 // borrow.controller.js#approve) or moved on from there. Medium #7 from the
@@ -107,19 +101,10 @@ function txnCode(t) {
 // Acknowledged/For Review/For Approval (not actually approved yet) and,
 // worse, Rejected and Cancelled (explicitly *not* approved) — inflating the
 // real approved count with everything that was ever submitted.
-const POST_APPROVAL_STATUSES = new Set([
-  'Approved',
-  'Released',
-  'Returned',
-  'Overdue',
-  'For Resolution',
-  'Replacement',
-  'Resolved',
-  'Completed'
-]);
+const POST_APPROVAL_STATUSES = new Set(POST_APPROVAL);
 
 exports.borrowing = async (req, res) => {
-  const { start, end } = quarterRange(req);
+  const { start, end, year, quarter } = quarterRange(req);
   const txns = await Transaction.findAll({
     where: { requestDatetime: { [Op.gte]: start, [Op.lt]: end } },
     include: TXN_INCLUDE_FOR_REPORTS,
@@ -144,6 +129,7 @@ exports.borrowing = async (req, res) => {
 
   const reportData = {
     title: 'BORROWING REPORT',
+    period: periodLabel(year, quarter),
     heads: ['Transaction No.', 'Borrower', 'Equipment', 'Qty', 'Borrow Date', 'Expected Return', 'Status'],
     data,
     stats: [
@@ -158,7 +144,7 @@ exports.borrowing = async (req, res) => {
 };
 
 exports.overdue = async (req, res) => {
-  const { start, end } = quarterRange(req);
+  const { start, end, year, quarter } = quarterRange(req);
   const now = new Date();
   const txns = await Transaction.findAll({
     where: {
@@ -190,6 +176,7 @@ exports.overdue = async (req, res) => {
 
   const reportData = {
     title: 'OVERDUE REPORT',
+    period: periodLabel(year, quarter),
     heads: ['Borrower', 'Equipment', 'Qty', 'Due Date', 'Days Overdue'],
     data,
     stats: [
@@ -203,7 +190,7 @@ exports.overdue = async (req, res) => {
 };
 
 exports.utilization = async (req, res) => {
-  const { start, end } = quarterRange(req);
+  const { start, end, year, quarter } = quarterRange(req);
   const [equipment, details] = await Promise.all([
     Equipment.findAll({ include: [{ model: Category, as: 'category' }] }),
     TransactionDetail.findAll({
@@ -230,6 +217,7 @@ exports.utilization = async (req, res) => {
 
   const reportData = {
     title: 'EQUIPMENT UTILIZATION REPORT',
+    period: periodLabel(year, quarter),
     heads: ['Equipment', 'Category', 'Times Borrowed', 'Available Quantity'],
     data,
     stats: [
@@ -243,7 +231,7 @@ exports.utilization = async (req, res) => {
 };
 
 exports.history = async (req, res) => {
-  const { start, end } = quarterRange(req);
+  const { start, end, year, quarter } = quarterRange(req);
   const txns = await Transaction.findAll({
     where: { requestDatetime: { [Op.gte]: start, [Op.lt]: end } },
     include: TXN_INCLUDE_FOR_REPORTS,
@@ -268,6 +256,7 @@ exports.history = async (req, res) => {
 
   const reportData = {
     title: 'TRANSACTION HISTORY REPORT',
+    period: periodLabel(year, quarter),
     heads: ['Date', 'Transaction No.', 'Borrower', 'Equipment', 'Action', 'Status'],
     data,
     stats: [['Total Transactions', String(txns.length)]]
@@ -293,12 +282,11 @@ exports.inventory = async (req, res) => {
     // Medium #8 from the 2026-09-08 system audit: `registered -
     // availableQuantity` still over-counts "Borrowed" — a registered item
     // that's Reserved (a pending, not-yet-released request), Damaged, Under
-    // Repair, Lost, or Decommissioned also isn't in availableQuantity, but
-    // none of those are actually borrowed either. Each Item already carries
-    // its own ground-truth availabilityStatus (set exclusively by the
-    // release/return workflow — see qr.controller.js's manual-status guard,
-    // which explicitly blocks hand-editing a Borrowed or Reserved item), so
-    // count that directly instead of deriving it arithmetically.
+    // Repair, or Lost also isn't in availableQuantity, but none of those are
+    // actually borrowed either. Each Item already carries its own
+    // ground-truth availabilityStatus (set exclusively by the
+    // release/return workflow), so count that directly instead of deriving
+    // it arithmetically.
     const borrowed = items.filter((i) => i.availabilityStatus === 'Borrowed').length;
     if (registered === 0 && e.totalQuantity > 0) missingItems += 1;
     return [
@@ -391,15 +379,8 @@ exports.condition = async (req, res) => {
 // Groups every transaction requested during the given month by the day of
 // month it was requested on, for the Transaction Log Report calendar.
 //
-// Same Medium #6 timezone issue as quarterRange() above applies to the
-// month *boundary* here, so it gets the same PHT-pinned fix. Note this
-// doesn't touch the day-bucketing below (`new Date(t.requestDatetime).
-// getDate()`), which still reads the day-of-month in the server process's
-// local timezone — a transaction made very late/early in the day PHT could
-// still land in the neighboring calendar cell if the server itself doesn't
-// run in PHT. That's a display-grouping nuance distinct from this range
-// possibly excluding/including the wrong transactions entirely, and is
-// left as-is here.
+// Groups the month's transactions by PHT request day for the Transaction
+// Log Report calendar (both the month range and the day bucket are PHT).
 exports.transactionLog = async (req, res) => {
   const phtNow = nowInPht();
   const year = parseInt(req.query.year, 10) || phtNow.getUTCFullYear();
@@ -416,7 +397,7 @@ exports.transactionLog = async (req, res) => {
 
   const byDay = {};
   rows.forEach((t) => {
-    const day = new Date(t.requestDatetime).getDate();
+    const day = phtDayOfMonth(t.requestDatetime);
     if (!byDay[day]) byDay[day] = [];
     byDay[day].push(serialize(t));
   });

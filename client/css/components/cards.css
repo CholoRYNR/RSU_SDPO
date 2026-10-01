@@ -1,16 +1,17 @@
+/* Equipment cards, shared by the Borrower showroom and the Admin/Staff/
+   Director equipment pages. Columns are sized from a balanced card width
+   (min 210px) instead of a fixed 3-column split, so cards stay the same
+   readable size on every screen: ~4-5 per row on desktop, 3 on laptop, 2
+   on tablet, 1 on small phones — never stretched to a third of a wide
+   screen (which made the old square images ~340px tall). */
 .equipment-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-6);
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--space-4);
+  align-items: stretch;
 }
 
-@media (max-width: 900px) {
-  .equipment-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 600px) {
+@media (max-width: 480px) {
   .equipment-grid {
     grid-template-columns: 1fr;
   }
@@ -19,6 +20,7 @@
 .equipment-card {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   background: var(--color-surface);
   border: 0.8px solid var(--color-border-soft);
   border-radius: var(--radius-xl);
@@ -26,28 +28,31 @@
   overflow: hidden;
 }
 
+/* Fixed 4:3 frame with the whole product visible: object-fit: contain never
+   stretches or crops a photo, whatever its own aspect ratio, and padding
+   keeps it clear of the badge/ID overlays. */
 .equipment-card__media {
   position: relative;
-  height: 160px;
+  aspect-ratio: 4 / 3;
   background: var(--color-surface-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
 }
 
 .equipment-card__media img {
-  width: 90px;
-  height: 90px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+  padding: 14px 14px 30px;
+  box-sizing: border-box;
 }
 
 .equipment-card__badge {
   position: absolute;
   top: var(--space-3);
   right: var(--space-3);
-  padding: 4.8px 12.8px;
+  padding: 3px 9px;
   border-radius: var(--radius-full);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   border: 0.8px solid transparent;
 }
@@ -64,10 +69,8 @@
   color: var(--color-warn-text);
 }
 
-/* Stock-level warning tiers — thresholds scale per equipment's own total
-   quantity (see stockLevel() in equipment.js / equipment-showroom-figma.html)
-   instead of a single fixed number, so a 10-unit item and a 3-unit item both
-   turn amber/red at the right point relative to their own stock. */
+/* Stock-level warning tiers — the fixed RSU SDPO availability thresholds
+   (see stockLevel() in client/js/shared/equipment-ui.js). */
 .equipment-card__badge--limited {
   background: var(--color-warn-bg);
   border-color: var(--color-warn-border);
@@ -85,32 +88,47 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: 48px;
+  height: 36px;
   display: flex;
   align-items: flex-end;
   padding: 0 var(--space-3) var(--space-2);
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.28), rgba(15, 23, 42, 0));
 }
 
 .equipment-card__id {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.62);
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
   border-radius: var(--radius-xs);
-  padding: 4px 8px;
+  padding: 3px 7px;
 }
 
 .equipment-card__body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-5);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+/* Two lines max so long names don't make one card taller than its row. */
+.equipment-card__body h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(14px * 1.35 * 2);
 }
 
 .equipment-card__tags {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
@@ -142,7 +160,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .equipment-card__stock-row span:first-child {
@@ -183,7 +201,8 @@
 
 .btn-details {
   flex: 1;
-  height: 36px;
+  min-width: 0;
+  height: 34px;
   border-radius: var(--radius-md);
   background: var(--color-accent-green-bg);
   color: var(--color-accent-green-dark);
@@ -192,8 +211,8 @@
 }
 
 .btn-icon-outline {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
   display: flex;
   align-items: center;

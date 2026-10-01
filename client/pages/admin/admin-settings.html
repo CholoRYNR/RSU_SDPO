@@ -6,77 +6,12 @@
   <title>RSU-SDPO | Settings</title>
   <link rel="stylesheet" href="../../css/shared/app-shell.css">
   <link rel="stylesheet" href="../../css/main.css">
-  <style>
-    /* Mirrors client/pages/user/settings.html's layout/format exactly (per
-       the user's explicit request: "I want by the settings is the same
-       format as the user side") — summary card + Edit Profile modal,
-       read-only Profile Details grid, an Account Actions card holding just
-       the password change, and a Display Preferences card. Previously this
-       page had its own different pattern: always-editable inline forms for
-       both profile and password, with no summary/read-only view at all. */
-    .content{width:100%;max-width:760px;margin:auto}
-    .settings-card{background:var(--page);border:1px solid var(--softline);border-radius:14px;margin-bottom:16px;overflow:hidden}
-    .settings-card-head{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--softline)}
-    .settings-card-head .icon{width:32px;height:32px;border-radius:10px;background:#ecfdf5;color:#00865d;display:grid;place-items:center;font-size:15px;flex-shrink:0}
-    .settings-card-head h2{margin:0;font-size:14px}
-    .settings-card-head p{margin:2px 0 0;font-size:11px;color:var(--muted)}
-    .settings-card-body{padding:18px 20px}
-
-    .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--softline)}
-    .toggle-row:last-child{border-bottom:0}
-    .toggle-row .label b{display:block;font-size:12px}
-    .toggle-row .label span{display:block;color:var(--muted);font-size:11px;margin-top:1px}
-    .switch{position:relative;width:38px;height:22px;flex-shrink:0}
-    .switch input{opacity:0;width:0;height:0}
-    .switch .track{position:absolute;inset:0;background:#cbd5e1;border-radius:999px;cursor:pointer;transition:background .15s}
-    .switch .track:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .15s}
-    .switch input:checked + .track{background:var(--green)}
-    .switch input:checked + .track:before{transform:translateX(16px)}
-
-    .save-toast{max-height:0;overflow:hidden;transition:max-height .25s ease}
-    .save-toast.show{max-height:60px}
-    .save-toast p{margin:12px 0 0;padding:9px 12px;border-radius:8px;background:#ecfdf5;border:1px solid #d0fae5;color:#007a55;font-size:12px;font-weight:600}
-
-    /* ---------- Account: photo/name/badges summary ---------- */
-    .profile-summary{display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
-    .photo-column{display:flex;flex:0 0 80px;flex-direction:column;align-items:center;gap:8px}
-    .photo{display:grid;place-items:center;width:80px;height:80px;border-radius:50%;background:var(--deep);color:#fff;font-size:28px;font-weight:800;overflow:hidden}
-    .photo img{width:100%;height:100%;object-fit:cover}
-    .text-button{padding:0;border:0;background:transparent;color:var(--deep);font:500 12px/18px inherit;text-decoration:underline;cursor:pointer}
-    .field-error{font-size:11px;color:#d92d20;min-height:14px;margin-top:2px;max-width:100px;text-align:center}
-    .person{min-width:0;flex:1}
-    .person h2{margin:0;font-size:20px;line-height:25px;color:var(--ink)}
-    .person .email{margin:2px 0 0;color:var(--muted);font-size:14px}
-    .badges{display:flex;gap:8px;padding-top:12px;flex-wrap:wrap}
-    .badge{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:500;border:0.8px solid transparent}
-    .badge.status-active{border-color:#a4f4cf;background:#ecfdf5;color:#00865d}
-    .badge.status-blocked,.badge.status-restricted{border-color:#fda29b;background:#fef3f2;color:#d92d20}
-    .badge.role-tag{border-color:#93c5fd;background:#dbeafe;color:#1d4ed8}
-    .profile-summary .btn{margin-left:auto}
-
-    /* ---------- Profile Details: read-only info sub-sections ---------- */
-    .subsection-title{margin:0 0 12px;font-size:12px;font-weight:700;color:var(--ink)}
-    .profile-subsection + .profile-subsection{margin-top:22px;padding-top:22px;border-top:1px solid var(--softline)}
-    .data-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-    .field{display:grid;gap:2px;min-height:40px}
-    .field-label{color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.3px;text-transform:uppercase}
-    .field-value{font-size:14px;color:var(--ink)}
-
-    /* ---------- Account actions ---------- */
-    .actions{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
-
-    /* ---------- Dialogs (reuse shared modal chrome from main.css) ---------- */
-    .modal--form{width:440px}
-    .modal--form .modal__body{gap:14px;padding-top:16px}
-    .modal--form p{margin:0;color:var(--muted);font-size:13px;line-height:20px}
-
-    @media(max-width:600px){.settings-card-body{padding:16px}.profile-summary{flex-direction:column}.profile-summary .btn{margin-left:0}.data-grid{grid-template-columns:1fr}.actions{flex-direction:column;align-items:stretch}}
-  </style>
 </head>
-<body>
+<body class="settings-page">
   <div id="app-root" data-page="" data-title="Settings" data-subtitle="Manage your account information and display preferences">
+    <div class="settings-grid">
 
-    <section class="settings-card">
+    <section class="settings-card settings-card--wide">
       <div class="settings-card-head"><span class="icon">◉</span><div><h2>Account</h2><p>Your signed-in staff identity</p></div></div>
       <div class="settings-card-body">
         <div class="profile-summary">
@@ -96,7 +31,7 @@
       </div>
     </section>
 
-    <section class="settings-card">
+    <section class="settings-card settings-card--wide">
       <div class="settings-card-head"><span class="icon">▤</span><div><h2>Profile Details</h2><p>Contact and office information on file</p></div></div>
       <div class="settings-card-body">
         <div class="profile-subsection">
@@ -131,6 +66,8 @@
         <div class="toggle-row"><div class="label"><b>Dark Mode</b><span>Switch the whole app to a dark theme</span></div><label class="switch"><input type="checkbox" id="themeToggle"><span class="track"></span></label></div>
       </div>
     </section>
+
+    </div>
 
     <div class="save-toast" id="settingsToast"><p>✓ Settings saved</p></div>
   </div>

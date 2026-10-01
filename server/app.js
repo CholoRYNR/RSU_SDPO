@@ -18,33 +18,37 @@ const sequelize = require('./database/connection');
 const { runOverdueSweep } = require('./jobs/overdueSweep');
 const { runDueDateReminderSweep } = require('./jobs/dueDateReminderSweep');
 const { runIncompleteRequirementsSweep } = require('./jobs/incompleteRequirementsSweep');
+const { buildContentSecurityPolicyDirectives } = require('./config/csp');
 
 const app = express();
 
+// Vercel (and any reverse proxy in front of this app) always sets
+// X-Forwarded-For on every request. Express's own proxy trust defaults to
+// false, and express-rate-limit deliberately throws (not just warns) when it
+// sees a forwarded-for header with proxy trust unset, since it can't safely
+// tell real users apart in that state — this was silently turning every
+// request to the 6 rate-limited auth routes below into a 500 once deployed
+// behind Vercel (never reproduced in local dev, since localhost never sends
+// X-Forwarded-For). `1` trusts exactly one hop (Vercel's own edge) — not
+// `true`, which express-rate-limit's own validation separately warns against
+// because it would let a client spoof its own IP via that same header and
+// dodge rate limiting entirely.
+app.set('trust proxy', 1);
+
 // Core middleware
-// client/ pages use inline <script> blocks and inline onclick/onchange handlers
-// throughout (not external .js files), so helmet's default CSP — which blocks
-// inline scripts even under 'self' — silently breaks every click on the site.
-// Relaxing script-src/script-src-attr here to match style-src's existing
-// 'unsafe-inline'. Before any public deployment, migrate inline scripts to
-// external files + nonces and drop this back to the strict default.
-// This server is plain HTTP only (no TLS listener) in development. Helmet's
-// defaults assume HTTPS: it sends Strict-Transport-Security and a CSP with
-// upgrade-insecure-requests, which tell the browser to force this origin to
-// https on every future visit. Since localhost:3000 never speaks TLS, that
-// self-inflicts ERR_INVALID_HTTP_RESPONSE / ERR_SSL_PROTOCOL_ERROR once the
-// browser caches the policy. Disable both here; re-enable hsts once this is
-// actually served over HTTPS in production.
+// See server/config/csp.js for why script-src/script-src-attr, img-src, and
+// frame-src each diverge from helmet's strict defaults. hsts is disabled
+// separately here (not in csp.js, since HSTS isn't a CSP directive): this
+// server is plain HTTP only (no TLS listener) in development, and helmet's
+// HSTS default tells the browser to force this origin to https on every
+// future visit, which self-inflicts ERR_INVALID_HTTP_RESPONSE /
+// ERR_SSL_PROTOCOL_ERROR against localhost once cached. Re-enable once this
+// is actually served over HTTPS in production.
 app.use(
   helmet({
     hsts: false,
     contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        'script-src': ["'self'", "'unsafe-inline'"],
-        'script-src-attr': ["'unsafe-inline'"],
-        'upgrade-insecure-requests': null
-      }
+      directives: buildContentSecurityPolicyDirectives()
     }
   })
 );
@@ -107,6 +111,13 @@ app.use('/api/auth/verify-registration', makeCodeRateLimiter());
 app.use('/api/auth/resend-verification', makeCodeRateLimiter());
 app.use('/api/auth/forgot-password', makeCodeRateLimiter());
 app.use('/api/auth/reset-password', makeCodeRateLimiter());
+// API responses are live data (stock, statuses, dashboards) — never let a
+// browser or proxy serve a cached copy. Routes that are safe to cache (the
+// versioned equipment photo) override this header themselves.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api', routes);
 
 // Static client (optional, adjust if serving client separately)

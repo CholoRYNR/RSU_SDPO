@@ -30,18 +30,25 @@ async function runOverdueSweep() {
   // would keep blocking the rest of the batch on every single run.
   for (const txn of overdue) {
     try {
-      txn.transactionStatus = 'Overdue';
-      await txn.save();
+      // Conditional update: if the transaction was returned (or another
+      // sweep instance already flipped it) between the query and now, skip
+      // it instead of overwriting the newer status or notifying twice.
+      const [moved] = await Transaction.update(
+        { transactionStatus: 'Overdue' },
+        { where: { id: txn.id, transactionStatus: 'Released' } }
+      );
+      if (!moved) continue;
       await logStatusChange(txn.id, null, 'Released', 'Overdue', 'Automatically flagged overdue by system sweep');
 
       if (txn.borrower && txn.borrower.user) {
         await notifyBorrower(
           txn.borrower.user.id,
           `Your borrowed equipment (Transaction #${txn.id}) is now overdue. Please return it to the SDPO office as soon as possible.`,
-          'Overdue'
+          'Overdue',
+          `txn-${txn.id}-overdue`
         );
       }
-      await notifyStaff(`Transaction #${txn.id} is now overdue.`, 'Overdue');
+      await notifyStaff(`Transaction #${txn.id} is now overdue.`, 'Overdue', `txn-${txn.id}-overdue`);
       flaggedCount += 1;
     } catch (err) {
       console.error(`Overdue sweep: failed to process transaction #${txn.id}:`, err.message);

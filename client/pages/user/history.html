@@ -126,9 +126,11 @@
         date:t.date,
         items:groupItems(t.items),
         rawItems:t.items,
-        fees:t.fees||[],
         returned:t.returned,
         due:t.due,
+        // Exact instants for the on-time check (display strings are PHT dates).
+        returnedAt:t.timestamps&&t.timestamps.returned,
+        dueAt:t.timestamps&&t.timestamps.expectedReturn,
         purpose:t.purpose,
         status:STATUS_BUCKET[t.status]
       };
@@ -149,7 +151,7 @@
     function onTimeRate(){
       const completed=data.filter(r=>r.status==='completed');
       if(!completed.length)return{pct:100,total:0,onTime:0};
-      const onTime=completed.filter(r=>!r.returned||!r.due||new Date(r.returned)<=new Date(r.due)).length;
+      const onTime=completed.filter(r=>!r.returnedAt||!r.dueAt||new Date(r.returnedAt)<=new Date(r.dueAt)).length;
       return{pct:Math.round((onTime/completed.length)*100),total:completed.length,onTime};
     }
 
@@ -199,21 +201,17 @@
         returnCard.classList.remove('hidden');
         const items=r.rawItems||[];
         const worst=items.some(i=>i.returnedCondition==='Lost')?'Lost':items.some(i=>i.returnedCondition==='Damaged')?'Damaged':'Good';
-        const onTime=!r.returned||!r.due||new Date(r.returned)<=new Date(r.due);
+        const onTime=!r.returnedAt||!r.dueAt||new Date(r.returnedAt)<=new Date(r.dueAt);
         const conditionColor=worst==='Good'?'var(--color-accent-green-dark)':'#dc2626';
-        const feesHtml=r.fees.length
-          ?`<div class="detail-row"><label>Outstanding Fees</label><strong style="color:#dc2626">${r.fees.map(f=>`₱${Number(f.feeAmount).toFixed(2)} (${esc(f.feeType)}, ${esc(f.feeStatus)})`).join(', ')}</strong></div>`
-          :'';
         $('returnRows').innerHTML=`
           <div class="detail-row"><label>Actual Return Date</label><strong>${esc(r.returned||'—')}</strong></div>
           <div class="detail-row"><label>Returned Condition</label><strong style="color:${conditionColor}">${worst}</strong></div>
-          <div class="detail-row"><label>Return Status</label><strong style="color:${onTime?'var(--color-accent-green-dark)':'#dc2626'}">◉ Returned ${onTime?'On Time':'Late'}</strong></div>
-          ${feesHtml}`;
+          <div class="detail-row"><label>Return Status</label><strong style="color:${onTime?'var(--color-accent-green-dark)':'#dc2626'}">◉ Returned ${onTime?'On Time':'Late'}</strong></div>`;
       }else{
         returnCard.classList.add('hidden');
       }
 
-      const stepsByStatus={completed:['Submitted','Acknowledged','For Approval','Approved','Released','Returned','Completed'],cancelled:['Submitted','Cancelled'],rejected:['Submitted','Rejected']};
+      const stepsByStatus={completed:['Submitted','Documents Verified','Approved','Released','Returned','Completed'],cancelled:['Submitted','Cancelled'],rejected:['Submitted','Rejected']};
       $('timeline').innerHTML=(stepsByStatus[r.status]||['Submitted']).map((s,i,arr)=>`<div class="step"><div class="dot">✓</div>${s}</div>${i<arr.length-1?'<i class="join"></i>':''}`).join('');
       scrollTo(0,0);
     }

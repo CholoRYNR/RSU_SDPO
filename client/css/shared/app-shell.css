@@ -8,12 +8,20 @@
   --nav-text:#45556c;--nav-title:#90a1b9;--online-bg:#ecfdf5;--online-border:#d0fae5;--online-text:#007a55;
   --unread-bg:#f8fffc;
   --font-sans:Inter,Arial,sans-serif;
+  /* auth-hero-background.png reused as a site-wide wallpaper (see .content
+     below): a tint of --page painted over the photo leaves it showing
+     through at ~25% (per user request — raised from an earlier ~8% pass),
+     while cards/tables (which keep their own solid --page background) stay
+     fully legible on top. The sidebar and topbar keep their plain solid
+     --page background untouched, so only the content pane wears the photo. */
+  --hero-overlay: rgba(255,255,255,.75);
 }
 :root[data-theme="dark"]{
   --deep:#00c98a;
   --ink:#e6edf7;--muted:#94a6c2;--line:#28374f;--softline:#19233a;--page:#101a2c;--canvas:#0a1220;
   --nav-text:#aebbd3;--nav-title:#6d7fa3;--online-bg:#0d2a22;--online-border:#0f3d30;--online-text:#4ade80;
   --unread-bg:#0d1f2e;
+  --hero-overlay: rgba(16,26,44,.76);
 }
 
 html,body{height:100%}
@@ -45,7 +53,21 @@ button{cursor:pointer}
 .sidebar .utility img{width:12px;height:12px;flex-shrink:0}
 
 /* ---------- Main / content scroll region ---------- */
-main{flex:1;min-width:0;background:var(--page);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+/* The hero wallpaper lives here (not on .content) so it fills the FULL
+   width of the main pane, edge to edge — .content is deliberately
+   width-capped and centered per page (max-width + margin:auto) for
+   readability, which would otherwise leave plain --page gutters on either
+   side with no image showing through them. main never scrolls itself
+   (.content does, internally), so a plain background here already stays
+   visually static without needing background-attachment:fixed. */
+main{
+  flex:1;min-width:0;display:flex;flex-direction:column;height:100vh;overflow:hidden;
+  background-color:var(--page);
+  background-image:linear-gradient(var(--hero-overlay),var(--hero-overlay)),url("../../assets/images/auth-hero-background.png");
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+}
 .topbar{flex-shrink:0;height:65px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:var(--page)}
 .topbar h1{font-size:18px;line-height:23px;margin:0;font-weight:700}
 .topbar p{font-size:12px;line-height:18px;margin:0;color:var(--muted)}

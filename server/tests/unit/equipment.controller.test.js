@@ -34,7 +34,7 @@ describe('serialize() photoUrl (via getOne)', () => {
     Equipment.findByPk.mockResolvedValueOnce({ id: 7, equipmentName: 'Basketball', photoPath: 'equipment-7-123.jpg', category: null });
     const res = mockRes();
     await ctrl.getOne({ params: { id: '7' } }, res);
-    expect(res.json.mock.calls[0][0].data.photoUrl).toBe('/api/equipment/7/photo');
+    expect(res.json.mock.calls[0][0].data.photoUrl).toBe('/api/equipment/7/photo?v=equipment-7-123.jpg'); // versioned by storage key
   });
 
   test('is null when no photo has ever been uploaded', async () => {
@@ -62,7 +62,7 @@ describe('POST /api/equipment/:id/photo (uploadPhoto)', () => {
     );
     expect(equipment.photoPath).toMatch(/^equipment-7-\d+\.jpg$/);
     expect(equipment.save).toHaveBeenCalledTimes(1);
-    expect(res.json.mock.calls[0][0].data.photoUrl).toBe('/api/equipment/7/photo');
+    expect(res.json.mock.calls[0][0].data.photoUrl).toBe('/api/equipment/7/photo?v=equipment-7-999.jpg'); // versioned by storage key
   });
 
   test('404s when the equipment does not exist', async () => {

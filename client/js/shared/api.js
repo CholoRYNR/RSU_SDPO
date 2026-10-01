@@ -47,11 +47,59 @@ function apiFetch(url, options) {
         throw new Error('Your session has expired. Please sign in again.');
       }
       if (!res.ok || !body || !body.success) {
-        throw new Error((body && body.message) || 'Request failed (' + res.status + ')');
+        // `code` and `details` carry the server's structured reason (e.g.
+        // BORROWER_FLAGGED, PENDING_REPLACEMENT, EMAIL_NOT_VERIFIED) so pages
+        // can react to the rule, not the wording of the message.
+        var err = new Error((body && body.message) || 'Request failed (' + res.status + ')');
+        err.status = res.status;
+        err.code = body && body.code;
+        err.details = body && body.data;
+        throw err;
       }
       return body.data;
     });
   });
+}
+
+/* ---------- Philippine Time display ----------
+   Every timestamp is recorded by the server; the browser only formats it,
+   always in Asia/Manila so users in any timezone (or with a wrong device
+   clock/timezone) see the same Philippine date and time. */
+var PH_TIME_ZONE = 'Asia/Manila';
+
+function formatPHDate(value) {
+  if (!value) return '—';
+  var d = new Date(value);
+  return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { timeZone: PH_TIME_ZONE, month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatPHTime(value) {
+  if (!value) return '';
+  var d = new Date(value);
+  return isNaN(d) ? '' : d.toLocaleTimeString('en-US', { timeZone: PH_TIME_ZONE, hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+function formatPHDateTime(value) {
+  if (!value) return '—';
+  var d = new Date(value);
+  return isNaN(d)
+    ? '—'
+    : d.toLocaleString('en-US', { timeZone: PH_TIME_ZONE, month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+// "YYYY-MM-DD" for today in Philippine Time — the floor for date inputs.
+function todayPHDateString() {
+  var parts = new Intl.DateTimeFormat('en-CA', { timeZone: PH_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  return parts; // en-CA formats as YYYY-MM-DD
+}
+
+// Random idempotency key for one submission attempt (see
+// borrow.controller.js#createSelfRequest).
+function newRequestKey() {
+  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID().replace(/-/g, '');
+  var s = '';
+  for (var i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16);
+  return s;
 }
 
 function currentUser() {

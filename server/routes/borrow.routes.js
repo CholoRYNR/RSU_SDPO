@@ -6,19 +6,21 @@ const ctrl = require('../controllers/borrow.controller');
 
 const router = express.Router();
 const staffOnly = roleMiddleware(['Admin', 'Director', 'Staff']);
-// Approve is Director-only per the formal workflow — Staff can Review a
-// request but only a Director (or Admin, as superuser) can approve it.
+// Document review/verification is Admin/Staff work; approval is the
+// Director's (Admin as superuser). The Director can view everything but
+// doesn't perform the Staff review step itself.
+const reviewerOnly = roleMiddleware(['Admin', 'Staff']);
 const directorOnly = roleMiddleware(['Admin', 'Director']);
 const borrowerOnly = roleMiddleware(['Borrower']);
 
 router.use(authMiddleware);
 router.get('/', staffOnly, catchAsync(ctrl.list));
 router.get('/mine', borrowerOnly, catchAsync(ctrl.mine));
-router.get('/late-return-status', borrowerOnly, catchAsync(ctrl.lateReturnStatus));
+router.get('/eligibility', borrowerOnly, catchAsync(ctrl.eligibility));
 router.post('/', staffOnly, catchAsync(ctrl.create));
 router.post('/request', borrowerOnly, catchAsync(ctrl.createSelfRequest));
 router.patch('/:id/cancel', borrowerOnly, catchAsync(ctrl.cancelSelfRequest));
-router.patch('/:id/review', staffOnly, catchAsync(ctrl.review));
+router.patch('/:id/review', reviewerOnly, catchAsync(ctrl.review));
 router.patch('/:id/approve', directorOnly, catchAsync(ctrl.approve));
 router.patch('/:id/acknowledge-receipt', borrowerOnly, catchAsync(ctrl.acknowledgeReceipt));
 router.patch('/:id/reject', staffOnly, catchAsync(ctrl.reject));
