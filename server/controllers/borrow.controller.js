@@ -140,6 +140,26 @@ async function getBorrowingRestrictions(borrower, user) {
   return restrictions;
 }
 
+// Staff-side counterpart to the submission check above: a borrower who is
+// flagged, has an unresolved replacement, or is overdue cannot have a request
+// approved or equipment released — even for a request submitted (or approved)
+// before the restriction began. Rejecting, returning for correction, and
+// receiving returned equipment stay open so the account can be resolved.
+async function assertBorrowerNotRestricted(txn, action) {
+  if (!txn.borrower) return;
+  const restrictions = await getBorrowingRestrictions(txn.borrower, txn.borrower.user);
+  if (restrictions.length === 0) return;
+  const reasons = restrictions
+    .map((r) => ({ BORROWER_FLAGGED: 'the account is flagged', PENDING_REPLACEMENT: 'a damaged/lost item still needs replacement', LATE_RETURN: 'equipment is overdue' })[r.code] || r.code)
+    .join('; ');
+  throw httpError(
+    409,
+    `Cannot ${action} Transaction ${txnCode(txn)}: this borrower is restricted (${reasons}). Resolve the restriction first, or reject the request instead.`,
+    'BORROWER_RESTRICTED',
+    { restrictions }
+  );
+}
+
 // Gives still-Reserved units back to the available pool when a request is
 // Rejected or Cancelled before release. A pending self-service request holds
 // no units (they are assigned at approval), so those rows are skipped.
@@ -698,6 +718,7 @@ exports.review = async (req, res) => {
         { missing }
       );
     }
+    await assertBorrowerNotRestricted(txn, 'approve');
     nextStatus = STATUS.APPROVED;
     await sequelize.transaction(async (t) => {
       await transition(
@@ -763,6 +784,7 @@ exports.approve = async (req, res) => {
   if (!txn.documentsVerifiedDatetime) {
     throw httpError(409, 'Submitted documents must be verified before this request can be approved', 'DOCUMENTS_NOT_VERIFIED');
   }
+  await assertBorrowerNotRestricted(txn, 'approve');
   await sequelize.transaction(async (t) => {
     await transition(txn, [STATUS.FOR_APPROVAL], STATUS.APPROVED, { approvedBy: req.user.id, approvalDatetime: new Date() }, t);
     await assignUnitsOnApproval(txn, t);
@@ -815,6 +837,7 @@ exports.release = async (req, res) => {
 
   const txn = await loadTransactionOr404(req.params.id);
   assertStatus(txn, STATUS.APPROVED);
+  await assertBorrowerNotRestricted(txn, 'release equipment for');
 
   const scanned = itemCodes.map((c) => String(c).trim());
   if (txn.details.some((d) => !d.item)) {
