@@ -14,10 +14,7 @@ const STAFF_ROLES = ['Admin', 'Director', 'Staff'];
 // Delivery failures are logged, never thrown, so they can't break the
 // workflow action that triggered them.
 //
-// SMS was removed (2026-10-02) per the manuscript's confirmed notification
-// channels: in-app and email only. The Semaphore SMS integration
-// (services/notificationService/smsService.js, config/semaphore.js) was
-// removed entirely along with it rather than left wired but unused.
+// Notification channels are in-app and email only.
 async function deliverExternalChannels(user, message, type) {
   if (!user) return;
   try {
@@ -66,7 +63,7 @@ async function notifyUser(userId, message, type, dedupeKey) {
       const user = await User.findByPk(userId);
       await deliverExternalChannels(user, message, type);
     } catch (err) {
-      console.error(`[notify] Failed to look up user ${userId} for email/SMS delivery:`, err.message || err);
+      console.error(`[notify] Failed to look up user ${userId} for email delivery:`, err.message || err);
     }
   }
   return notification;
