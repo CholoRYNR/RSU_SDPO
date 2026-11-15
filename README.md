@@ -29,8 +29,8 @@ See folder tree for full module breakdown (auth, inventory, equipment, QR, borro
 
 1. `npm install`
 2. Copy `.env.example` to `.env` and fill in credentials
-3. Run database migrations in `server/database/migrations`
-4. Seed initial data: `node server/scripts/seedDatabase.js`
+3. Run database migrations: `npm run db:migrate`
+4. Seed initial data: `npm run db:seed`
 5. `npm run dev` to start in development mode
 
 ## Development Team
@@ -39,8 +39,8 @@ See folder tree for full module breakdown (auth, inventory, equipment, QR, borro
 |---|---|
 | Project Leader | Laurie Jean F. Fernandez |
 | Backend Developer | Ryan Norleigh F. Roxas |
-| Frontend Developer | Mark Laurence T. Dioco |
-| Database Developer | Mar Jhon S. Fermanejo |
+| Frontend Developer | Mark Laurence S. Dioco |
+| Database Developer | Mar Jhon T. Fermanejo |
 
 ## Scope
 
