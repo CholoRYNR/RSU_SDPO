@@ -708,3 +708,55 @@ describe('reserve-on-approval — units are assigned and stock drops only when a
     await expect(ctrl.release({ params: { id: 31 }, body: { itemCodes: ['X'] }, user: { id: 3 } }, mockRes())).rejects.toMatchObject({ statusCode: 409 });
   });
 });
+
+describe('restricted borrowers — approval and release are blocked (2026-11-15)', () => {
+  const restrictedTxn = (status, extra = {}) =>
+    stubFindByPkResult({
+      id: 70,
+      transactionStatus: status,
+      borrower: { ...READY_BORROWER, user: { id: 40, accountStatus: 'Restricted' } },
+      authorizationDocumentPath: READY_BORROWER.authorizationDocumentPath,
+      validIdPath: null,
+      documentsVerifiedDatetime: new Date(),
+      details: [{ id: 1, equipmentId: 1, itemId: 5, item: { id: 5, itemCode: 'VVB-48-01', availabilityStatus: 'Reserved', equipmentId: 1 } }],
+      ...extra
+    });
+
+  test('review(accept) is refused with BORROWER_RESTRICTED for a flagged borrower', async () => {
+    Transaction.findByPk.mockResolvedValueOnce(restrictedTxn('Acknowledged'));
+    await expect(
+      ctrl.review({ params: { id: 70 }, user: { id: 3 }, body: { action: 'accept' } }, mockRes())
+    ).rejects.toMatchObject({ statusCode: 409, code: 'BORROWER_RESTRICTED' });
+    expect(Item.update).not.toHaveBeenCalled();
+    expect(notifyBorrower).not.toHaveBeenCalled();
+  });
+
+  test('approve() is refused for a flagged borrower', async () => {
+    Transaction.findByPk.mockResolvedValueOnce(restrictedTxn('For Approval'));
+    await expect(ctrl.approve({ params: { id: 70 }, user: { id: 3 } }, mockRes())).rejects.toMatchObject({ code: 'BORROWER_RESTRICTED' });
+  });
+
+  test('release() is refused for a flagged borrower even though the request was approved earlier', async () => {
+    Transaction.findByPk.mockResolvedValueOnce(restrictedTxn('Approved'));
+    await expect(
+      ctrl.release({ params: { id: 70 }, body: { itemCodes: ['VVB-48-01'] }, user: { id: 3 } }, mockRes())
+    ).rejects.toMatchObject({ statusCode: 409, code: 'BORROWER_RESTRICTED' });
+  });
+
+  test('rejecting a flagged borrower’s request is still allowed', async () => {
+    const txn = restrictedTxn('Acknowledged');
+    Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
+    await expect(
+      ctrl.review({ params: { id: 70 }, user: { id: 3 }, body: { action: 'reject', remarks: 'Account flagged' } }, mockRes())
+    ).resolves.not.toThrow();
+  });
+
+  test('a pending replacement blocks approval too', async () => {
+    const txn = restrictedTxn('Acknowledged', { borrower: { ...READY_BORROWER, user: { id: 40, accountStatus: 'Active' } } });
+    Transaction.findByPk.mockResolvedValueOnce(txn);
+    DamageLossRecord.findAll.mockResolvedValueOnce([{ id: 1, itemId: 5, transactionId: 70, resolutionStatus: 'Pending', item: null }]);
+    await expect(
+      ctrl.review({ params: { id: 70 }, user: { id: 3 }, body: { action: 'accept' } }, mockRes())
+    ).rejects.toMatchObject({ code: 'BORROWER_RESTRICTED' });
+  });
+});
