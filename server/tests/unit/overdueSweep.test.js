@@ -99,7 +99,7 @@ describe('jobs/overdueSweep.js', () => {
     const first = makeTxn({ id: 1 });
     const second = makeTxn({ id: 2 });
     Transaction.findAll.mockResolvedValue([first, second]);
-    notifyStaff.mockRejectedValueOnce(new Error('SMS gateway down'));
+    notifyStaff.mockRejectedValueOnce(new Error('notification gateway down'));
 
     await runOverdueSweep();
 

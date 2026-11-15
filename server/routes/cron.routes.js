@@ -17,7 +17,7 @@ const router = express.Router();
 // <CRON_SECRET>` header when the CRON_SECRET env var is set (see
 // https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs).
 // Without checking it, this path would be a public, unauthenticated way
-// for anyone to trigger the sweeps (and their emails/SMS/notifications) on
+// for anyone to trigger the sweeps (and their emails/notifications) on
 // demand. If CRON_SECRET isn't set at all, the check is skipped rather
 // than locking the route out entirely — matches this app's existing
 // "flag it, don't block on it" pattern for optional hardening (see the

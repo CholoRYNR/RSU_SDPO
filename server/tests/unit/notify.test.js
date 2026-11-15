@@ -90,7 +90,7 @@ describe('helpers/notify.js', () => {
       expect(sendEmail).toHaveBeenCalledTimes(1);
     });
 
-    test('the in-app write still succeeds when the user lookup for email/SMS fails', async () => {
+    test('the in-app write still succeeds when the user lookup for email fails', async () => {
       User.findByPk.mockRejectedValue(new Error('db hiccup'));
       await expect(notifyBorrower(1, 'm', 'Approval')).resolves.toEqual({ id: 100 });
     });
