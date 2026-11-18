@@ -69,11 +69,11 @@
       <article class="rate-card">
         <div>
           <span class="muted">On-Time Return Rate</span>
-          <b>92%</b>
-          <span class="muted">You returned 11 of 12 completed borrowings on time</span>
-          <p class="late">◉ 1 late return</p>
+          <b>–</b>
+          <span class="muted">Loading…</span>
+          <p class="late" style="display:none"></p>
         </div>
-        <div class="ring">92%</div>
+        <div class="ring">–</div>
       </article>
       <div class="controls">
         <div class="tabs" id="tabs"></div>
@@ -137,9 +137,15 @@
     }
 
     let data=[];
+    // Borrowings still out (Released/Overdue) whose due time has passed. They
+    // are not in History yet, but they were not returned on time, so the
+    // on-time rate has to count them as late.
+    let outstandingLate=0;
     function loadHistory(){
       return apiFetch('/api/borrow/mine').then(rows=>{
         data=rows.filter(t=>HISTORY_STATUSES.includes(t.status)).map(mapTransaction);
+        const now=Date.now();
+        outstandingLate=rows.filter(t=>(t.status==='Released'||t.status==='Overdue')&&t.timestamps&&t.timestamps.expectedReturn&&new Date(t.timestamps.expectedReturn).getTime()<now).length;
       });
     }
 
@@ -150,20 +156,24 @@
 
     function onTimeRate(){
       const completed=data.filter(r=>r.status==='completed');
-      if(!completed.length)return{pct:100,total:0,onTime:0};
+      const total=completed.length+outstandingLate;
+      if(!total)return{pct:null,total:0,onTime:0};
       const onTime=completed.filter(r=>!r.returnedAt||!r.dueAt||new Date(r.returnedAt)<=new Date(r.dueAt)).length;
-      return{pct:Math.round((onTime/completed.length)*100),total:completed.length,onTime};
+      return{pct:Math.round((onTime/total)*100),total,onTime};
     }
 
     function renderRateCard(){
       const {pct,total,onTime}=onTimeRate();
       const late=total-onTime;
-      document.querySelector('.rate-card b').textContent=pct+'%';
-      document.querySelector('.rate-card .muted:last-of-type').textContent=`You returned ${onTime} of ${total} completed borrowings on time`;
-      document.querySelector('.ring').textContent=pct+'%';
+      const label=pct===null?'–':pct+'%';
+      document.querySelector('.rate-card b').textContent=label;
+      document.querySelector('.rate-card .muted:last-of-type').textContent=pct===null
+        ?'No completed borrowings yet'
+        :`You returned ${onTime} of ${total} borrowings on time`;
+      document.querySelector('.ring').textContent=label;
       const lateEl=document.querySelector('.rate-card .late');
       lateEl.style.display=late>0?'':'none';
-      lateEl.textContent='◉ '+late+' late return'+(late===1?'':'s');
+      lateEl.textContent='◉ '+late+' late or overdue'+(outstandingLate>0?' ('+outstandingLate+' not yet returned)':'');
     }
 
     function renderTabs(){
