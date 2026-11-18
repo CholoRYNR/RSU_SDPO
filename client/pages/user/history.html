@@ -15,7 +15,9 @@
     .rate-card .muted{color:var(--color-text-500);font-size:12px}
     .rate-card b{display:block;font-size:32px;color:var(--color-accent-green-dark);margin:2px 0}
     .rate-card .late{color:var(--color-warn-text);font-size:12px;margin-top:4px}
-    .ring{width:72px;height:72px;flex-shrink:0;border:5px solid #cceee2;border-top-color:var(--color-accent-green-dark);border-right-color:var(--color-accent-green-dark);border-radius:50%;display:grid;place-items:center;color:var(--color-accent-green-dark);font-weight:700;font-size:13px}
+    .ring{--pct:0;width:72px;height:72px;flex-shrink:0;border-radius:50%;background:conic-gradient(var(--color-accent-green-dark) calc(var(--pct)*1%),#cceee2 0);position:relative;display:grid;place-items:center;color:var(--color-accent-green-dark);font-weight:700;font-size:13px}
+    .ring::before{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--color-surface)}
+    .ring span{position:relative}
 
     /* ---------- Filter tabs + search ---------- */
     .controls{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;margin-bottom:16px}
@@ -73,7 +75,7 @@
           <span class="muted">Loading…</span>
           <p class="late" style="display:none"></p>
         </div>
-        <div class="ring">–</div>
+        <div class="ring" role="img" aria-label="On-time return rate"><span>–</span></div>
       </article>
       <div class="controls">
         <div class="tabs" id="tabs"></div>
@@ -170,7 +172,7 @@
       document.querySelector('.rate-card .muted:last-of-type').textContent=pct===null
         ?'No completed borrowings yet'
         :`You returned ${onTime} of ${total} borrowings on time`;
-      document.querySelector('.ring').textContent=label;
+      const ring=document.querySelector('.ring');ring.style.setProperty('--pct',pct===null?0:pct);ring.querySelector('span').textContent=label;
       const lateEl=document.querySelector('.rate-card .late');
       lateEl.style.display=late>0?'':'none';
       lateEl.textContent='◉ '+late+' late or overdue'+(outstandingLate>0?' ('+outstandingLate+' not yet returned)':'');
