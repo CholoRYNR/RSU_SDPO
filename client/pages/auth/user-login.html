@@ -28,11 +28,30 @@
     .role-tag{display:inline-block;margin-top:8px;padding:4px 12px;border-radius:999px;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:#ecfdf5;color:#02704f}
     .signup-title,.screen-title{margin:8px 0 0;font-size:.95rem;font-weight:600;color:#334155}
 
-    .form-card{display:grid;gap:12px}
-    label{display:grid;gap:4px;font-size:.8rem;color:#475569}
+    .form-card{display:grid;gap:12px;min-width:0}
+    /* A <select>'s intrinsic width in Chromium is based on its widest
+       <option> text (e.g. "College of Computing, Multimedia Arts and
+       Digital Innovation (CCMADI)"). Grid items default to min-width:auto,
+       which lets that intrinsic width push the whole single-column
+       .form-card grid wider than the fixed-width .card — every field then
+       visibly overflows the white card onto the background, not just the
+       college field, since the grid track is shared by the whole column.
+       min-width:0 at each level that would otherwise inherit the select's
+       natural size lets the grid track stay capped at the card's width and
+       the <select> truncate/ellipsis its own text instead.
+       (2026-10-03 report: "the textbox exceeds".) */
+    label{display:grid;gap:4px;font-size:.8rem;color:#475569;min-width:0}
+    /* `label{display:grid}` above is an author rule, so it wins over the
+       browser's own `[hidden]{display:none}` default regardless of which
+       selector is more specific — author rules always beat user-agent
+       rules at the same importance. Without this, <label hidden> (e.g.
+       #signupCollegeOtherLabel before "Others" is picked) stays visible.
+       `[hidden]` here is also an author rule, so normal CSS specificity
+       applies between the two, and the attribute selector wins. */
+    [hidden]{display:none!important}
     label>span:first-child{font-size:10px;font-weight:500;letter-spacing:.25px;text-transform:uppercase;color:#4a5565}
-    .field-group{display:flex;align-items:center;gap:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px}
-    .field-group input,.field-group select{flex:1;min-width:0;border:0;background:transparent;outline:none;color:#0f172a;font-size:14px}
+    .field-group{display:flex;align-items:center;gap:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:8px 12px;min-width:0}
+    .field-group input,.field-group select{flex:1;min-width:0;max-width:100%;border:0;background:transparent;outline:none;color:#0f172a;font-size:14px;text-overflow:ellipsis}
     .field-group input::placeholder{color:#717182}
     .field-group.invalid{border-color:#fda29b;background:#fef3f2}
     .field-icon{display:flex;flex-shrink:0;color:#99a1af}
@@ -132,8 +151,24 @@
           </label>
           <label>
             <span>College / Unit</span>
-            <div class="field-group" id="signupCollegeGroup"><input id="signupCollege" type="text" placeholder="e.g. College of Engineering" autocomplete="organization"></div>
+            <div class="field-group" id="signupCollegeGroup">
+              <select id="signupCollege">
+                <option value="">Select your college or unit...</option>
+                <option>College of Arts and Sciences (CAS)</option>
+                <option>College of Business and Accountancy (CBA)</option>
+                <option>College of Education (CED)</option>
+                <option>College of Engineering and Technology (CET)</option>
+                <option>College of Computing, Multimedia Arts and Digital Innovation (CCMADI)</option>
+                <option>College of Agriculture, Fisheries and Environmental Sciences (CAFES)</option>
+                <option value="__other__">Others (please specify)</option>
+              </select>
+            </div>
             <span class="field-error" id="signupCollegeError"></span>
+          </label>
+          <label id="signupCollegeOtherLabel" hidden>
+            <span>Specify College / Unit</span>
+            <div class="field-group" id="signupCollegeOtherGroup"><input id="signupCollegeOther" type="text" placeholder="Enter your college or unit" autocomplete="organization"></div>
+            <span class="field-error" id="signupCollegeOtherError"></span>
           </label>
           <label>
             <span>Borrower Type</span>
@@ -141,7 +176,6 @@
               <select id="signupCategory">
                 <option value="Student">Student</option>
                 <option value="Faculty">Faculty</option>
-                <option value="Staff">Staff (non-teaching university staff)</option>
                 <option value="Employee">Employee</option>
                 <option value="External">External</option>
               </select>
@@ -268,6 +302,19 @@
       window.location.href = staffRoles.includes(user.userRole) ? '../admin/dashboard.html' : '../user/equipment-showroom-figma.html';
     }
 
+    // Shows the free-text "specify your college or unit" field only when
+    // the dropdown's catch-all option is picked — keeps the common case
+    // (one of the 12 actual RSU colleges) a clean dropdown pick, while still
+    // allowing a unit that isn't on the list (e.g. a non-academic office).
+    $('signupCollege').addEventListener('change', () => {
+      const isOther = $('signupCollege').value === '__other__';
+      $('signupCollegeOtherLabel').hidden = !isOther;
+      if (!isOther) {
+        $('signupCollegeOther').value = '';
+        setFieldError('signupCollegeOtherGroup', 'signupCollegeOtherError', '');
+      }
+    });
+
     $('openSignupButton').addEventListener('click', showSignup);
     $('backToLoginButton').addEventListener('click', () => showLogin());
     $('forgotPasswordButton').addEventListener('click', showForgot);
@@ -370,14 +417,19 @@
       e.preventDefault();
       const name = $('signupName').value.trim();
       const email = $('signupEmail').value.trim();
-      const college = $('signupCollege').value.trim();
+      const collegeChoice = $('signupCollege').value;
+      const collegeOther = $('signupCollegeOther').value.trim();
+      const college = collegeChoice === '__other__' ? collegeOther : collegeChoice;
       const category = $('signupCategory').value;
       const pw = $('signupPassword').value;
       const confirm = $('signupConfirm').value;
       let ok = true;
       ok = setFieldError('signupNameGroup', 'signupNameError', name ? '' : 'Enter your full name.') && ok;
       ok = setFieldError('signupEmailGroup', 'signupEmailError', EMAIL_RE.test(email) ? '' : 'Enter a valid email address.') && ok;
-      ok = setFieldError('signupCollegeGroup', 'signupCollegeError', college ? '' : 'Enter your college or unit.') && ok;
+      ok = setFieldError('signupCollegeGroup', 'signupCollegeError', collegeChoice ? '' : 'Select your college or unit.') && ok;
+      if (collegeChoice === '__other__') {
+        ok = setFieldError('signupCollegeOtherGroup', 'signupCollegeOtherError', collegeOther ? '' : 'Enter your college or unit.') && ok;
+      }
       ok = setFieldError('signupPasswordGroup', 'signupPasswordError', pw.length >= 8 ? '' : 'Password must be at least 8 characters.') && ok;
       ok = setFieldError('signupConfirmGroup', 'signupConfirmError', confirm && confirm === pw ? '' : 'Passwords do not match.') && ok;
       if (!ok) return;
@@ -457,6 +509,18 @@
       });
       el.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace' && !el.value && codeDigits[i - 1]) codeDigits[i - 1].focus();
+      });
+      // Let a copied 6-digit code be pasted into any box — fills every box
+      // from the start rather than only the one that was clicked, since a
+      // pasted code is always meant to fill the whole field.
+      el.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const pasted = (e.clipboardData || window.clipboardData).getData('text');
+        const digits = pasted.replace(/[^0-9]/g, '').slice(0, 6);
+        if (!digits) return;
+        digits.split('').forEach((d, idx) => { codeDigits[idx].value = d; });
+        const nextEmpty = codeDigits.findIndex((d) => !d.value);
+        (nextEmpty === -1 ? codeDigits[codeDigits.length - 1] : codeDigits[nextEmpty]).focus();
       });
     });
     $('verifyForm').addEventListener('submit', async (e) => {

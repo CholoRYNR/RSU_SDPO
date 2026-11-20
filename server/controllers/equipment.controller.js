@@ -36,7 +36,7 @@ function serialize(equipment) {
   const counts = items ? statusCounts(items) : null;
   return {
     id: equipment.id,
-    equipmentCode: formatEquipmentCode(equipment.id),
+    equipmentCode: formatEquipmentCode(equipment.category ? equipment.category.categoryName : null, equipment.equipmentName, equipment.id),
     equipmentName: equipment.equipmentName,
     categoryId: equipment.categoryId,
     category: equipment.category ? { id: equipment.category.id, categoryName: equipment.category.categoryName } : null,
@@ -79,15 +79,25 @@ function parseQuantity(value) {
 
 // Creates `count` new Available units for an equipment, continuing its
 // unit sequence. Each unit's code is the QR payload for that unit.
-async function createUnits(equipmentId, count, t) {
+//
+// `equipment` only needs to carry the fields the code's letter prefix is
+// built from — { id, equipmentName, category? } — not a full model
+// instance. Callers that already have the row loaded (with its category)
+// pass it straight through; callers that only have an id/categoryId look
+// up just the category name first, so this never re-fetches the equipment
+// row itself (which some callers hold under a row lock — see
+// exports.update and qr.controller.js#generate).
+async function createUnits(equipment, count, t) {
   if (count <= 0) return [];
+  const equipmentId = equipment.id;
+  const categoryName = equipment.category ? equipment.category.categoryName : null;
   const existing = await Item.findAll({ where: { equipmentId }, attributes: ['itemCode'], transaction: t });
   const start = maxSequence(equipmentId, existing.map((i) => i.itemCode));
   const rows = [];
   for (let i = 1; i <= count; i += 1) {
     rows.push({
       equipmentId,
-      itemCode: formatItemCode(equipmentId, start + i),
+      itemCode: formatItemCode(categoryName, equipment.equipmentName, equipmentId, start + i),
       itemCondition: 'Good',
       availabilityStatus: 'Available',
       engravingStatus: 'Not Engraved'
@@ -149,7 +159,7 @@ exports.create = async (req, res) => {
       },
       { transaction: t }
     );
-    await createUnits(equipment.id, totalQuantity, t);
+    await createUnits({ id: equipment.id, equipmentName, category }, totalQuantity, t);
     return equipment;
   });
 
@@ -189,8 +199,13 @@ exports.update = async (req, res) => {
       const delta = totalQuantity - equipment.totalQuantity;
       if (delta > 0) {
         // More stock: register the additional units right away so they're
-        // immediately borrowable.
-        await createUnits(equipment.id, delta, t);
+        // immediately borrowable. The equipment row itself was fetched
+        // above under a row lock (FOR UPDATE) without its category
+        // association — joining Category onto a locked row isn't safe in
+        // Postgres, so the category name is looked up on its own here,
+        // only when it's actually needed for the new units' codes.
+        const category = equipment.categoryId ? await Category.findByPk(equipment.categoryId, { transaction: t }) : null;
+        await createUnits({ id: equipment.id, equipmentName: equipment.equipmentName, category }, delta, t);
       } else {
         // Less stock. Some older records carry non-serviceable stock in their
         // total with no unit record behind it (see migration 023); that part
@@ -206,14 +221,29 @@ exports.update = async (req, res) => {
             transaction: t
           });
           const usedIds = new Set(used.map((d) => d.itemId));
-          const removable = items
-            .filter((i) => i.availabilityStatus === 'Available' && !usedIds.has(i.id))
+          // Available, never-borrowed units are only safe to actually
+          // delete when they ALSO have no QR label on them yet. A unit
+          // that's already stickered (PrintCo) or laser-engraved
+          // (engravingStatus 'Engraved'/'Tagged') represents real,
+          // already-spent physical labeling work — deleting its row would
+          // silently orphan that label, so a later scan of the physical
+          // sticker/engraving resolves to nothing (2026-10-01 system
+          // audit). Those units are excluded from auto-removal entirely;
+          // retiring one is a deliberate staff decision (delete the
+          // specific unit from the equipment's unit list), not something
+          // a quantity-number edit should do on its own.
+          const eligible = items.filter((i) => i.availabilityStatus === 'Available' && !usedIds.has(i.id));
+          const removable = eligible
+            .filter((i) => i.engravingStatus === 'Not Engraved')
             .sort((a, b) => b.id - a.id)
             .slice(0, unitsToRemove);
           if (removable.length < unitsToRemove) {
-            const err = new Error(
-              `Total quantity can only be lowered to ${items.length - removable.length} — the other units are borrowed, reserved, or have transaction history.`
-            );
+            const labeledCount = eligible.length - eligible.filter((i) => i.engravingStatus === 'Not Engraved').length;
+            const reason =
+              labeledCount > 0
+                ? `${labeledCount} of the remaining unit(s) already have a QR sticker or engraving and were kept — retire those from the unit list directly if they're no longer needed`
+                : 'the other units are borrowed, reserved, or have transaction history';
+            const err = new Error(`Total quantity can only be lowered to ${items.length - removable.length} — ${reason}.`);
             err.statusCode = 409;
             throw err;
           }
@@ -269,8 +299,19 @@ exports.downloadPhoto = async (req, res) => {
     throw err;
   }
 
-  const { data, error } = await getClient().storage.from(PHOTOS_BUCKET).download(equipment.photoPath);
+  let data, error;
+  try {
+    ({ data, error } = await getClient().storage.from(PHOTOS_BUCKET).download(equipment.photoPath));
+  } catch (err) {
+    // A thrown exception here (auth/network/service failure) is a different
+    // problem than a genuinely missing file: log the real cause server-side
+    // and tell the browser's <img onerror> fallback to quietly show the
+    // category icon instead of flooding the console with an unexplained 500.
+    console.error('[equipment] Photo storage download failed for', equipment.photoPath, '-', err.message);
+    return res.status(502).json({ success: false, message: 'Could not load the photo from storage. Please try again in a moment.' });
+  }
   if (error || !data) {
+    if (error) console.error('[equipment] Photo storage download error for', equipment.photoPath, '-', error.message);
     return res.status(404).json({ success: false, message: 'Photo file is missing in storage' });
   }
   res.set('Content-Type', data.type || 'application/octet-stream');
@@ -289,9 +330,9 @@ exports.remove = async (req, res) => {
   await sequelize.transaction(async (t) => {
     const items = await Item.findAll({ where: { equipmentId: equipment.id }, attributes: ['id', 'availabilityStatus'], transaction: t });
     const itemIds = items.map((i) => i.id);
-    const usedCount = itemIds.length
-      ? await TransactionDetail.count({ where: { itemId: { [Op.in]: itemIds } }, transaction: t })
-      : 0;
+    // By equipment (not just unit) so a pending request that has not been
+    // assigned units yet also counts as history.
+    const usedCount = await TransactionDetail.count({ where: { equipmentId: equipment.id }, transaction: t });
     if (usedCount > 0 || items.some((i) => i.availabilityStatus !== 'Available')) {
       const err = new Error('Cannot delete — this equipment has borrowing history or units currently in use');
       err.statusCode = 409;

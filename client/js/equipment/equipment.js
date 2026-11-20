@@ -53,7 +53,6 @@
   var detailsStatBorrowed = $("detailsStatBorrowed");
   var detailsCategoryWrap = $("detailsCategoryWrap");
   var detailsDescriptionWrap = $("detailsDescriptionWrap");
-  var detailsQrWrap = $("detailsQrWrap");
   var detailsEditBtn = $("detailsEditBtn");
   var detailsDeleteBtn = $("detailsDeleteBtn");
   var changePhotoBtn = $("changePhotoBtn");
@@ -388,11 +387,6 @@
     detailsCategoryWrap.innerHTML =
       '<span class="chip chip--neutral">' + escapeHtml(item.category) + "</span>";
     detailsDescriptionWrap.textContent = item.description || "—";
-
-    // Unit QR codes all start with this equipment's ID (e.g. EQ-005-001).
-    detailsQrWrap.textContent = item.itemCodes.length
-      ? item.itemCodes.length + " unit(s) — " + item.itemCodes.join(", ")
-      : "No units registered";
 
     openModal(detailsModalOverlay);
   }

@@ -9,3 +9,4 @@ server/reports/generated/*
 npm-debug.log*
 dist/
 build/
+.claude/settings.local.json

@@ -16,11 +16,12 @@
     .welcome:after{content:"";position:absolute;width:128px;height:128px;border-radius:50%;left:-32px;bottom:-40px;background:rgba(254,154,0,.12);filter:blur(40px)}
     .live{position:relative;display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.1);border-radius:999px;padding:5px 13px;font-size:10px;font-weight:500}
     .live i{width:4px;height:4px;background:#00d492;border-radius:50%}
-    .welcome h2{position:relative;font-size:22px;line-height:33px;margin:6px 0 0}
+    .welcome h2{position:relative;font-size:22px;line-height:33px;margin:6px 0 0;color:#fff}
     .welcome p{position:relative;margin:0;color:#d0fae5;font-size:13px;line-height:20px}
 
     /* ---------- Late Return Policy block banner ---------- */
     .late-block-banner{display:flex;align-items:flex-start;gap:10px;margin-top:12px;padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#991b1b;font-size:13px;line-height:1.4}
+    .late-block-banner[hidden]{display:none}
     .late-block-banner b{display:block;margin-bottom:2px;font-size:13px}
 
     /* ---------- Stat cards ---------- */
@@ -116,7 +117,16 @@
       background-repeat:no-repeat;
     }
     .borrow-flow.open{display:block}
-    .close-flow{position:fixed;top:16px;right:18px;border:0;border-radius:50%;height:34px;width:34px;background:#fff;color:#344054;font-size:22px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:5;cursor:pointer}
+    /* .borrow-flow is itself the scrolling container (overflow:auto above,
+       since it covers the whole viewport and holds a tall multi-step form).
+       Without this, the page underneath stayed scrollable too — scrolling
+       with the cursor over the form mostly scrolled the form, but reaching
+       either end of it let the scroll "chain" through to the page behind,
+       and the page's own scrollbar visibly moved along with it (2026-10-03
+       report: "when I scroll up or down, the scroll bar on the background
+       moves"). body.flow-open is toggled alongside .borrow-flow.open in JS. */
+    body.flow-open{overflow:hidden}
+    .close-flow{position:fixed;top:16px;right:18px;border:0;border-radius:50%;height:34px;width:34px;display:flex;align-items:center;justify-content:center;background:#fff;color:#344054;font-size:22px;box-shadow:0 2px 8px rgba(0,0,0,.15);z-index:5;cursor:pointer}
     .wizard-shell{max-width:900px;margin:0 auto;padding:56px 24px 48px}
     .wizard-letterhead{display:flex;align-items:center;gap:12px;padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid var(--line)}
     .wizard-letterhead img{width:44px;height:44px;object-fit:contain;flex-shrink:0;border:1px solid var(--line);border-radius:8px;background:#fff;padding:4px}
@@ -164,6 +174,24 @@
     .wizard-field textarea{resize:vertical;min-height:80px;font-family:inherit}
     .wizard-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 
+    /* Read-only borrower summary (account details already on file) shown as
+       plain label/value pairs instead of disabled-looking input boxes —
+       these were never editable here anyway (they come from the account's
+       own profile; see Settings to change them), so styling them like a
+       form the borrower could fill in was misleading. */
+    .wizard-summary-field{display:block}
+    .wizard-summary-field+.wizard-summary-field{margin-top:14px}
+    .wizard-summary-field label{display:block;font-size:10px;font-weight:700;color:#8a97ab;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}
+    .wizard-summary-field div{font-size:14px;font-weight:600;color:#1d293d}
+    .wizard-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+    /* The adjacent-sibling rule above (.wizard-summary-field+.wizard-summary-field)
+       matches DOM order, not visual column — inside a two-column grid it was
+       also landing on the second column's field (e.g. "College / Unit"),
+       giving it a top margin the first column didn't have and knocking the
+       two label/value pairs out of alignment with each other. Cancel it
+       inside the grid so both columns start on the same line. */
+    .wizard-summary-grid>.wizard-summary-field{margin-top:0}
+
     .equip-row{background:var(--canvas);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start}
     .equip-row+.equip-row{margin-top:10px}
     .equip-row__main{flex:1;min-width:0}
@@ -175,7 +203,7 @@
     .equip-badge--low{background:#fef2f2;color:#c10007}
     /* Minimum-stock warning note — separate from the available/limited/low
        color badges above, which stay exactly as they were. This only
-       appears once stock is at or below the SDPO's 25% minimum-stock floor,
+       appears once stock is at or below the SDPO's 15% minimum-stock floor,
        where borrowing is blocked outright (see minStockFloor() below and
        its server-side counterpart, maxBorrowableUnits() in
        borrow.controller.js). */
@@ -185,11 +213,11 @@
        why the + stepper stops where it does instead of it just going dim
        with no explanation. */
     .equip-cap-note{font-size:11px;font-weight:500;color:var(--muted)}
-    .equip-row__stepper{display:flex;align-items:center;gap:6px;flex-shrink:0;padding-top:2px}
-    .equip-row__stepper button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px;line-height:1;cursor:pointer;color:#1d293d}
+    .equip-row__stepper{display:flex;align-items:center;gap:6px;flex-shrink:0;padding-top:4px}
+    .equip-row__stepper button{width:28px;height:28px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1d293d}
     .equip-row__stepper button:disabled{opacity:.4;cursor:not-allowed}
     .equip-row__stepper span{display:inline-block;width:22px;text-align:center;font-size:13px;font-weight:600}
-    .equip-row__remove{width:28px;height:28px;border:1px solid #fecaca;background:#fff5f5;border-radius:8px;cursor:pointer;flex-shrink:0}
+    .equip-row__remove{width:28px;height:28px;margin-top:4px;padding:0;border:1px solid #fecaca;background:#fff5f5;border-radius:8px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}.equip-row__remove img{display:block}
     .equip-add{border:0;background:none;color:var(--deep);font-size:13px;font-weight:500;cursor:pointer;padding:12px 0 0;display:flex;align-items:center;gap:6px}
     .equip-empty{color:#62748e;font-size:12px;margin:0}
 
@@ -224,7 +252,17 @@
     .wizard-actions .btn-primary{flex:1;border:0;background:var(--deep);border-radius:14px;padding:12px;font-size:14px;font-weight:600;color:#fff;cursor:pointer}
     .wizard-actions .btn-primary:disabled{background:#d6dde6;cursor:not-allowed}
 
-    .success-screen{max-width:448px;margin:24px auto 0;text-align:center}
+    /* Submission success — shown as an actual floating popup modal (dim
+       backdrop + centered card) over the equipment showroom, rather than
+       as another step inside the wizard's own full-page flow — per the
+       2026-10-03 request for a "confirmation / successful... wait for
+       approval" popup once the borrow form is confirmed. z-index is above
+       .borrow-flow (1000) since the flow is already closed underneath by
+       the time this shows, but kept higher in case of any transition
+       overlap. */
+    .success-modal-overlay{display:none;position:fixed;inset:0;z-index:1100;background:rgba(15,23,42,.5);align-items:center;justify-content:center;padding:20px;overflow:auto}
+    .success-modal-overlay.open{display:flex}
+    .success-screen{max-width:448px;width:100%;margin:0;text-align:center;background:#fff;border-radius:20px;padding:36px 32px 32px;box-shadow:0 24px 60px rgba(7,16,30,.3);max-height:calc(100vh - 40px);overflow:auto}
     .success-icon{width:80px;height:80px;border-radius:50%;background:#dcfce7;display:grid;place-items:center;margin:0 auto;font-size:32px;color:#16a34a;font-weight:700}
     .success-screen h2{font-size:22px;margin:20px 0 0;color:#1d293d}
     .success-screen>p{color:#62748e;font-size:14px;line-height:1.6;margin:8px 0 0}
@@ -326,7 +364,7 @@
 
   <!-- ---------- Borrowing Sports Equipment Form flow (4-step wizard) ---------- -->
   <section class="borrow-flow" id="borrowFlow" aria-label="Borrowing Sports Equipment Form">
-    <button class="close-flow" id="closeFlow" aria-label="Close Borrowing Sports Equipment Form">×</button>
+    <button class="close-flow" id="closeFlow" aria-label="Close Borrowing Sports Equipment Form"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
     <div class="wizard-shell">
       <div class="wizard-letterhead">
         <img src="../../assets/images/rsu-sdpo-logo.png" alt="RSU-SDPO logo">
@@ -352,7 +390,7 @@
           <p class="wizard-quote">Borrowing of equipment must be requested and completed at least 2–5 days before the scheduled event to ensure equipment availability and proper preparation. Borrowers must present a valid identification card and all required documents.</p>
           <div class="wizard-section">
             <h4>Eligible to Borrow</h4>
-            <p>Faculty, staff, employees, students, and stakeholders (external users) may borrow equipment.</p>
+            <p>Faculty, employees, students, and stakeholders (external users) may borrow equipment.</p>
           </div>
           <div class="wizard-section">
             <h4>Procedures</h4>
@@ -396,10 +434,10 @@
         <p class="wizard-sub">Fill in your information and the equipment you want to borrow.</p>
         <div class="wizard-card">
           <div class="wizard-card__head"><h3>Borrower Details</h3></div>
-          <div class="wizard-field"><label>Borrower's Name <em>*</em></label><input type="text" id="slipBorrowerName" readonly></div>
-          <div class="wizard-field wizard-grid-2">
-            <div><label>Borrower Type <em>*</em></label><input type="text" id="slipBorrowerType" readonly></div>
-            <div><label>College / Unit <em>*</em></label><input type="text" id="slipCollege" readonly></div>
+          <div class="wizard-summary-field"><label>Borrower's Name</label><div id="slipBorrowerName">—</div></div>
+          <div class="wizard-summary-grid">
+            <div class="wizard-summary-field"><label>Borrower Type</label><div id="slipBorrowerType">—</div></div>
+            <div class="wizard-summary-field"><label>College / Unit</label><div id="slipCollege">—</div></div>
           </div>
         </div>
         <div class="wizard-card">
@@ -482,22 +520,28 @@
         </div>
       </section>
 
-      <section class="wizard-panel success-screen" id="panel-success">
-        <div class="success-icon">✓</div>
-        <h2>Request Submitted</h2>
-        <p>Your borrowing request has been successfully submitted and is now awaiting review by SDPO personnel.</p>
-        <div class="success-card">
-          <div class="success-row"><span>Request Number</span><span class="success-req-id" id="successReqId"></span></div>
-          <div class="success-row" style="margin-bottom:0;border-bottom:0;padding-bottom:0"><span>Status</span><span class="status-pill">Acknowledged</span></div>
-          <div class="success-next" style="padding-top:12px"><b>What happens next?</b><span>Acknowledged → Reviewed → <em>Pending Approval</em> → Approved → Released → Returned → Completed</span></div>
-        </div>
-        <div class="success-actions">
-          <button type="button" class="btn-primary" id="viewMyRequest">View My Request</button>
-          <button type="button" class="btn-back" id="backToEquipment">Back to Equipment</button>
-        </div>
-      </section>
     </div>
   </section>
+
+  <!-- Submission success — a real popup modal over the showroom, shown
+       once the borrow form has been confirmed and submitted; see the
+       .success-modal-overlay CSS note above. -->
+  <div class="success-modal-overlay" id="successModalOverlay">
+    <section class="success-screen" id="panel-success" role="alertdialog" aria-modal="true" aria-labelledby="successTitle">
+      <div class="success-icon">✓</div>
+      <h2 id="successTitle">Request Submitted</h2>
+      <p>Your borrowing request has been successfully submitted and is now awaiting review by SDPO personnel.</p>
+      <div class="success-card">
+        <div class="success-row"><span>Request Number</span><span class="success-req-id" id="successReqId"></span></div>
+        <div class="success-row" style="margin-bottom:0;border-bottom:0;padding-bottom:0"><span>Status</span><span class="status-pill">Request Pending</span></div>
+        <div class="success-next" style="padding-top:12px"><b>What happens next?</b><span>Request Pending → Reviewed → <em>Approval</em> → Approved → Released → Returned → Completed</span></div>
+      </div>
+      <div class="success-actions">
+        <button type="button" class="btn-primary" id="viewMyRequest">View My Request</button>
+        <button type="button" class="btn-back" id="backToEquipment">Back to Equipment</button>
+      </div>
+    </section>
+  </div>
 
   <div class="toast-stack" id="toastStack"></div>
 
@@ -528,11 +572,22 @@
     let category='All Categories',current=null;
 
     /* ---------- Stats ---------- */
-    // Catalog totals in units (same definition as the admin dashboard).
+    // Total/Available/Categories used to be summed here from /api/equipment's
+    // raw per-equipment counters — which drifted from what the admin
+    // dashboard showed for the same two numbers (e.g. 245 here vs 200 there)
+    // whenever an equipment's availableQuantity counter was higher than the
+    // QR codes actually registered for it (the same registration gap behind
+    // the "not enough stock" bug — see borrow.controller.js#createSelfRequest).
+    // The admin dashboard's figures come from the server's inventoryFigures()
+    // (server/controllers/dashboard.controller.js), which counts real,
+    // registered Item rows instead — the ground truth. loadMyActivity() below
+    // already fetches that same computation via /api/dashboard/me's `catalog`
+    // field; this just displays it instead of re-deriving a different number.
+    let catalogFigures={totalEquipment:0,availableEquipment:0,categories:0};
     function renderStats(){
-      $('statTotal').textContent=products.reduce((n,p)=>n+p.total,0);
-      $('statAvailable').textContent=products.reduce((n,p)=>n+Math.max(p.available,0),0);
-      $('statCategories').textContent=new Set(products.map(p=>p.category)).size;
+      $('statTotal').textContent=catalogFigures.totalEquipment;
+      $('statAvailable').textContent=catalogFigures.availableEquipment;
+      $('statCategories').textContent=catalogFigures.categories;
     }
 
     function loadEquipment(){
@@ -649,12 +704,11 @@
        second slot to say what it actually needs to be for that category. */
     const DOC_REQUIREMENTS_BY_CATEGORY={
       Faculty:{needsValidId:false,docLabel:'Activity Schedule',docHint:'The schedule of the activity you\'re borrowing equipment for.'},
-      Staff:{needsValidId:false,docLabel:'Approved Proposal / Request Letter',docHint:'An approved proposal or request letter for this borrowing.'},
       Employee:{needsValidId:false,docLabel:'Approved Proposal / Request Letter',docHint:'An approved proposal or request letter for this borrowing.'},
       Student:{needsValidId:false,docLabel:'Authorization Letter',docHint:'An authorization letter signed by your adviser or faculty member.'},
       External:{needsValidId:true,docLabel:'Approved Proposal / Request Letter',docHint:'An approved proposal or request letter for this borrowing.'}
     };
-    const DOC_REQ_DEFAULT={needsValidId:true,docLabel:'Approved Proposal / Authorization',docHint:'Images (JPG, PNG, WEBP) or PDF/DOCX — max 2MB.'};
+    const DOC_REQ_DEFAULT={needsValidId:true,docLabel:'Approved Proposal / Authorization',docHint:'Images (JPG, PNG, WEBP) or PDF/DOCX — max 10MB.'};
     let docReq=DOC_REQ_DEFAULT;
 
     function applyDocRequirements(borrowerCategory){
@@ -672,7 +726,7 @@
       $('reviewAuthDocLabel').textContent=docReq.docLabel;
       $('docsIntro').textContent=docReq.needsValidId
         ?'Upload the documents required for your borrowing request.'
-        :`As a ${esc(borrowerCategory==='Employee'||borrowerCategory==='Staff'?'RSU Employee':borrowerCategory)}, only the document below is required — no Valid ID needed.`;
+        :`As a ${esc(borrowerCategory==='Employee'?'RSU Employee':borrowerCategory)}, only the document below is required — no Valid ID needed.`;
       updateStepValidity();
     }
 
@@ -698,10 +752,12 @@
       }).catch(()=>{});
     }
 
+    // Uploads straight to Supabase Storage (see uploadBorrowerDocument in
+    // js/shared/api.js) instead of through this app's server — bypasses
+    // Vercel's 4.5MB-per-request body cap, so a document can be up to 10MB
+    // here instead of the old 2MB multipart-upload limit.
     function uploadDocument(fieldName,zoneId,titleId,file){
-      const formData=new FormData();
-      formData.append(fieldName,file);
-      return apiFetch('/api/borrowers/me/documents',{method:'POST',body:formData})
+      return uploadBorrowerDocument(fieldName,file)
         .then(status=>{
           uploadedValidId=status.validIdUploaded;
           uploadedAuthDoc=status.authorizationDocumentUploaded;
@@ -721,13 +777,59 @@
     let equipmentRows=[],rowSeq=0;
     const productById=id=>products.find(p=>p.id===id);
 
-    function equipmentOptionsHtml(selectedId){
+    // Two rows can reference the same equipment (e.g. the borrower wants
+    // Agility Cone split across rows for some reason, or just picked it
+    // twice) — the server already merges those into one line and checks
+    // the combined quantity against real stock (see
+    // borrow.controller.js#createSelfRequest, "Merge repeated lines for
+    // the same equipment"), but the form itself still showed every row's
+    // "Available"/cap as if it alone owned the full stock, e.g. three
+    // Agility Cone rows all independently reading "21 left" (2026-10-03
+    // report: "it should change and adjust real time"). This sums what
+    // every *other* row already claims of that equipment so each row's own
+    // display reflects what's actually still available to IT.
+    function reservedByOtherRows(equipmentId,excludeRowId){
+      return equipmentRows.filter(r=>r.equipmentId===equipmentId&&r.rowId!==excludeRowId).reduce((sum,r)=>sum+(r.quantity||0),0);
+    }
+
+    // Unlike reservedByOtherRows (which excludes the row asking), this
+    // includes every row — it's "how much of this equipment does the
+    // request ask for in total," which is exactly what the server checks
+    // against the per-request cap (see borrow.controller.js#createSelfRequest,
+    // "Merge repeated lines for the same equipment so the per-request cap
+    // can't be sidestepped by splitting a quantity across rows"). The
+    // per-row stepper cap alone can't catch this: three separate rows of
+    // Agility Cone at 1 unit each all individually respect "max 2 per
+    // request," but together ask for 3, which the server correctly rejects
+    // at Submit — too late in the wizard to be useful (2026-10-03 report:
+    // "it says max 2 per req right, its 3 now didn't it apply?").
+    function combinedQuantityForEquipment(equipmentId){
+      return equipmentRows.filter(r=>r.equipmentId===equipmentId).reduce((sum,r)=>sum+(r.quantity||0),0);
+    }
+
+    function equipmentOptionsHtml(selectedId,excludeRowId){
       const opts=products.map(p=>{
-        const cap=maxBorrowableUnits(p.available,p.total);
-        const blocked=p.available>0&&cap===0;
-        const disabled=!p.available||blocked;
-        const suffix=blocked?' — below minimum stock':cap>0?` — max ${cap} per request`:'';
-        return `<option value="${p.id}" ${p.id===selectedId?'selected':''} ${disabled?'disabled':''}>${esc(p.name)} (Available: ${p.available})${suffix}</option>`;
+        const available=Math.max(0,p.available-reservedByOtherRows(p.id,excludeRowId));
+        const cap=maxBorrowableUnits(available,p.total);
+        const blocked=available>0&&cap===0;
+        // Rather than let someone add the same equipment to a second row
+        // and only find out afterward it pushes the request over its cap
+        // (2026-10-03 follow-up: "it shouldn't be clickable... because
+        // there's the adding of quantity at the side"), stop the dropdown
+        // from offering it in the first place once your OTHER rows already
+        // claim the full per-request cap for it — the +/- stepper on the
+        // row that already has it is the only way to go further, exactly
+        // like the equipment showroom's own quantity control. Uses the
+        // RAW p.available (not the row-adjusted `available` above) because
+        // that's what the server's cap check uses — see
+        // combinedQuantityForEquipment's comment. Never disables a row's
+        // OWN current selection — only picking it fresh into ANOTHER row.
+        const othersQty=reservedByOtherRows(p.id,excludeRowId);
+        const rawCap=maxBorrowableUnits(p.available,p.total);
+        const atCapElsewhere=p.id!==selectedId&&rawCap>0&&othersQty>=rawCap;
+        const disabled=!available||blocked||atCapElsewhere;
+        const suffix=blocked?' — below minimum stock':atCapElsewhere?` — already at max (${rawCap}) in your other row(s), use + there instead`:cap>0?` — max ${cap} per request`:'';
+        return `<option value="${p.id}" ${p.id===selectedId?'selected':''} ${disabled?'disabled':''}>${esc(p.name)} (Available: ${available})${suffix}</option>`;
       }).join('');
       return `<option value="">Select equipment...</option>${opts}`;
     }
@@ -736,7 +838,7 @@
       const list=$('equipmentList');
       list.innerHTML=equipmentRows.length?equipmentRows.map(row=>{
         const product=productById(row.equipmentId);
-        const available=product?product.available:0;
+        const available=product?Math.max(0,product.available-reservedByOtherRows(row.equipmentId,row.rowId)):0;
         const level=product?stockLevel(available):'available';
         const cap=product?maxBorrowableUnits(available,product.total):0;
         const minBlocked=product&&cap===0;
@@ -747,11 +849,27 @@
         // submittable instead of letting a stale quantity slip through to
         // a 409 at Continue.
         if(product&&row.quantity>cap&&cap>0)row.quantity=cap;
+        // The per-row stepper cap above only limits a single row in
+        // isolation — it can't stop three separate rows of the same
+        // equipment at 1 unit each from quietly adding up to more than the
+        // policy actually allows for that equipment in this request. The
+        // server checks the true total against the cap computed from the
+        // equipment's RAW available count (see
+        // borrow.controller.js#createSelfRequest's "Merge repeated lines"
+        // step) — not this row's own other-rows-adjusted display number —
+        // so this check mirrors that exactly, rather than the locally
+        // shrinking `cap` above, to predict what the server will actually
+        // accept (2026-10-03 report: "it says max 2 per req right, its 3
+        // now didn't it apply?").
+        const rawCap=product?maxBorrowableUnits(product.available,product.total):0;
+        const combinedQty=product?combinedQuantityForEquipment(row.equipmentId):0;
+        const combinedExceeds=product&&rawCap>0&&combinedQty>rawCap;
         return `<div class="equip-row" data-row="${row.rowId}">
           <div class="equip-row__main">
-            <select class="equip-row__select">${equipmentOptionsHtml(row.equipmentId)}</select>
+            <select class="equip-row__select">${equipmentOptionsHtml(row.equipmentId,row.rowId)}</select>
             <div class="equip-row__meta">${product?`<span class="equip-badge equip-badge--${level}">${available} left</span>${cap>0?`<span class="equip-cap-note">Max ${cap} per request</span>`:''}`:''}</div>
             ${minBlocked?'<div class="equip-min-stock-note">⚠ Warning: stock is too low to borrow right now — choose a different item.</div>':''}
+            ${!minBlocked&&combinedExceeds?`<div class="equip-min-stock-note">⚠ You have ${combinedQty} total of "${esc(product.name)}" across your rows, but only ${rawCap} may be borrowed per request — combine them into one row of ${rawCap} or remove the extra row(s).</div>`:''}
           </div>
           <div class="equip-row__stepper">
             <button type="button" class="equip-row__dec" ${row.quantity<=1?'disabled':''}>−</button>
@@ -815,10 +933,10 @@
 
     function showWizardStep(n){
       wizardStep=n;
-      const activeId=n===4?'panel-success':stepPanels[n];
-      ['panel-0','panel-1','panel-2','panel-3','panel-success'].forEach(id=>$(id).classList.toggle('active',id===activeId));
-      stepEls.forEach((el,i)=>{el.classList.toggle('is-active',i===n);el.classList.toggle('is-done',i<n||n===4);});
-      connectors.forEach((el,i)=>el.classList.toggle('is-done',i<n||n===4));
+      const activeId=stepPanels[n];
+      stepPanels.forEach(id=>$(id).classList.toggle('active',id===activeId));
+      stepEls.forEach((el,i)=>{el.classList.toggle('is-active',i===n);el.classList.toggle('is-done',i<n);});
+      connectors.forEach((el,i)=>el.classList.toggle('is-done',i<n));
       // Re-floor the min (and re-check validity) every time this step is
       // reached, not just once at page load — a wizard left open past
       // midnight would otherwise still accept "today" meaning yesterday.
@@ -828,8 +946,23 @@
     }
 
     function updateStepValidity(){
+      saveDraft();
       $('toStep1').disabled=!$('acknowledge').checked;
-      const hasEquip=equipmentRows.length>0&&equipmentRows.every(r=>r.equipmentId&&r.quantity>0);
+      // A row's own per-row cap can look fine in isolation while the SAME
+      // equipment split across multiple rows still exceeds what one
+      // request may actually borrow of it — see combinedQuantityForEquipment
+      // and the ⚠ note rendered per row in renderEquipmentList(). Blocking
+      // Continue here, not just showing the note, keeps the wizard from
+      // reaching Submit only to fail with a 409 after documents/review are
+      // already filled in.
+      const noCombinedCapExceeded=equipmentRows.every(r=>{
+        if(!r.equipmentId)return true;
+        const product=productById(r.equipmentId);
+        if(!product)return true;
+        const rawCap=maxBorrowableUnits(product.available,product.total);
+        return rawCap<=0||combinedQuantityForEquipment(r.equipmentId)<=rawCap;
+      });
+      const hasEquip=equipmentRows.length>0&&equipmentRows.every(r=>r.equipmentId&&r.quantity>0)&&noCombinedCapExceeded;
       const returnDateOk=$('returnDateInput').value&&$('returnDateInput').value>=todayLocalDateStr();
       const infoValid=hasEquip&&$('purposeInput').value.trim()&&returnDateOk&&$('returnTimeInput').value;
       $('toStep2').disabled=!infoValid;
@@ -853,9 +986,9 @@
     function formatTime(t){const[h,m]=t.split(':').map(Number);const d=new Date();d.setHours(h,m);return d.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
 
     function renderReview(){
-      $('reviewName').textContent=$('slipBorrowerName').value;
-      $('reviewType').textContent=$('slipBorrowerType').value;
-      $('reviewCollege').textContent=$('slipCollege').value;
+      $('reviewName').textContent=$('slipBorrowerName').textContent;
+      $('reviewType').textContent=$('slipBorrowerType').textContent;
+      $('reviewCollege').textContent=$('slipCollege').textContent;
       $('reviewEquipment').innerHTML=equipmentRows.map(r=>{
         const p=productById(r.equipmentId);
         return `<div class="review-item"><span class="review-item__name">${p?`<img class="review-item__thumb" src="${esc(productThumb(p))}" alt="" onerror="${UI.imageFallbackAttr(p.category)}">${esc(p.name)} <small>(${esc(p.code)})</small>`:''}</span><span class="review-qty">${r.quantity} unit${r.quantity>1?'s':''}</span></div>`;
@@ -873,6 +1006,73 @@
     // One idempotency key per filled-in request: resubmitting the same form
     // (double-click, retry after a network error) can't create a duplicate.
     let requestKey=null;
+    // Also locks/unlocks the page behind the form so it can't scroll (or be
+    // scrolled into) while the form is open — see .body.flow-open above.
+    function openBorrowFlow(){borrowFlow.classList.add('open');document.body.classList.add('flow-open');}
+    function closeBorrowFlow(){borrowFlow.classList.remove('open');document.body.classList.remove('flow-open');}
+    function openSuccessModal(){$('successModalOverlay').classList.add('open');}
+    function closeSuccessModal(){$('successModalOverlay').classList.remove('open');}
+    $('successModalOverlay').addEventListener('click',e=>{if(e.target===$('successModalOverlay'))closeSuccessModal();});
+
+    /* ---------- Draft autosave (2026-10-03 report) ----------
+       A hard refresh reloads the whole page, which wipes every JS variable
+       — there's no way to stop that. What was actually fixable: the form
+       silently threw everything away with no warning and nothing to come
+       back to. This saves the in-progress wizard (which equipment/
+       quantities, purpose, return date/time, which step) to sessionStorage
+       on every change, and restores it automatically the next time this
+       page loads in the same tab. Uploaded documents don't need saving
+       here — those already live on the server and checkExistingDocuments()
+       re-fetches them — only a file picked but not yet uploaded is lost on
+       refresh, which no amount of client-side storage can prevent (the
+       browser never hands JS the file's bytes back after a reload). */
+    const DRAFT_KEY='rsuSdpoBorrowDraft';
+    function saveDraft(){
+      if(!borrowFlow.classList.contains('open'))return;
+      try{
+        sessionStorage.setItem(DRAFT_KEY,JSON.stringify({
+          equipmentRows,wizardStep,
+          purpose:$('purposeInput').value,
+          returnDate:$('returnDateInput').value,
+          returnTime:$('returnTimeInput').value,
+          acknowledge:$('acknowledge').checked
+        }));
+      }catch(e){/* storage unavailable/full — the form still works, it just won't survive a refresh */}
+    }
+    function clearDraft(){try{sessionStorage.removeItem(DRAFT_KEY);}catch(e){}}
+    function restoreDraftIfAny(){
+      let draft;
+      try{draft=JSON.parse(sessionStorage.getItem(DRAFT_KEY)||'null');}catch(e){draft=null;}
+      if(!draft)return;
+      // Equipment may have been removed/renamed since the draft was saved —
+      // only restore rows that still resolve to a real product.
+      const rows=(draft.equipmentRows||[]).filter(r=>r.equipmentId&&productById(r.equipmentId));
+      if(!rows.length){clearDraft();return;}
+      equipmentRows=rows;
+      rowSeq=Math.max(0,...rows.map(r=>r.rowId));
+      $('purposeInput').value=draft.purpose||'';
+      $('returnDateInput').value=draft.returnDate||'';
+      $('returnTimeInput').value=draft.returnTime||'';
+      $('acknowledge').checked=!!draft.acknowledge;
+      requestKey=newRequestKey();
+      openBorrowFlow();
+      renderEquipmentList();
+      showWizardStep(Math.min(draft.wizardStep||0,3));
+      checkExistingDocuments();
+      updateStepValidity();
+      showToast('Picked up where you left off — your borrowing request was restored.','success');
+    }
+    // beforeunload can't stop a refresh outright or customize its message
+    // (browsers deliberately ignore any custom text here), but it does show
+    // the browser's own "leave site? changes may not be saved" prompt,
+    // which is the right outcome now that a confirmed refresh is recoverable
+    // anyway — this is just for the person who meant to click away entirely.
+    window.addEventListener('beforeunload',e=>{
+      if(!borrowFlow.classList.contains('open'))return;
+      e.preventDefault();
+      e.returnValue='';
+    });
+
     reqContinueBtn.addEventListener('click',()=>{
       reqModalOverlay.hidden=true;
       requestKey=newRequestKey();
@@ -882,13 +1082,13 @@
       $('returnDateInput').value='';
       $('returnTimeInput').value='';
       $('acknowledge').checked=false;
-      borrowFlow.classList.add('open');
+      openBorrowFlow();
       showWizardStep(0);
       checkExistingDocuments();
       updateStepValidity();
     });
-    $('closeFlow').addEventListener('click',()=>borrowFlow.classList.remove('open'));
-    $('backToEquipment').addEventListener('click',()=>borrowFlow.classList.remove('open'));
+    $('closeFlow').addEventListener('click',()=>{clearDraft();closeBorrowFlow();});
+    $('backToEquipment').addEventListener('click',()=>{closeSuccessModal();});
     $('viewMyRequest').addEventListener('click',()=>{window.location.href='my-requests.html';});
 
     $('submitRequest').addEventListener('click',()=>{
@@ -906,8 +1106,10 @@
         body:JSON.stringify({items,purpose:$('purposeInput').value.trim()||null,expectedReturnDatetime,acknowledged:$('acknowledge').checked,requestKey})
       })
         .then(data=>{
+          clearDraft();
+          closeBorrowFlow();
           $('successReqId').textContent=data.id;
-          showWizardStep(4);
+          openSuccessModal();
           // Stock and my-activity figures changed — refresh them from the server.
           refreshCatalog();
           loadMyActivity();
@@ -916,7 +1118,8 @@
         .catch(err=>{
           if(err.details&&err.details.restrictions){
             renderRestrictions(err.details.restrictions);
-            borrowFlow.classList.remove('open');
+            clearDraft();
+            closeBorrowFlow();
           }
           showToast(err.message,'danger');
           btn.disabled=false;
@@ -948,14 +1151,15 @@
       if(rows.length)$('welcomeName').textContent=`Welcome back, ${firstName}.`;
     }).catch(()=>{});
     loadEligibility();
-    $('slipBorrowerName').value=displayName;
-    $('slipBorrowerType').value=(borrowerProfile&&borrowerProfile.borrowerCategory)||'—';
-    $('slipCollege').value=(borrowerProfile&&borrowerProfile.collegeOrUnit)||'—';
+    $('slipBorrowerName').textContent=displayName;
+    $('slipBorrowerType').textContent=(borrowerProfile&&borrowerProfile.borrowerCategory)||'—';
+    $('slipCollege').textContent=(borrowerProfile&&borrowerProfile.collegeOrUnit)||'—';
     applyDocRequirements(borrowerProfile&&borrowerProfile.borrowerCategory);
 
     function refreshCatalog(){
+      // Stats (Total/Available/Categories) are rendered from loadMyActivity's
+      // /api/dashboard/me response, not from this call — see renderStats().
       return loadEquipment().then(()=>{
-        renderStats();
         renderCategoryPanel();
         render();
       }).catch(err=>showToast('Could not load equipment: '+err.message,'danger'));
@@ -979,6 +1183,8 @@
         $('myRejected').textContent=d.mine.rejectedRequests;
         $('myReturned').textContent=d.mine.returnedEquipment;
         $('myActive').textContent=d.mine.borrowedUnits;
+        catalogFigures=d.catalog;
+        renderStats();
       }).catch(err=>showToast('Could not load your activity: '+err.message,'danger'));
     }
     [myYearSelect,mySemesterSelect].forEach(el=>el.addEventListener('change',loadMyActivity));
@@ -987,13 +1193,26 @@
     document.addEventListener('appshell:user-updated',e=>{
       const bp=e.detail&&e.detail.borrowerProfile;
       if(!bp)return;
-      $('slipBorrowerType').value=bp.borrowerCategory||'—';
-      $('slipCollege').value=bp.collegeOrUnit||'—';
+      $('slipBorrowerType').textContent=bp.borrowerCategory||'—';
+      $('slipCollege').textContent=bp.collegeOrUnit||'—';
       applyDocRequirements(bp.borrowerCategory);
     });
 
-    refreshCatalog();
+    // restoreDraftIfAny() needs products loaded first (it resolves each
+    // saved row's equipmentId against productById()), so it's chained onto
+    // this initial load rather than running alongside it.
+    refreshCatalog().then(restoreDraftIfAny);
     loadMyActivity();
+
+    // Keep availability/stats current after changes made elsewhere (staff
+    // releasing/returning equipment, another borrower's request going
+    // through, QR codes being generated) — this page had no auto-refresh at
+    // all before, so it only ever showed a frozen snapshot from whenever it
+    // was first opened. Same pattern as the admin dashboard
+    // (client/pages/admin/dashboard.html): poll every 60s while the tab is
+    // visible, plus an immediate refresh when the tab regains focus.
+    setInterval(()=>{if(!document.hidden){refreshCatalog();loadMyActivity();}},60000);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshCatalog();loadMyActivity();}});
   </script>
 </body>
 </html>

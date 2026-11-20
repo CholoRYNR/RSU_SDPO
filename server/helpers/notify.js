@@ -2,27 +2,28 @@
 
 const { Notification, User } = require('../models');
 const { sendEmail } = require('../services/notificationService/emailService');
-const { sendSms } = require('../services/notificationService/smsService');
+const { recipientNameFor } = require('./recipientName');
 
 const STAFF_ROLES = ['Admin', 'Director', 'Staff'];
 
 // One action produces exactly ONE notification row per recipient: the
-// in-app ('System') row the bell and Notifications page show. Email/SMS are
-// delivery channels for that same notification, not separate notifications
+// in-app ('System') row the bell and Notifications page show. Email is a
+// delivery channel for that same notification, not a separate notification
 // — previously each channel wrote its own extra Notification row, so every
-// event showed up three times (System + Email + SMS) in the recipient's list.
+// event showed up multiple times in the recipient's list.
 // Delivery failures are logged, never thrown, so they can't break the
 // workflow action that triggered them.
+//
+// Notification channels are in-app and email only.
 async function deliverExternalChannels(user, message, type) {
   if (!user) return;
   try {
     if (user.emailAddress) {
-      const result = await sendEmail(user.emailAddress, `RSU SDPO Notification: ${type}`, message);
+      const result = await sendEmail(user.emailAddress, `RSU SDPO Notification: ${type}`, message, {
+        heading: type,
+        recipientName: await recipientNameFor(user)
+      });
       if (!result.success) console.error(`[notify] Email to user ${user.id} failed: ${result.error}`);
-    }
-    if (user.contactNumber) {
-      const result = await sendSms(user.contactNumber, message);
-      if (!result.success) console.error(`[notify] SMS to user ${user.id} failed: ${result.error}`);
     }
   } catch (err) {
     console.error(`[notify] External delivery failed for user ${user.id}:`, err.message || err);
@@ -62,7 +63,7 @@ async function notifyUser(userId, message, type, dedupeKey) {
       const user = await User.findByPk(userId);
       await deliverExternalChannels(user, message, type);
     } catch (err) {
-      console.error(`[notify] Failed to look up user ${userId} for email/SMS delivery:`, err.message || err);
+      console.error(`[notify] Failed to look up user ${userId} for email delivery:`, err.message || err);
     }
   }
   return notification;

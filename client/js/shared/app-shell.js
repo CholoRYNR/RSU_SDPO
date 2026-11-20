@@ -253,7 +253,8 @@
     var items = NOTIFICATIONS.map(notifItemHtml).join('');
     return (
       '<div class="notif-panel" id="notifPanel" role="dialog" aria-label="Notifications">' +
-        '<div class="notif-panel-head"><h3>Notifications</h3><button class="notif-mark-read" id="notifMarkRead">Mark all as read</button></div>' +
+        '<div class="notif-panel-head"><h3>Notifications</h3><div class="notif-head-actions"><button class="notif-mark-read" id="notifMarkRead">Mark all as read</button><button class="notif-delete-all" id="notifDeleteAll" type="button">Delete all</button></div></div>' +
+        '<p class="notif-hint" id="notifHint" hidden></p>' +
         '<div class="notif-list" id="notifList">' + (items || '<div class="notif-empty">You\'re all caught up.</div>') + '</div>' +
       '</div>'
     );
@@ -330,30 +331,80 @@
 
     // Opening a notification — like opening an email — marks it read and
     // shows the full message instead of the panel's truncated preview.
+    function markOneRead(n) {
+      if (!n.unread) return;
+      n.unread = false;
+      updateBellState();
+      if (n.dbId) {
+        // Kept so a quick Delete waits for the server to record the read.
+        n.readRequest = shellApiFetch('/api/notifications/' + n.dbId + '/read', { method: 'PATCH' }).catch(function () {});
+      }
+    }
+
+    // "Delete all" removes every notification that has already been read.
+    // Unread ones are kept (they must be read first) — the server enforces
+    // this too (notification.controller removeAllRead). Two taps: the first
+    // asks to confirm, so a stray tap on a phone can't wipe the list.
+    var deleteAll = document.getElementById('notifDeleteAll');
+    var hint = document.getElementById('notifHint');
+    var confirmTimer = null;
+    function showHint(text) {
+      if (!hint) return;
+      hint.textContent = text; hint.hidden = !text;
+      if (text) setTimeout(function () { if (hint.textContent === text) hint.hidden = true; }, 5000);
+    }
+    function resetDeleteAll() {
+      clearTimeout(confirmTimer);
+      if (deleteAll) { deleteAll.textContent = 'Delete all'; deleteAll.classList.remove('is-confirm'); }
+    }
+    if (deleteAll) deleteAll.addEventListener('click', function () {
+      var readCount = NOTIFICATIONS.filter(function (n) { return !n.unread; }).length;
+      var unreadCount = NOTIFICATIONS.length - readCount;
+      if (!readCount) {
+        resetDeleteAll();
+        showHint(unreadCount ? 'Only read notifications can be deleted. Open them or tap "Mark all as read" first.' : 'There are no notifications to delete.');
+        return;
+      }
+      if (!deleteAll.classList.contains('is-confirm')) {
+        deleteAll.textContent = 'Delete ' + readCount + ' read?';
+        deleteAll.classList.add('is-confirm');
+        showHint(unreadCount ? unreadCount + ' unread notification' + (unreadCount === 1 ? '' : 's') + ' will be kept.' : '');
+        confirmTimer = setTimeout(resetDeleteAll, 4000);
+        return;
+      }
+      resetDeleteAll();
+      var removed = NOTIFICATIONS.filter(function (n) { return !n.unread; });
+      var pending = Promise.all(removed.map(function (n) { return n.readRequest; }));
+      NOTIFICATIONS = NOTIFICATIONS.filter(function (n) { return n.unread; });
+      refreshNotifPanel();
+      showHint(removed.length + ' read notification' + (removed.length === 1 ? '' : 's') + ' deleted.');
+      pending.then(function () { return shellApiFetch('/api/notifications/read', { method: 'DELETE' }); })
+        .catch(function () {
+          NOTIFICATIONS = removed.concat(NOTIFICATIONS).sort(function (a, b) { return (b.dbId || 0) - (a.dbId || 0); });
+          refreshNotifPanel();
+          showHint('Could not delete notifications. Please try again.');
+        });
+    });
+
     list.addEventListener('click', function (e) {
       var item = e.target.closest('.notif-item');
       if (!item) return;
       var n = NOTIFICATIONS[Number(item.getAttribute('data-index'))];
       if (!n) return;
+      markOneRead(n);
+      item.classList.remove('notif-item-unread');
       openNotifDetail(n);
-      if (n.unread) {
-        n.unread = false;
-        item.classList.remove('notif-item-unread');
-        updateBellState();
-        if (n.dbId) {
-          shellApiFetch('/api/notifications/' + n.dbId + '/read', { method: 'PATCH' }).catch(function () {});
-        }
-      }
+      refreshNotifPanel();
     });
+
 
     if (detailClose) detailClose.addEventListener('click', function () { detailOverlay.hidden = true; });
     if (detailOverlay) detailOverlay.addEventListener('click', function (e) { if (e.target === detailOverlay) detailOverlay.hidden = true; });
 
     markRead.addEventListener('click', function () {
-      NOTIFICATIONS.forEach(function (n) { n.unread = false; });
-      document.querySelectorAll('.notif-item-unread').forEach(function (el) { el.classList.remove('notif-item-unread'); });
-      updateBellState();
-      shellApiFetch('/api/notifications/read-all', { method: 'PATCH' }).catch(function () {});
+      var readAll = shellApiFetch('/api/notifications/read-all', { method: 'PATCH' }).catch(function () {});
+      NOTIFICATIONS.forEach(function (n) { if (n.unread) n.readRequest = readAll; n.unread = false; });
+      refreshNotifPanel();
     });
 
     if (previewOpen === 'notifications') openPanel();
@@ -409,11 +460,68 @@
     });
     document.querySelectorAll('.js-signout-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        localStorage.removeItem('rsuSdpoToken');
-        localStorage.removeItem('rsuSdpoUser');
-        window.location.href = base + (role === 'user' ? 'pages/auth/user-login.html' : 'pages/auth/admin-login.html');
+        confirmSignOut(btn, function () {
+          localStorage.removeItem('rsuSdpoToken');
+          localStorage.removeItem('rsuSdpoUser');
+          window.location.href = base + (role === 'user' ? 'pages/auth/user-login.html' : 'pages/auth/admin-login.html');
+        });
       });
     });
+  }
+
+  // "Are you sure you want to sign out?" dialog shared by borrowers and
+  // SDPO staff/admins (both reach Sign Out through this same shell). The
+  // safe choice — Cancel — has the initial focus, Esc / clicking outside /
+  // Cancel all close it without signing out, and Tab stays inside the
+  // dialog while it is open. Focus returns to the Sign Out button on cancel.
+  // Automatic sign-outs (expired session, blocked account) do not go through
+  // here — those happen in api.js / syncSessionUser and never ask.
+  function confirmSignOut(trigger, onConfirm) {
+    if (document.getElementById('signoutConfirmOverlay')) return;
+
+    var overlay = document.createElement('div');
+    overlay.className = 'signout-overlay';
+    overlay.id = 'signoutConfirmOverlay';
+    overlay.innerHTML =
+      '<div class="signout-dialog" role="alertdialog" aria-modal="true" aria-labelledby="signoutTitle" aria-describedby="signoutText">' +
+        '<h2 class="signout-title" id="signoutTitle">Sign out?</h2>' +
+        '<p class="signout-text" id="signoutText">You will need to sign in again to continue using RSU-SDPO.</p>' +
+        '<div class="signout-actions">' +
+          '<button type="button" class="signout-btn signout-btn--cancel" id="signoutCancel">Cancel</button>' +
+          '<button type="button" class="signout-btn signout-btn--confirm" id="signoutConfirm">Sign Out</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    var cancelBtn = overlay.querySelector('#signoutCancel');
+    var confirmBtn = overlay.querySelector('#signoutConfirm');
+
+    function close() {
+      document.removeEventListener('keydown', onKeydown, true);
+      overlay.remove();
+      if (trigger && trigger.focus) trigger.focus();
+    }
+    function onKeydown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      } else if (e.key === 'Tab') {
+        // Keep keyboard focus inside the two-button dialog.
+        e.preventDefault();
+        (document.activeElement === cancelBtn ? confirmBtn : cancelBtn).focus();
+      }
+    }
+
+    cancelBtn.addEventListener('click', close);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    confirmBtn.addEventListener('click', function () {
+      confirmBtn.disabled = true;
+      cancelBtn.disabled = true;
+      document.removeEventListener('keydown', onKeydown, true);
+      onConfirm();
+    });
+    document.addEventListener('keydown', onKeydown, true);
+    cancelBtn.focus();
   }
 
   // Keeps the cached signed-in user (name, Borrower Type, college, account

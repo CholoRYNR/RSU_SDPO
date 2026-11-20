@@ -5,11 +5,10 @@
 // approved RSU SDPO borrowing requirements; the client reads the same rules
 // back from GET /api/borrowers/me/documents so the wizard and the server can
 // never disagree.
-const BORROWER_CATEGORIES = ['Faculty', 'Staff', 'Employee', 'Student', 'External'];
+const BORROWER_CATEGORIES = ['Faculty', 'Employee', 'Student', 'External'];
 
 const DOCUMENT_REQUIREMENTS = {
   Faculty: { needsValidId: false, documentLabel: 'Activity Schedule' },
-  Staff: { needsValidId: false, documentLabel: 'Approved Proposal / Request Letter' },
   Employee: { needsValidId: false, documentLabel: 'Approved Proposal / Request Letter' },
   Student: { needsValidId: false, documentLabel: 'Authorization Letter' },
   External: { needsValidId: true, documentLabel: 'Approved Proposal / Request Letter' }
@@ -22,12 +21,14 @@ function requirementsFor(category) {
 }
 
 // Names of the required documents this borrower has NOT uploaded yet.
-function missingDocuments(borrower) {
+// `docs` is where the file paths are read from: the borrower by default, or a
+// transaction when checking the documents submitted with one specific request.
+function missingDocuments(borrower, docs = borrower) {
   if (!borrower) return ['Borrower profile'];
   const req = requirementsFor(borrower.borrowerCategory);
   const missing = [];
-  if (req.needsValidId && !borrower.validIdPath) missing.push('Valid ID');
-  if (!borrower.authorizationDocumentPath) missing.push(req.documentLabel);
+  if (req.needsValidId && !docs.validIdPath) missing.push('Valid ID');
+  if (!docs.authorizationDocumentPath) missing.push(req.documentLabel);
   return missing;
 }
 

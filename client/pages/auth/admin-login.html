@@ -261,12 +261,17 @@
         // screen has no signup flow to have reached it from otherwise, so
         // route straight to it with a working Resend button rather than
         // just showing the error text with no way to act on it.
-        // Only route to the verify screen when we actually know their email
-        // (they logged in with it, not a bare username) — verify-registration
-        // and resend-verification both look accounts up by email address.
-        if (err.message && err.message.toLowerCase().includes('verify your email') && username.includes('@')) {
-          verifyContext = { mode: 'register', email: username };
-          $('verifyEmailTarget').textContent = maskEmail(username);
+        // Only route to the verify screen when we actually know their email.
+        // The server identifies this case with code EMAIL_NOT_VERIFIED and,
+        // since the password was correct, returns the account's email — so
+        // the code screen works even when signing in with a username rather
+        // than an email address (matches user-login.html's equivalent fix).
+        const unverifiedEmail = err.code === 'EMAIL_NOT_VERIFIED'
+          ? ((err.details && err.details.email) || (username.includes('@') ? username : null))
+          : null;
+        if (unverifiedEmail) {
+          verifyContext = { mode: 'register', email: unverifiedEmail };
+          $('verifyEmailTarget').textContent = maskEmail(unverifiedEmail);
           showVerify();
         } else {
           showLogin(err.message, true);
@@ -313,6 +318,18 @@
       });
       el.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace' && !el.value && codeDigits[i - 1]) codeDigits[i - 1].focus();
+      });
+      // Let a copied 6-digit code be pasted into any box — fills every box
+      // from the start rather than only the one that was clicked, since a
+      // pasted code is always meant to fill the whole field.
+      el.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const pasted = (e.clipboardData || window.clipboardData).getData('text');
+        const digits = pasted.replace(/[^0-9]/g, '').slice(0, 6);
+        if (!digits) return;
+        digits.split('').forEach((d, idx) => { codeDigits[idx].value = d; });
+        const nextEmpty = codeDigits.findIndex((d) => !d.value);
+        (nextEmpty === -1 ? codeDigits[codeDigits.length - 1] : codeDigits[nextEmpty]).focus();
       });
     });
     $('verifyForm').addEventListener('submit', async (e) => {

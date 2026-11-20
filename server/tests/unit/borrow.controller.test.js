@@ -2,7 +2,7 @@
 
 // Verifies server/controllers/borrow.controller.js — the request → document
 // verification → Director approval → release workflow:
-//   - Green/Yellow/Red availability caps + 25% minimum-stock floor
+//   - Green/Yellow/Red availability caps + 15% minimum-stock floor
 //   - units Reserved at submission, released back on Rejected/Cancelled
 //   - flagged-borrower / pending-replacement / late-return restrictions,
 //     enforced server-side before anything is created
@@ -16,8 +16,8 @@ jest.mock('../../models', () => ({
   TransactionDetail: { bulkCreate: jest.fn() },
   Borrower: { findOne: jest.fn(), findByPk: jest.fn() },
   User: { findByPk: jest.fn() },
-  Item: { findAll: jest.fn(), update: jest.fn() },
-  Equipment: { findByPk: jest.fn(), decrement: jest.fn(), increment: jest.fn() },
+  Item: { findAll: jest.fn(), update: jest.fn(), count: jest.fn() },
+  Equipment: { findByPk: jest.fn(), findAll: jest.fn(), decrement: jest.fn(), increment: jest.fn() },
   Category: {},
   TransactionLog: {},
   DamageLossRecord: { findAll: jest.fn() },
@@ -26,7 +26,7 @@ jest.mock('../../models', () => ({
 jest.mock('../../helpers/notify', () => ({ notifyBorrower: jest.fn(), notifyStaff: jest.fn(), notifyRoles: jest.fn() }));
 jest.mock('../../helpers/transactionLog', () => ({ logStatusChange: jest.fn() }));
 
-const { Transaction, Borrower, User, Item, Equipment, DamageLossRecord, sequelize } = require('../../models');
+const { Transaction, TransactionDetail, Borrower, User, Item, Equipment, DamageLossRecord, sequelize } = require('../../models');
 const { Op } = require('sequelize');
 const { logStatusChange } = require('../../helpers/transactionLog');
 const { notifyBorrower, notifyRoles } = require('../../helpers/notify');
@@ -97,7 +97,7 @@ describe('createSelfRequest — Green/Yellow/Red availability-threshold caps', (
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
-  test('Yellow tier (4-5 available) allows exactly 1 unit and reserves it', async () => {
+  test('Yellow tier (4-5 available) allows exactly 1 unit without reserving it yet', async () => {
     const equipment = { id: 1, equipmentName: 'Basketball', availableQuantity: 5, decrement: jest.fn().mockResolvedValue() };
     Equipment.findByPk.mockResolvedValueOnce(equipment);
     Item.findAll.mockResolvedValueOnce([{ id: 101, equipmentId: 1, itemCode: 'EQ-001-001' }]);
@@ -106,8 +106,10 @@ describe('createSelfRequest — Green/Yellow/Red availability-threshold caps', (
 
     await ctrl.createSelfRequest(selfReq([{ equipmentId: 1, quantity: 1 }]), mockRes());
 
-    expect(Item.update).toHaveBeenCalledWith({ availabilityStatus: 'Reserved' }, expect.objectContaining({ where: { id: [101] } }));
-    expect(equipment.decrement).toHaveBeenCalledWith('availableQuantity', expect.objectContaining({ by: 1 }));
+    // Reserve-on-approval: a pending request holds no stock.
+    expect(Item.update).not.toHaveBeenCalled();
+    expect(equipment.decrement).not.toHaveBeenCalled();
+    expect(TransactionDetail.bulkCreate).toHaveBeenCalledWith([{ transactionId: 55, equipmentId: 1, itemId: null }], expect.anything());
   });
 
   test('Green tier (>5 available) caps at 2 units — requesting 3 is rejected', async () => {
@@ -115,7 +117,7 @@ describe('createSelfRequest — Green/Yellow/Red availability-threshold caps', (
     await expect(ctrl.createSelfRequest(selfReq([{ equipmentId: 1, quantity: 3 }]), mockRes())).rejects.toMatchObject({ statusCode: 409 });
   });
 
-  test('Green tier (>5 available) allows exactly 2 units and reserves them', async () => {
+  test('Green tier (>5 available) allows exactly 2 units without reserving them yet', async () => {
     const equipment = { id: 1, equipmentName: 'Cones', availableQuantity: 20, decrement: jest.fn().mockResolvedValue() };
     Equipment.findByPk.mockResolvedValueOnce(equipment);
     Item.findAll.mockResolvedValueOnce([
@@ -127,8 +129,9 @@ describe('createSelfRequest — Green/Yellow/Red availability-threshold caps', (
 
     await ctrl.createSelfRequest(selfReq([{ equipmentId: 1, quantity: 2 }]), mockRes());
 
-    expect(Item.update).toHaveBeenCalledWith({ availabilityStatus: 'Reserved' }, expect.objectContaining({ where: { id: [201, 202] } }));
-    expect(equipment.decrement).toHaveBeenCalledWith('availableQuantity', expect.objectContaining({ by: 2 }));
+    expect(Item.update).not.toHaveBeenCalled();
+    expect(equipment.decrement).not.toHaveBeenCalled();
+    expect(TransactionDetail.bulkCreate.mock.calls[0][0]).toHaveLength(2);
   });
 
   test('still rejects with insufficient-stock when fewer units are actually Available than the cap allows', async () => {
@@ -138,15 +141,47 @@ describe('createSelfRequest — Green/Yellow/Red availability-threshold caps', (
 
     await expect(ctrl.createSelfRequest(selfReq([{ equipmentId: 1, quantity: 2 }]), mockRes())).rejects.toMatchObject({ statusCode: 409 });
     expect(equipment.decrement).not.toHaveBeenCalled();
+    expect(Item.count).not.toHaveBeenCalled(); // totalQuantity unknown here — no registration-gap check possible
+  });
+
+  // 2026-10 bug report: "quantity is 10, they borrow 2" got the same
+  // "Not enough stock" message as genuine depletion — but the real cause
+  // for equipment like "Shuttle Cock" (totalQuantity 10, availableQuantity
+  // 10, zero actual Item rows ever registered via QR Management) is a data
+  // gap, not a stock shortage, and the message needs to say so distinctly.
+  test('a QR-registration gap (fewer Item rows than totalQuantity) gets its own distinct message', async () => {
+    const equipment = { id: 51, equipmentName: 'Shuttle Cock', availableQuantity: 10, totalQuantity: 10, decrement: jest.fn() };
+    Equipment.findByPk.mockResolvedValueOnce(equipment);
+    Item.findAll.mockResolvedValueOnce([]); // zero units ever registered
+    Item.count.mockResolvedValueOnce(0);
+
+    await expect(ctrl.createSelfRequest(selfReq([{ equipmentId: 51, quantity: 2 }]), mockRes())).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'ITEMS_NOT_REGISTERED',
+      message: expect.stringMatching(/QR code registered in QR Management/)
+    });
+    expect(equipment.decrement).not.toHaveBeenCalled();
+  });
+
+  test('a genuine stock shortage (registered units all Borrowed/Reserved) keeps the original message', async () => {
+    const equipment = { id: 1, equipmentName: 'Table Tennis Ball', availableQuantity: 12, totalQuantity: 12, decrement: jest.fn() };
+    Equipment.findByPk.mockResolvedValueOnce(equipment);
+    Item.findAll.mockResolvedValueOnce([{ id: 301, equipmentId: 1, itemCode: 'TTB-001-01' }]); // 1 of 2 requested
+    Item.count.mockResolvedValueOnce(12); // all 12 units are registered — nothing missing
+
+    await expect(ctrl.createSelfRequest(selfReq([{ equipmentId: 1, quantity: 2 }]), mockRes())).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringMatching(/^Not enough stock for/)
+    });
   });
 });
 
-describe('createSelfRequest — 25%-of-total minimum-stock floor', () => {
-  test('blocks borrowing at the 25%-of-total floor, even where the Yellow band alone would allow 1 unit', async () => {
-    Equipment.findByPk.mockResolvedValueOnce({ id: 1, equipmentName: 'Cones', availableQuantity: 5, totalQuantity: 20 });
+describe('createSelfRequest — 15%-of-total minimum-stock floor', () => {
+  test('blocks borrowing at the 15%-of-total floor, even where the Yellow band alone would allow 1 unit', async () => {
+    Equipment.findByPk.mockResolvedValueOnce({ id: 1, equipmentName: 'Cones', availableQuantity: 5, totalQuantity: 30 });
     await expect(ctrl.createSelfRequest(selfReq([{ equipmentId: 1, quantity: 1 }]), mockRes())).rejects.toMatchObject({
       statusCode: 409,
-      message: expect.stringMatching(/25% minimum-stock threshold/)
+      message: expect.stringMatching(/15% minimum-stock threshold/)
     });
     expect(Item.update).not.toHaveBeenCalled();
   });
@@ -162,11 +197,17 @@ describe('createSelfRequest — 25%-of-total minimum-stock floor', () => {
     Transaction.findByPk.mockResolvedValueOnce(stubFindByPkResult({ id: 57 }));
 
     await ctrl.createSelfRequest(selfReq([{ equipmentId: 1, quantity: 2 }]), mockRes());
-    expect(equipment.decrement).toHaveBeenCalledWith('availableQuantity', expect.objectContaining({ by: 2 }));
+    expect(equipment.decrement).not.toHaveBeenCalled();
+    expect(Transaction.create).toHaveBeenCalled();
   });
 
   test('rounds the floor up (ceil)', async () => {
-    Equipment.findByPk.mockResolvedValueOnce({ id: 1, equipmentName: 'Rackets', availableQuantity: 3, totalQuantity: 10 });
+    // totalQuantity 21 -> 21*0.15 = 3.15, which only blocks at availableQuantity
+    // 4 if the floor is rounded UP to 4 (ceil). A floor() implementation would
+    // give 3 and let this one through. availableQuantity 4 also sits in the
+    // Yellow band (cap 1), not the fixed Red band, so this isolates the floor's
+    // own rounding behavior from the fixed-band cap.
+    Equipment.findByPk.mockResolvedValueOnce({ id: 1, equipmentName: 'Rackets', availableQuantity: 4, totalQuantity: 21 });
     await expect(ctrl.createSelfRequest(selfReq([{ equipmentId: 1, quantity: 1 }]), mockRes())).rejects.toMatchObject({ statusCode: 409 });
   });
 
@@ -259,7 +300,7 @@ describe('createSelfRequest — idempotent submission and notifications', () => 
     expect(notifyRoles).not.toHaveBeenCalled();
   });
 
-  test('stores the requestKey and notifies the borrower once and Admin/Staff once, with dedupe keys', async () => {
+  test('stores the requestKey and notifies the borrower once and Admin/Director/Staff once, with dedupe keys', async () => {
     successfulSubmission(71);
     await ctrl.createSelfRequest(selfReq([{ equipmentId: 1, quantity: 1 }], { requestKey: 'abcdef123456' }), mockRes());
 
@@ -267,7 +308,7 @@ describe('createSelfRequest — idempotent submission and notifications', () => 
     expect(notifyBorrower).toHaveBeenCalledTimes(1);
     expect(notifyBorrower).toHaveBeenCalledWith(9, expect.any(String), 'Request Submitted', 'txn-71-submitted');
     expect(notifyRoles).toHaveBeenCalledTimes(1);
-    expect(notifyRoles).toHaveBeenCalledWith(['Admin', 'Staff'], expect.any(String), 'New Request', 'txn-71-new-request');
+    expect(notifyRoles).toHaveBeenCalledWith(['Admin', 'Director', 'Staff'], expect.any(String), 'New Request', 'txn-71-new-request');
   });
 
   test('the return date/time is interpreted as Philippine Time', async () => {
@@ -279,6 +320,41 @@ describe('createSelfRequest — idempotent submission and notifications', () => 
     );
     const created = Transaction.create.mock.calls[0][0];
     expect(created.expectedReturnDatetime.toISOString()).toBe(`${year}-03-10T07:00:00.000Z`);
+  });
+});
+
+describe('create — staff walk-in / emergency borrowing is not limited by the self-service caps', () => {
+  const staffReq = (itemIds) => ({ user: { id: 2 }, body: { borrowerId: 5, itemIds, expectedReturnDatetime: FUTURE, purpose: 'Emergency match' } });
+
+  function arrange(equipmentRow) {
+    Borrower.findByPk.mockResolvedValue({ ...READY_BORROWER, user: { id: 9, accountStatus: 'Active' } });
+    Item.findAll.mockResolvedValue([{ id: 11, equipmentId: 3, availabilityStatus: 'Available' }]);
+    Item.update.mockResolvedValue([1]);
+    Equipment.findAll.mockResolvedValue([equipmentRow]);
+    Equipment.decrement.mockResolvedValue();
+    Transaction.create.mockResolvedValue({ id: 50 });
+    Transaction.findByPk.mockResolvedValue(stubFindByPkResult({ id: 50 }));
+    const { TransactionDetail } = require('../../models');
+    TransactionDetail.bulkCreate.mockResolvedValue();
+  }
+
+  test('lends the last units at critical stock and records it as an emergency walk-in in the audit log', async () => {
+    arrange({ id: 3, equipmentName: 'Pickle Ball', availableQuantity: 2, totalQuantity: 10 });
+    const res = mockRes();
+    await ctrl.create(staffReq([11]), res);
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(Equipment.decrement).toHaveBeenCalledWith('availableQuantity', expect.objectContaining({ by: 1 }));
+    const remarks = logStatusChange.mock.calls[0][4];
+    expect(remarks).toContain('Request created by SDPO staff');
+    expect(remarks).toContain('Emergency walk-in');
+    expect(remarks).toContain('Pickle Ball (2 of 10 available');
+  });
+
+  test('a normal walk-in within the self-service limit keeps the plain audit remark', async () => {
+    arrange({ id: 3, equipmentName: 'Volleyball', availableQuantity: 9, totalQuantity: 12 });
+    await ctrl.create(staffReq([11]), mockRes());
+    expect(logStatusChange.mock.calls[0][4]).toBe('Request created by SDPO staff');
   });
 });
 
@@ -308,33 +384,54 @@ describe('eligibility()', () => {
   });
 });
 
-describe('review() — Admin/Staff document verification gate', () => {
+describe('review() — single approval step (2026-10-02)', () => {
   function pendingTxn(overrides) {
     return stubFindByPkResult({
       transactionStatus: 'Acknowledged',
       borrower: { ...READY_BORROWER, user: { id: 40 } },
+      validIdPath: READY_BORROWER.validIdPath,
+      authorizationDocumentPath: READY_BORROWER.authorizationDocumentPath,
       details: [{ item: { id: 301, equipmentId: 1, availabilityStatus: 'Reserved', itemCode: 'EQ-001-001', equipment: { equipmentName: 'Cones' } } }],
       ...overrides
     });
   }
 
-  test('accept verifies the documents, moves to For Approval, and notifies the Director', async () => {
+  test('accept verifies the documents and approves the request in one step, for any of the three equal roles', async () => {
     const txn = pendingTxn({ id: 13 });
     Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
 
     await ctrl.review({ params: { id: 13 }, user: { id: 3 }, body: { action: 'accept' } }, mockRes());
 
     expect(Transaction.update).toHaveBeenCalledWith(
-      expect.objectContaining({ transactionStatus: 'For Approval', documentsVerifiedBy: 3, documentsVerifiedDatetime: expect.any(Date) }),
-      { where: { id: 13, transactionStatus: { [Op.in]: ['Pending', 'Acknowledged'] } }, transaction: undefined }
+      expect.objectContaining({
+        transactionStatus: 'Approved',
+        documentsVerifiedBy: 3,
+        documentsVerifiedDatetime: expect.any(Date),
+        approvedBy: 3,
+        approvalDatetime: expect.any(Date)
+      }),
+      { where: { id: 13, transactionStatus: { [Op.in]: ['Pending', 'Acknowledged'] } }, transaction: fakeT }
     );
-    expect(Item.update).not.toHaveBeenCalled(); // units stay Reserved through approval
-    expect(txn.transactionStatus).toBe('For Approval');
-    expect(notifyRoles).toHaveBeenCalledWith(['Director'], expect.any(String), 'Awaiting Approval', 'txn-13-awaiting-approval');
+    expect(Item.update).not.toHaveBeenCalled(); // walk-in-style rows already hold units; nothing to assign
+    expect(txn.transactionStatus).toBe('Approved');
+    // No separate "awaiting Director approval" ping — there's no longer a
+    // second stage for a Director to be notified about.
+    expect(notifyRoles).not.toHaveBeenCalled();
+    expect(notifyBorrower).toHaveBeenCalledWith(40, expect.stringContaining('has been approved'), 'Approval', 'txn-13-approved');
+  });
+
+  test('any of the three equally-privileged roles (Admin, Director, Staff) can accept', async () => {
+    for (const userRole of ['Admin', 'Director', 'Staff']) {
+      jest.clearAllMocks();
+      const txn = pendingTxn({ id: 20 });
+      Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
+      await ctrl.review({ params: { id: 20 }, user: { id: 3, userRole }, body: { action: 'accept' } }, mockRes());
+      expect(txn.transactionStatus).toBe('Approved');
+    }
   });
 
   test('accept is refused when required documents are missing', async () => {
-    const txn = pendingTxn({ id: 18, borrower: { ...READY_BORROWER, authorizationDocumentPath: null, user: { id: 40 } } });
+    const txn = pendingTxn({ id: 18, authorizationDocumentPath: null, borrower: { ...READY_BORROWER, authorizationDocumentPath: null, user: { id: 40 } } });
     Transaction.findByPk.mockResolvedValueOnce(txn);
     await expect(ctrl.review({ params: { id: 18 }, user: { id: 3 }, body: { action: 'accept' } }, mockRes())).rejects.toMatchObject({
       statusCode: 409,
@@ -400,7 +497,6 @@ describe('release()', () => {
     const txn = stubFindByPkResult({
       id: 7,
       transactionStatus: 'Approved',
-      receivedByBorrowerDatetime: new Date(),
       details: [{ item: { itemCode: 'EQ-001-001', availabilityStatus: 'Available', update: jest.fn(), equipment: { equipmentName: 'Basketball' } } }]
     });
     Transaction.findByPk.mockResolvedValueOnce(txn);
@@ -409,18 +505,14 @@ describe('release()', () => {
     });
   });
 
-  test('refuses to release before the borrower acknowledges receipt', async () => {
-    const txn = stubFindByPkResult({ id: 9, transactionStatus: 'Approved', receivedByBorrowerDatetime: null, details: [reservedDetail(jest.fn())] });
-    Transaction.findByPk.mockResolvedValueOnce(txn);
-    await expect(ctrl.release({ params: { id: 9 }, body: { itemCodes: ['EQ-001-001'] }, user: { id: 3 } }, mockRes())).rejects.toMatchObject({
-      statusCode: 409,
-      message: expect.stringMatching(/acknowledg/i)
-    });
-  });
-
+  // The borrower electronic-acknowledgement-of-receipt gate (and the
+  // acknowledgeReceipt() endpoint that set it) was removed by request —
+  // staff can release equipment as soon as a request is Approved, with no
+  // separate borrower confirmation step. release() no longer checks
+  // receivedByBorrowerDatetime at all.
   test('releases (also by a legacy label code) without double-decrementing stock', async () => {
     const itemUpdate = jest.fn().mockResolvedValue();
-    const txn = stubFindByPkResult({ id: 8, transactionStatus: 'Approved', borrowerId: 5, receivedByBorrowerDatetime: new Date(), details: [reservedDetail(itemUpdate)] });
+    const txn = stubFindByPkResult({ id: 8, transactionStatus: 'Approved', borrowerId: 5, details: [reservedDetail(itemUpdate)] });
     Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
 
     await ctrl.release({ params: { id: 8 }, body: { itemCodes: ['BB-1-001'] }, user: { id: 3 } }, mockRes());
@@ -431,43 +523,11 @@ describe('release()', () => {
   });
 
   test('a code from a different unit does not match', async () => {
-    const txn = stubFindByPkResult({ id: 10, transactionStatus: 'Approved', receivedByBorrowerDatetime: new Date(), details: [reservedDetail(jest.fn())] });
+    const txn = stubFindByPkResult({ id: 10, transactionStatus: 'Approved', details: [reservedDetail(jest.fn())] });
     Transaction.findByPk.mockResolvedValueOnce(txn);
     await expect(ctrl.release({ params: { id: 10 }, body: { itemCodes: ['EQ-001-002'] }, user: { id: 3 } }, mockRes())).rejects.toMatchObject({
       statusCode: 409
     });
-  });
-});
-
-describe('acknowledgeReceipt()', () => {
-  test('rejects a borrower who does not own the transaction', async () => {
-    Borrower.findOne.mockResolvedValueOnce({ id: 6 });
-    Transaction.findByPk.mockResolvedValueOnce(stubFindByPkResult({ id: 20, transactionStatus: 'Approved', borrowerId: 5 }));
-    await expect(ctrl.acknowledgeReceipt({ params: { id: 20 }, user: { id: 9 } }, mockRes())).rejects.toMatchObject({ statusCode: 403 });
-  });
-
-  test('rejects when the transaction is not yet Approved', async () => {
-    Transaction.findByPk.mockResolvedValueOnce(stubFindByPkResult({ id: 21, transactionStatus: 'For Approval', borrowerId: 5 }));
-    await expect(ctrl.acknowledgeReceipt({ params: { id: 21 }, user: { id: 9 } }, mockRes())).rejects.toMatchObject({ statusCode: 409 });
-  });
-
-  test('rejects if receipt was already acknowledged', async () => {
-    Transaction.findByPk.mockResolvedValueOnce(
-      stubFindByPkResult({ id: 22, transactionStatus: 'Approved', borrowerId: 5, receivedByBorrowerDatetime: new Date() })
-    );
-    await expect(ctrl.acknowledgeReceipt({ params: { id: 22 }, user: { id: 9 } }, mockRes())).rejects.toMatchObject({ statusCode: 409 });
-  });
-
-  test('records the acknowledgement timestamp with a conditional update', async () => {
-    const txn = stubFindByPkResult({ id: 23, transactionStatus: 'Approved', borrowerId: 5, receivedByBorrowerDatetime: null });
-    Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
-    const res = mockRes();
-    await ctrl.acknowledgeReceipt({ params: { id: 23 }, user: { id: 9 } }, res);
-    expect(Transaction.update).toHaveBeenCalledWith(
-      { receivedByBorrowerDatetime: expect.any(Date) },
-      { where: { id: 23, transactionStatus: 'Approved', receivedByBorrowerDatetime: null } }
-    );
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, data: expect.objectContaining({ dbId: 23 }) }));
   });
 });
 
@@ -500,19 +560,18 @@ describe('reject() / cancelSelfRequest() release Reserved units back to stock', 
     expect(notifyBorrower).toHaveBeenCalledWith(40, expect.stringContaining('Missing valid ID'), 'Rejection', 'txn-14-rejected');
   });
 
-  test('reject() forbids Staff at the For Approval stage', async () => {
-    Transaction.findByPk.mockResolvedValueOnce(reservedTxn({ id: 15, transactionStatus: 'For Approval' }));
-    await expect(ctrl.reject({ params: { id: 15 }, user: { id: 3, userRole: 'Staff' }, body: {} }, mockRes())).rejects.toMatchObject({
-      statusCode: 403
-    });
-    expect(Item.update).not.toHaveBeenCalled();
-  });
-
-  test('reject() allows the Director at the For Approval stage', async () => {
-    const txn = reservedTxn({ id: 16, transactionStatus: 'For Approval' });
-    Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
-    await ctrl.reject({ params: { id: 16 }, user: { id: 3, userRole: 'Director' }, body: {} }, mockRes());
-    expect(txn.transactionStatus).toBe('Rejected');
+  // Single approval step (2026-10-02): the old restriction limiting a
+  // For-Approval-stage rejection to Director/Admin only is gone — all three
+  // equally-privileged roles (Admin, Director, Staff) can reject at any
+  // stage. ('For Approval' itself is now only reachable by a pre-existing
+  // legacy row, but the equal-access rule still applies to it.)
+  test('reject() allows any of the three equally-privileged roles at the For Approval stage', async () => {
+    for (const userRole of ['Admin', 'Director', 'Staff']) {
+      const txn = reservedTxn({ id: 16, transactionStatus: 'For Approval' });
+      Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
+      await ctrl.reject({ params: { id: 16 }, user: { id: 3, userRole }, body: {} }, mockRes());
+      expect(txn.transactionStatus).toBe('Rejected');
+    }
   });
 
   test('a duplicate reject never releases stock twice', async () => {
@@ -573,7 +632,7 @@ describe('serialize()', () => {
     const data = res.json.mock.calls[0][0].data[0];
     expect(data.date).toBe('Sep 1, 2026');
     expect(data.time).toBe('1:30 AM');
-    expect(data.id).toBe('TXN-2026-0093');
+    expect(data.id).toBe('TN93-2026');
   });
 
   test('units carry the canonical Equipment ID of their equipment', async () => {
@@ -585,7 +644,119 @@ describe('serialize()', () => {
     Transaction.findAll.mockResolvedValueOnce([txn]);
     const res = mockRes();
     await ctrl.list({}, res);
-    expect(res.json.mock.calls[0][0].data[0].items[0]).toMatchObject({ code: 'EQ-005-002', equipmentId: 5, equipmentCode: 'EQ-005' });
+    expect(res.json.mock.calls[0][0].data[0].items[0]).toMatchObject({ code: 'EQ-005-002', equipmentId: 5, equipmentCode: 'VV-05' });
     expect(res.json.mock.calls[0][0].data[0]).not.toHaveProperty('fees');
+  });
+});
+
+
+describe('reserve-on-approval — units are assigned and stock drops only when a request is approved', () => {
+  const pendingDetails = () => [
+    { id: 1, equipmentId: 1, itemId: null, item: null, update: jest.fn().mockResolvedValue() },
+    { id: 2, equipmentId: 1, itemId: null, item: null, update: jest.fn().mockResolvedValue() }
+  ];
+  const pending = (details) =>
+    stubFindByPkResult({
+      id: 30,
+      transactionStatus: 'Acknowledged',
+      borrower: { ...READY_BORROWER, user: { id: 40 } },
+      authorizationDocumentPath: READY_BORROWER.authorizationDocumentPath,
+      validIdPath: null,
+      details
+    });
+
+  test('approving reserves the first free units, decrements stock and assigns them to the request', async () => {
+    const details = pendingDetails();
+    const txn = pending(details);
+    Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
+    Equipment.findByPk.mockResolvedValueOnce({ id: 1, equipmentName: 'Cones' });
+    Item.findAll.mockResolvedValueOnce([{ id: 11 }, { id: 12 }]);
+
+    await ctrl.review({ params: { id: 30 }, user: { id: 3 }, body: { action: 'accept' } }, mockRes());
+
+    expect(Item.update).toHaveBeenCalledWith({ availabilityStatus: 'Reserved' }, expect.objectContaining({ where: { id: [11, 12] } }));
+    expect(Equipment.decrement).toHaveBeenCalledWith('availableQuantity', expect.objectContaining({ by: 2, where: { id: 1 } }));
+    expect(details[0].update).toHaveBeenCalledWith({ itemId: 11 }, expect.anything());
+    expect(details[1].update).toHaveBeenCalledWith({ itemId: 12 }, expect.anything());
+  });
+
+  test('approval is refused with a 409 and no stock change when free units ran out', async () => {
+    const txn = pending(pendingDetails());
+    Transaction.findByPk.mockResolvedValueOnce(txn);
+    Equipment.findByPk.mockResolvedValueOnce({ id: 1, equipmentName: 'Cones' });
+    Item.findAll.mockResolvedValueOnce([{ id: 11 }]);
+
+    await expect(
+      ctrl.review({ params: { id: 30 }, user: { id: 3 }, body: { action: 'accept' } }, mockRes())
+    ).rejects.toMatchObject({ statusCode: 409, code: 'INSUFFICIENT_STOCK_AT_APPROVAL' });
+    expect(Item.update).not.toHaveBeenCalled();
+    expect(Equipment.decrement).not.toHaveBeenCalled();
+    expect(notifyBorrower).not.toHaveBeenCalled();
+  });
+
+  test('rejecting or cancelling a pending request frees nothing because it holds nothing', async () => {
+    const txn = pending(pendingDetails());
+    Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
+    await ctrl.reject({ params: { id: 30 }, user: { id: 3, userRole: 'Staff' }, body: {} }, mockRes());
+    expect(Item.update).not.toHaveBeenCalled();
+    expect(Equipment.increment).not.toHaveBeenCalled();
+  });
+
+  test('release refuses a request whose units were never assigned', async () => {
+    const txn = stubFindByPkResult({ id: 31, transactionStatus: 'Approved', details: pendingDetails() });
+    Transaction.findByPk.mockResolvedValueOnce(txn);
+    await expect(ctrl.release({ params: { id: 31 }, body: { itemCodes: ['X'] }, user: { id: 3 } }, mockRes())).rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+describe('restricted borrowers — approval and release are blocked (2026-11-15)', () => {
+  const restrictedTxn = (status, extra = {}) =>
+    stubFindByPkResult({
+      id: 70,
+      transactionStatus: status,
+      borrower: { ...READY_BORROWER, user: { id: 40, accountStatus: 'Restricted' } },
+      authorizationDocumentPath: READY_BORROWER.authorizationDocumentPath,
+      validIdPath: null,
+      documentsVerifiedDatetime: new Date(),
+      details: [{ id: 1, equipmentId: 1, itemId: 5, item: { id: 5, itemCode: 'VVB-48-01', availabilityStatus: 'Reserved', equipmentId: 1 } }],
+      ...extra
+    });
+
+  test('review(accept) is refused with BORROWER_RESTRICTED for a flagged borrower', async () => {
+    Transaction.findByPk.mockResolvedValueOnce(restrictedTxn('Acknowledged'));
+    await expect(
+      ctrl.review({ params: { id: 70 }, user: { id: 3 }, body: { action: 'accept' } }, mockRes())
+    ).rejects.toMatchObject({ statusCode: 409, code: 'BORROWER_RESTRICTED' });
+    expect(Item.update).not.toHaveBeenCalled();
+    expect(notifyBorrower).not.toHaveBeenCalled();
+  });
+
+  test('approve() is refused for a flagged borrower', async () => {
+    Transaction.findByPk.mockResolvedValueOnce(restrictedTxn('For Approval'));
+    await expect(ctrl.approve({ params: { id: 70 }, user: { id: 3 } }, mockRes())).rejects.toMatchObject({ code: 'BORROWER_RESTRICTED' });
+  });
+
+  test('release() is refused for a flagged borrower even though the request was approved earlier', async () => {
+    Transaction.findByPk.mockResolvedValueOnce(restrictedTxn('Approved'));
+    await expect(
+      ctrl.release({ params: { id: 70 }, body: { itemCodes: ['VVB-48-01'] }, user: { id: 3 } }, mockRes())
+    ).rejects.toMatchObject({ statusCode: 409, code: 'BORROWER_RESTRICTED' });
+  });
+
+  test('rejecting a flagged borrower’s request is still allowed', async () => {
+    const txn = restrictedTxn('Acknowledged');
+    Transaction.findByPk.mockResolvedValueOnce(txn).mockResolvedValueOnce(txn);
+    await expect(
+      ctrl.review({ params: { id: 70 }, user: { id: 3 }, body: { action: 'reject', remarks: 'Account flagged' } }, mockRes())
+    ).resolves.not.toThrow();
+  });
+
+  test('a pending replacement blocks approval too', async () => {
+    const txn = restrictedTxn('Acknowledged', { borrower: { ...READY_BORROWER, user: { id: 40, accountStatus: 'Active' } } });
+    Transaction.findByPk.mockResolvedValueOnce(txn);
+    DamageLossRecord.findAll.mockResolvedValueOnce([{ id: 1, itemId: 5, transactionId: 70, resolutionStatus: 'Pending', item: null }]);
+    await expect(
+      ctrl.review({ params: { id: 70 }, user: { id: 3 }, body: { action: 'accept' } }, mockRes())
+    ).rejects.toMatchObject({ code: 'BORROWER_RESTRICTED' });
   });
 });

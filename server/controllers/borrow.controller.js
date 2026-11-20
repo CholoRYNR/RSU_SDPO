@@ -15,7 +15,9 @@ const {
 } = require('../models');
 const { notifyBorrower, notifyRoles } = require('../helpers/notify');
 const { logStatusChange } = require('../helpers/transactionLog');
+const { lastCorrectionLog } = require('../helpers/correction');
 const { formatDate, formatTime, parsePhtDateTime, toPhtWallClock, DAY_MS } = require('../helpers/dateHelper');
+const { txnCode } = require('../helpers/txnCode');
 const { formatEquipmentCode } = require('../helpers/equipmentCode');
 const { missingDocuments } = require('../constants/borrowerCategories');
 const { STATUS, AWAITING_REVIEW } = require('../constants/transactionStatus');
@@ -28,7 +30,10 @@ const INCLUDE = [
   {
     model: TransactionDetail,
     as: 'details',
-    include: [{ model: Item, as: 'item', include: [{ model: Equipment, as: 'equipment', include: [{ model: Category, as: 'category' }] }] }]
+    include: [
+      { model: Item, as: 'item', include: [{ model: Equipment, as: 'equipment', include: [{ model: Category, as: 'category' }] }] },
+      { model: Equipment, as: 'equipment', include: [{ model: Category, as: 'category' }] }
+    ]
   },
   { model: TransactionLog, as: 'logs' }
 ];
@@ -45,11 +50,13 @@ function httpError(statusCode, message, code, details) {
 //   > 5 available  = Green  = up to 2 units may be borrowed per request
 //   4-5 available  = Yellow = only 1 unit may be borrowed per request
 //   1-3 available  = Red    = borrowing not allowed
-// plus a per-equipment minimum-stock floor at 25% of total quantity
-// (project-leader decision, 2026-09-12). Enforced for self-service requests;
-// staff-created walk-in transactions are left to staff judgment per spec.
+// plus a per-equipment minimum-stock floor at 15% of total quantity
+// (project-leader decision, 2026-09-12; lowered from 25% to 15% on
+// 2026-10-02). Enforced for self-service requests; staff-created walk-in
+// transactions are not limited by it (emergency borrowing at the SDPO
+// office) — create() only records in the audit log when staff lend beyond it.
 function lowStockFloor(totalQuantity) {
-  return Math.ceil(totalQuantity * 0.25);
+  return Math.ceil(totalQuantity * 0.15);
 }
 
 function maxBorrowableUnits(availableQuantity, totalQuantity) {
@@ -85,7 +92,8 @@ async function getLateReturnBlock(borrowerId) {
     count: overdue.length,
     graceDays: LATE_RETURN_GRACE_DAYS,
     daysOverdue,
-    oldestTransactionId: oldest.id
+    oldestTransactionId: oldest.id,
+    oldestTransactionCode: txnCode(oldest)
   };
 }
 
@@ -124,7 +132,7 @@ async function getBorrowingRestrictions(borrower, user) {
   if (lateBlock) {
     restrictions.push({
       code: 'LATE_RETURN',
-      message: `You have equipment overdue by ${lateBlock.daysOverdue} day(s) (Transaction #${lateBlock.oldestTransactionId}). New borrowing requests are blocked until all overdue equipment is returned.`,
+      message: `You have equipment overdue by ${lateBlock.daysOverdue} day(s) (Transaction ${lateBlock.oldestTransactionCode}). New borrowing requests are blocked until all overdue equipment is returned.`,
       ...lateBlock
     });
   }
@@ -132,11 +140,31 @@ async function getBorrowingRestrictions(borrower, user) {
   return restrictions;
 }
 
-// Counterpart to the reservation done at request creation: gives still-
-// Reserved units back to the available pool when a request is Rejected or
-// Cancelled before release.
+// Staff-side counterpart to the submission check above: a borrower who is
+// flagged, has an unresolved replacement, or is overdue cannot have a request
+// approved or equipment released — even for a request submitted (or approved)
+// before the restriction began. Rejecting, returning for correction, and
+// receiving returned equipment stay open so the account can be resolved.
+async function assertBorrowerNotRestricted(txn, action) {
+  if (!txn.borrower) return;
+  const restrictions = await getBorrowingRestrictions(txn.borrower, txn.borrower.user);
+  if (restrictions.length === 0) return;
+  const reasons = restrictions
+    .map((r) => ({ BORROWER_FLAGGED: 'the account is flagged', PENDING_REPLACEMENT: 'a damaged/lost item still needs replacement', LATE_RETURN: 'equipment is overdue' })[r.code] || r.code)
+    .join('; ');
+  throw httpError(
+    409,
+    `Cannot ${action} Transaction ${txnCode(txn)}: this borrower is restricted (${reasons}). Resolve the restriction first, or reject the request instead.`,
+    'BORROWER_RESTRICTED',
+    { restrictions }
+  );
+}
+
+// Gives still-Reserved units back to the available pool when a request is
+// Rejected or Cancelled before release. A pending self-service request holds
+// no units (they are assigned at approval), so those rows are skipped.
 async function releaseReservedItems(txn, t) {
-  const reserved = txn.details.filter((d) => d.item.availabilityStatus === 'Reserved');
+  const reserved = txn.details.filter((d) => d.item && d.item.availabilityStatus === 'Reserved');
   if (reserved.length === 0) return;
   await Item.update(
     { availabilityStatus: 'Available' },
@@ -148,6 +176,45 @@ async function releaseReservedItems(txn, t) {
   });
   for (const [equipmentId, qty] of Object.entries(byEquipment)) {
     await Equipment.increment('availableQuantity', { by: qty, where: { id: equipmentId }, transaction: t });
+  }
+}
+
+// Reserve-on-approval: a self-service request names equipment only. When it
+// is approved, one free unit per requested line is locked, marked Reserved
+// and assigned to the detail row, and the equipment's available count drops.
+// Walk-in requests already hold their units, so their rows are skipped.
+// Throws 409 (and rolls the approval back) if free units ran out meanwhile.
+async function assignUnitsOnApproval(txn, t) {
+  const pending = txn.details.filter((d) => !d.item && !d.itemId);
+  if (pending.length === 0) return;
+  const byEquipment = new Map();
+  pending.forEach((d) => {
+    if (!byEquipment.has(d.equipmentId)) byEquipment.set(d.equipmentId, []);
+    byEquipment.get(d.equipmentId).push(d);
+  });
+  for (const [equipmentId, rows] of byEquipment) {
+    const equipment = await Equipment.findByPk(equipmentId, { transaction: t, lock: t.LOCK.UPDATE });
+    const free = await Item.findAll({
+      where: { equipmentId, availabilityStatus: 'Available' },
+      order: [['id', 'ASC']],
+      limit: rows.length,
+      lock: t.LOCK.UPDATE,
+      transaction: t
+    });
+    if (free.length < rows.length) {
+      const name = equipment ? equipment.equipmentName : `Equipment #${equipmentId}`;
+      throw httpError(
+        409,
+        `Cannot approve: "${name}" has only ${free.length} free unit(s) left but this request needs ${rows.length}. Other approved requests are holding the stock — return the request for correction or reject it.`,
+        'INSUFFICIENT_STOCK_AT_APPROVAL',
+        { equipmentId, available: free.length, requested: rows.length }
+      );
+    }
+    await Item.update({ availabilityStatus: 'Reserved' }, { where: { id: free.map((i) => i.id) }, transaction: t });
+    await Equipment.decrement('availableQuantity', { by: rows.length, where: { id: equipmentId }, transaction: t });
+    for (let i = 0; i < rows.length; i += 1) {
+      await rows[i].update({ itemId: free[i].id }, { transaction: t });
+    }
   }
 }
 
@@ -174,10 +241,6 @@ async function transition(txn, fromStatuses, toStatus, fields, t) {
   return txn;
 }
 
-function txnCode(t) {
-  const year = toPhtWallClock(t.requestDatetime || t.createdAt).getUTCFullYear();
-  return `TXN-${year}-${String(t.id).padStart(4, '0')}`;
-}
 
 // Most recent audit-trail entry reaching `newStatus` — shows *why* a request
 // was rejected or when it was cancelled without a separate column.
@@ -190,11 +253,16 @@ function lastLogFor(t, newStatus) {
 // Dates are formatted in Philippine Time on the server (formatDate/
 // formatTime) and also returned as ISO instants so clients can format them
 // consistently without trusting their own clock/timezone.
+function detailEquipment(d) {
+  return d.equipment || (d.item && d.item.equipment) || null;
+}
+
 function serialize(t) {
   const b = t.borrower;
   const firstItem = (t.details || [])[0];
   const rejectionLog = t.transactionStatus === STATUS.REJECTED ? lastLogFor(t, STATUS.REJECTED) : null;
   const cancellationLog = t.transactionStatus === STATUS.CANCELLED ? lastLogFor(t, STATUS.CANCELLED) : null;
+  const correctionLog = lastCorrectionLog(t);
   return {
     dbId: t.id,
     borrowerId: t.borrowerId,
@@ -213,6 +281,12 @@ function serialize(t) {
     status: t.transactionStatus,
     reason: rejectionLog ? rejectionLog.remarks : null,
     cancelledAt: cancellationLog ? formatDate(cancellationLog.changeDatetime) : null,
+    // Set only while the request is still Pending/Acknowledged *after*
+    // being returned for correction — distinct from `reason` (Rejected
+    // only). Not the same as a rejection: reserved stock stays held, and
+    // the borrower is expected to fix something and let SDPO re-review it.
+    needsCorrection: !!correctionLog,
+    correctionNote: correctionLog ? correctionLog.remarks : null,
     receivedByBorrowerDatetime: t.receivedByBorrowerDatetime || null,
     review: t.reviewer ? t.reviewer.username : '—',
     approve: t.approver ? t.approver.username : '—',
@@ -228,23 +302,27 @@ function serialize(t) {
       returned: t.returnDatetime || null,
       expectedReturn: t.expectedReturnDatetime || null
     },
-    category:
-      firstItem && firstItem.item && firstItem.item.equipment && firstItem.item.equipment.category
-        ? firstItem.item.equipment.category.categoryName
-        : '—',
-    items: (t.details || []).map((d) => ({
-      code: d.item.itemCode,
-      legacyCode: d.item.legacyItemCode || null,
-      equipmentId: d.item.equipmentId,
-      equipmentCode: formatEquipmentCode(d.item.equipmentId),
-      name: d.item.equipment.equipmentName,
-      category: d.item.equipment.category ? d.item.equipment.category.categoryName : null,
-      photoUrl: d.item.equipment.photoPath
-        ? `/api/equipment/${d.item.equipmentId}/photo?v=${encodeURIComponent(String(d.item.equipment.photoPath).split('/').pop())}`
+    category: firstItem && detailEquipment(firstItem) && detailEquipment(firstItem).category
+      ? detailEquipment(firstItem).category.categoryName
+      : '—',
+    items: (t.details || []).map((d) => {
+      const eq = detailEquipment(d);
+      const eqId = d.equipmentId || (d.item && d.item.equipmentId);
+      const cat = eq && eq.category ? eq.category.categoryName : null;
+      return {
+      code: d.item ? d.item.itemCode : null,
+      legacyCode: (d.item && d.item.legacyItemCode) || null,
+      equipmentId: eqId,
+      equipmentCode: formatEquipmentCode(cat, eq ? eq.equipmentName : '', eqId),
+      name: eq ? eq.equipmentName : '—',
+      category: cat,
+      photoUrl: eq && eq.photoPath
+        ? `/api/equipment/${eqId}/photo?v=${encodeURIComponent(String(eq.photoPath).split('/').pop())}`
         : null,
       returnedCondition: d.returnedCondition,
       conditionNotes: d.conditionNotes
-    }))
+      };
+    })
   };
 }
 
@@ -309,6 +387,10 @@ exports.create = async (req, res) => {
     throw httpError(403, restrictions[0].message, restrictions[0].code, { restrictions });
   }
 
+  // Filled in below when staff lend more than the self-service rules would
+  // allow (emergency walk-in), so the audit log can show it was deliberate.
+  let emergencyNote = '';
+
   const created = await sequelize.transaction(async (t) => {
     // FOR UPDATE row-locks the chosen units so two concurrent requests can't
     // both reserve the same physical item.
@@ -327,18 +409,33 @@ exports.create = async (req, res) => {
     items.forEach((i) => {
       byEquipment[i.equipmentId] = (byEquipment[i.equipmentId] || 0) + 1;
     });
+    // Staff walk-ins are not limited by the self-service caps / 15% floor,
+    // but any lending beyond them is recorded in the audit log.
+    const stockRows = await Equipment.findAll({ where: { id: Object.keys(byEquipment) }, transaction: t });
+    const beyondLimit = [];
+    for (const [equipmentId, qty] of Object.entries(byEquipment)) {
+      const eq = (stockRows || []).find((e) => String(e.id) === String(equipmentId));
+      if (eq && qty > maxBorrowableUnits(eq.availableQuantity, eq.totalQuantity)) {
+        beyondLimit.push(`${eq.equipmentName} (${eq.availableQuantity} of ${eq.totalQuantity} available before this transaction, ${qty} lent)`);
+      }
+    }
+    if (beyondLimit.length) {
+      emergencyNote = `. Emergency walk-in: stock was below the self-service minimum, so staff lent beyond the normal limit for ${beyondLimit.join('; ')}`;
+    }
     for (const [equipmentId, qty] of Object.entries(byEquipment)) {
       await Equipment.decrement('availableQuantity', { by: qty, where: { id: equipmentId }, transaction: t });
     }
 
     // Starts Acknowledged like a self-request; it still has to pass the
-    // Admin/Staff document verification and Director approval steps.
+    // single Admin/Director/Staff review-and-approval step.
     const txn = await Transaction.create(
       {
         borrowerId,
         purpose: purpose || null,
         expectedReturnDatetime,
         requestDatetime: new Date(),
+        validIdPath: borrower.validIdPath || null,
+        authorizationDocumentPath: borrower.authorizationDocumentPath || null,
         transactionStatus: STATUS.ACKNOWLEDGED,
         borrowerAcknowledged: true,
         acknowledgementTimestamp: new Date()
@@ -346,13 +443,13 @@ exports.create = async (req, res) => {
       { transaction: t }
     );
     await TransactionDetail.bulkCreate(
-      items.map((i) => ({ transactionId: txn.id, itemId: i.id })),
+      items.map((i) => ({ transactionId: txn.id, itemId: i.id, equipmentId: i.equipmentId })),
       { transaction: t }
     );
     return txn;
   });
 
-  await logStatusChange(created.id, req.user.id, STATUS.ACKNOWLEDGED, STATUS.ACKNOWLEDGED, 'Request created by SDPO staff');
+  await logStatusChange(created.id, req.user.id, STATUS.ACKNOWLEDGED, STATUS.ACKNOWLEDGED, `Request created by SDPO staff${emergencyNote}`);
   const withIncludes = await Transaction.findByPk(created.id, { include: INCLUDE });
   res.status(201).json({ success: true, data: serialize(withIncludes) });
 };
@@ -431,7 +528,6 @@ exports.createSelfRequest = async (req, res) => {
   let created;
   try {
     created = await sequelize.transaction(async (t) => {
-      const selectedItems = [];
       for (const { equipmentId, quantity } of lines) {
         // FOR UPDATE serializes concurrent requests for the same equipment.
         const equipment = await Equipment.findByPk(equipmentId, { transaction: t, lock: t.LOCK.UPDATE });
@@ -449,7 +545,7 @@ exports.createSelfRequest = async (req, res) => {
           throw httpError(
             409,
             atFloor
-              ? `Warning: "${equipment.equipmentName}" can't be borrowed at this moment — only ${equipment.availableQuantity} of ${equipment.totalQuantity} left, at or below the SDPO's 25% minimum-stock threshold.`
+              ? `Warning: "${equipment.equipmentName}" can't be borrowed at this moment — only ${equipment.availableQuantity} of ${equipment.totalQuantity} left, at or below the SDPO's 15% minimum-stock threshold.`
               : cap === 0
                 ? `"${equipment.equipmentName}" is low in stock (${equipment.availableQuantity} available) and can't be borrowed right now under the SDPO's minimum-stock guideline.`
                 : `Only ${cap} unit(s) of "${equipment.equipmentName}" may be borrowed per request while stock is at ${equipment.availableQuantity} available (SDPO minimum-stock guideline).`
@@ -460,19 +556,39 @@ exports.createSelfRequest = async (req, res) => {
           where: { equipmentId, availabilityStatus: 'Available' },
           order: [['id', 'ASC']],
           limit: quantity,
-          lock: t.LOCK.UPDATE,
           transaction: t
         });
         if (available.length < quantity) {
+          // Two different problems can produce this same shortfall, and they
+          // need two different messages: (1) every unit really is Borrowed/
+          // Reserved right now — a genuine stock shortage — or (2) fewer Item
+          // rows have ever been registered (via QR Management) than the
+          // equipment's own totalQuantity counter claims, e.g. "Shuttle
+          // Cock" showing 10/10 available with zero QR-registered units
+          // (2026-10 bug report). The old message read identically for
+          // both, which looked like a logic bug when it was really a data
+          // gap the SDPO needs to close by generating QR codes.
+          let registeredGap = null;
+          if (Number.isFinite(equipment.totalQuantity) && equipment.totalQuantity > 0) {
+            const registered = await Item.count({ where: { equipmentId }, transaction: t });
+            if (registered < equipment.totalQuantity) {
+              registeredGap = { registered, shortfall: equipment.totalQuantity - registered };
+            }
+          }
+          if (registeredGap) {
+            throw httpError(
+              409,
+              `"${equipment.equipmentName}" shows ${equipment.totalQuantity} total units, but only ${registeredGap.registered} have a QR code registered in QR Management (${available.length} of those are currently available). Generate QR codes for the remaining ${registeredGap.shortfall} unit(s) before they can be borrowed.`,
+              'ITEMS_NOT_REGISTERED',
+              { registered: registeredGap.registered, totalQuantity: equipment.totalQuantity, available: available.length, requested: quantity }
+            );
+          }
           throw httpError(409, `Not enough stock for "${equipment.equipmentName}" — ${available.length} available, ${quantity} requested`);
         }
 
-        await Item.update(
-          { availabilityStatus: 'Reserved' },
-          { where: { id: available.map((i) => i.id) }, transaction: t }
-        );
-        await equipment.decrement('availableQuantity', { by: quantity, transaction: t });
-        selectedItems.push(...available);
+        // Reserve-on-approval: nothing is reserved or decremented here. A
+        // pending request leaves stock untouched; units are assigned and
+        // availableQuantity drops only when SDPO approves it.
       }
 
       const txn = await Transaction.create(
@@ -482,16 +598,19 @@ exports.createSelfRequest = async (req, res) => {
           expectedReturnDatetime,
           requestDatetime: new Date(),
           requestKey,
+          validIdPath: borrower.validIdPath || null,
+          authorizationDocumentPath: borrower.authorizationDocumentPath || null,
           transactionStatus: STATUS.ACKNOWLEDGED,
           borrowerAcknowledged: true,
           acknowledgementTimestamp: new Date()
         },
         { transaction: t }
       );
-      await TransactionDetail.bulkCreate(
-        selectedItems.map((i) => ({ transactionId: txn.id, itemId: i.id })),
-        { transaction: t }
-      );
+      const detailRows = [];
+      lines.forEach(({ equipmentId, quantity }) => {
+        for (let i = 0; i < quantity; i += 1) detailRows.push({ transactionId: txn.id, equipmentId, itemId: null });
+      });
+      await TransactionDetail.bulkCreate(detailRows, { transaction: t });
       return txn;
     });
   } catch (err) {
@@ -507,15 +626,17 @@ exports.createSelfRequest = async (req, res) => {
   await logStatusChange(created.id, req.user.id, STATUS.ACKNOWLEDGED, STATUS.ACKNOWLEDGED, 'Request submitted by borrower');
   await notifyBorrower(
     req.user.id,
-    `Your borrow request (Transaction #${created.id}) was submitted and is awaiting document review by SDPO staff.`,
+    `Your borrow request (Transaction ${txnCode(created)}) was submitted and is awaiting SDPO review and approval.`,
     'Request Submitted',
     `txn-${created.id}-submitted`
   );
-  // Admin/Staff review the documents first; the Director is notified only
-  // once the request actually reaches them (see review()).
+  // Single approval step (2026-10-02): Admin, Director, and Staff have
+  // identical access to review and approve a request, so all three are
+  // notified of a new submission at once — not just Admin/Staff first,
+  // with the Director notified later once the request is forwarded.
   await notifyRoles(
-    ['Admin', 'Staff'],
-    `New borrow request from ${[borrower.firstName, borrower.lastName].filter(Boolean).join(' ')} (Transaction #${created.id}) — submitted documents need review.`,
+    ['Admin', 'Director', 'Staff'],
+    `New borrow request from ${[borrower.firstName, borrower.lastName].filter(Boolean).join(' ')} (Transaction ${txnCode(created)}) — submitted documents need review.`,
     'New Request',
     `txn-${created.id}-new-request`
   );
@@ -562,12 +683,17 @@ exports.cancelSelfRequest = async (req, res) => {
   res.json({ success: true, data: serialize(await loadTransactionOr404(txn.id)) });
 };
 
-// Step 2 — Admin/Staff review of the borrower's submitted documents.
-//   accept     → documents verified; request proceeds to the Director
+// Step 2 — SDPO review of the borrower's submitted documents.
+//   accept     → documents verified and request approved, in one action
 //   correction → stays with the borrower to fix (status unchanged)
-//   reject     → request rejected, reserved stock released
-// A request can only reach the Director through 'accept', and 'accept'
-// requires every document the borrower's type needs to be on file.
+//   reject     → request rejected (any units already held are released)
+// 'accept' requires every document the borrower's type needs to be on file.
+// Single approval step (2026-10-02): checking the borrower's documents and
+// approving the request happen together, in one action, by whichever of the
+// three equally-privileged roles (Director, Property Custodian, or
+// Administrative Aide VI — Admin/Director/Staff) handles it. There is no
+// longer a separate "forward to the Director" stage — 'accept' takes the
+// transaction straight from Pending/Acknowledged to Approved.
 exports.review = async (req, res) => {
   const { action } = req.body;
   const remarks = req.body.remarks ? String(req.body.remarks).trim() : '';
@@ -583,7 +709,7 @@ exports.review = async (req, res) => {
 
   let nextStatus;
   if (action === 'accept') {
-    const missing = missingDocuments(txn.borrower);
+    const missing = missingDocuments(txn.borrower, txn);
     if (missing.length) {
       throw httpError(
         409,
@@ -592,11 +718,23 @@ exports.review = async (req, res) => {
         { missing }
       );
     }
-    nextStatus = STATUS.FOR_APPROVAL;
-    await transition(txn, AWAITING_REVIEW, nextStatus, {
-      ...reviewFields,
-      documentsVerifiedBy: req.user.id,
-      documentsVerifiedDatetime: now
+    await assertBorrowerNotRestricted(txn, 'approve');
+    nextStatus = STATUS.APPROVED;
+    await sequelize.transaction(async (t) => {
+      await transition(
+        txn,
+        AWAITING_REVIEW,
+        nextStatus,
+        {
+          ...reviewFields,
+          documentsVerifiedBy: req.user.id,
+          documentsVerifiedDatetime: now,
+          approvedBy: req.user.id,
+          approvalDatetime: now
+        },
+        t
+      );
+      await assignUnitsOnApproval(txn, t);
     });
   } else if (action === 'reject') {
     nextStatus = STATUS.REJECTED;
@@ -614,74 +752,51 @@ exports.review = async (req, res) => {
     req.user.id,
     oldStatus,
     nextStatus,
-    action === 'accept' ? `Documents verified${remarks ? ': ' + remarks : ''}` : remarks || null
+    action === 'accept' ? `Documents verified and approved${remarks ? ': ' + remarks : ''}` : remarks || null
   );
 
   if (txn.borrower && txn.borrower.user) {
     const message =
       action === 'accept'
-        ? `Your submitted documents for Transaction #${txn.id} were verified. The request is now awaiting Director approval.`
+        ? `Your borrow request (Transaction ${txnCode(txn)}) has been approved. Confirm receipt from your account when you pick up the equipment at the SDPO office.`
         : action === 'reject'
-          ? `Your borrow request (Transaction #${txn.id}) was rejected during review.${remarks ? ' Reason: ' + remarks : ''}`
-          : `Your borrow request (Transaction #${txn.id}) needs correction before it can proceed.${remarks ? ' ' + remarks : ''}`;
+          ? `Your borrow request (Transaction ${txnCode(txn)}) was rejected during review.${remarks ? ' Reason: ' + remarks : ''}`
+          : `Your borrow request (Transaction ${txnCode(txn)}) needs correction before it can proceed.${remarks ? ' ' + remarks : ''}`;
     const key =
       action === 'accept'
-        ? `txn-${txn.id}-documents-verified`
+        ? `txn-${txn.id}-approved`
         : action === 'reject'
           ? `txn-${txn.id}-rejected`
           : `txn-${txn.id}-correction-${log && log.id ? log.id : now.getTime()}`;
-    await notifyBorrower(txn.borrower.user.id, message, action === 'reject' ? 'Rejection' : 'Review', key);
-  }
-  if (action === 'accept') {
-    const name = txn.borrower ? [txn.borrower.firstName, txn.borrower.lastName].filter(Boolean).join(' ') : 'a borrower';
-    await notifyRoles(
-      ['Director'],
-      `Transaction #${txn.id} from ${name} passed document verification and is awaiting your approval.`,
-      'Awaiting Approval',
-      `txn-${txn.id}-awaiting-approval`
-    );
+    await notifyBorrower(txn.borrower.user.id, message, action === 'reject' ? 'Rejection' : 'Approval', key);
   }
   res.json({ success: true, data: serialize(await loadTransactionOr404(txn.id)) });
 };
 
-// Step 3 — Director approval (Director/Admin only, enforced on the route).
+// Legacy fallback only (2026-10-02): no new request reaches 'For Approval'
+// under the single-approval workflow above — exports.review('accept') goes
+// straight to Approved. This stays only so a request that was already
+// sitting in the old two-step 'For Approval' status before this change can
+// still be resolved, equally, by any of the three roles (route: staffOnly).
 exports.approve = async (req, res) => {
   const txn = await loadTransactionOr404(req.params.id);
   assertStatus(txn, STATUS.FOR_APPROVAL);
   if (!txn.documentsVerifiedDatetime) {
-    throw httpError(409, 'Submitted documents must be verified by SDPO staff before the Director can approve this request', 'DOCUMENTS_NOT_VERIFIED');
+    throw httpError(409, 'Submitted documents must be verified before this request can be approved', 'DOCUMENTS_NOT_VERIFIED');
   }
-  await transition(txn, [STATUS.FOR_APPROVAL], STATUS.APPROVED, { approvedBy: req.user.id, approvalDatetime: new Date() });
-  await logStatusChange(txn.id, req.user.id, STATUS.FOR_APPROVAL, STATUS.APPROVED);
+  await assertBorrowerNotRestricted(txn, 'approve');
+  await sequelize.transaction(async (t) => {
+    await transition(txn, [STATUS.FOR_APPROVAL], STATUS.APPROVED, { approvedBy: req.user.id, approvalDatetime: new Date() }, t);
+    await assignUnitsOnApproval(txn, t);
+  });
+  await logStatusChange(txn.id, req.user.id, STATUS.FOR_APPROVAL, STATUS.APPROVED, 'Request approved');
   if (txn.borrower && txn.borrower.user) {
     await notifyBorrower(
       txn.borrower.user.id,
-      `Your borrow request (Transaction #${txn.id}) has been approved by the Director. Confirm receipt from your account when you pick up the equipment at the SDPO office.`,
+      `Your borrow request (Transaction ${txnCode(txn)}) has been approved. Confirm receipt from your account when you pick up the equipment at the SDPO office.`,
       'Approval',
       `txn-${txn.id}-approved`
     );
-  }
-  res.json({ success: true, data: serialize(await loadTransactionOr404(txn.id)) });
-};
-
-// Step 4 — the borrower's electronic acknowledgement of receipt (no
-// signature), required before staff can release the equipment.
-exports.acknowledgeReceipt = async (req, res) => {
-  const borrower = await Borrower.findOne({ where: { userId: req.user.id } });
-  const txn = await loadTransactionOr404(req.params.id);
-  if (!borrower || txn.borrowerId !== borrower.id) {
-    throw httpError(403, 'You do not have permission to acknowledge this transaction');
-  }
-  assertStatus(txn, STATUS.APPROVED);
-  if (txn.receivedByBorrowerDatetime) {
-    throw httpError(409, 'Receipt has already been acknowledged for this transaction');
-  }
-  const [count] = await Transaction.update(
-    { receivedByBorrowerDatetime: new Date() },
-    { where: { id: txn.id, transactionStatus: STATUS.APPROVED, receivedByBorrowerDatetime: null } }
-  );
-  if (!count) {
-    throw httpError(409, 'Receipt has already been acknowledged for this transaction');
   }
   res.json({ success: true, data: serialize(await loadTransactionOr404(txn.id)) });
 };
@@ -691,10 +806,6 @@ exports.reject = async (req, res) => {
   const txn = await loadTransactionOr404(req.params.id);
   const allowed = [...AWAITING_REVIEW, STATUS.FOR_APPROVAL];
   assertStatusIn(txn, allowed);
-  // Once a request reaches For Approval, only the Director (or Admin) decides.
-  if (txn.transactionStatus === STATUS.FOR_APPROVAL && !['Director', 'Admin'].includes(req.user.userRole)) {
-    throw httpError(403, 'Only a Director can reject a request that has reached the approval stage');
-  }
   const oldStatus = txn.transactionStatus;
   await sequelize.transaction(async (t) => {
     await transition(txn, [oldStatus], STATUS.REJECTED, {}, t);
@@ -704,7 +815,7 @@ exports.reject = async (req, res) => {
   if (txn.borrower && txn.borrower.user) {
     await notifyBorrower(
       txn.borrower.user.id,
-      `Your borrow request (Transaction #${txn.id}) was rejected.${remarks ? ' Reason: ' + remarks : ''}`,
+      `Your borrow request (Transaction ${txnCode(txn)}) was rejected.${remarks ? ' Reason: ' + remarks : ''}`,
       'Rejection',
       `txn-${txn.id}-rejected`
     );
@@ -726,15 +837,12 @@ exports.release = async (req, res) => {
 
   const txn = await loadTransactionOr404(req.params.id);
   assertStatus(txn, STATUS.APPROVED);
-
-  if (!txn.receivedByBorrowerDatetime) {
-    throw httpError(
-      409,
-      'The borrower has not yet completed the electronic acknowledgement of receipt for this request — it must be acknowledged before equipment can be released.'
-    );
-  }
+  await assertBorrowerNotRestricted(txn, 'release equipment for');
 
   const scanned = itemCodes.map((c) => String(c).trim());
+  if (txn.details.some((d) => !d.item)) {
+    throw httpError(409, 'Units have not been assigned to this transaction yet. Refresh and try again.');
+  }
   const units = txn.details.map((d) => d.item);
   const allMatched =
     scanned.length === units.length &&
@@ -754,7 +862,7 @@ exports.release = async (req, res) => {
 
   await sequelize.transaction(async (t) => {
     await transition(txn, [STATUS.APPROVED], STATUS.RELEASED, { releasedBy: req.user.id, releaseDatetime: new Date() }, t);
-    // availableQuantity was already decremented at reservation time.
+    // availableQuantity was already decremented when the units were reserved at approval.
     for (const detail of txn.details) {
       await detail.item.update(
         { availabilityStatus: 'Borrowed', currentBorrowerId: txn.borrowerId },
@@ -763,11 +871,17 @@ exports.release = async (req, res) => {
     }
   });
 
-  await logStatusChange(txn.id, req.user.id, STATUS.APPROVED, STATUS.RELEASED);
+  await logStatusChange(
+    txn.id,
+    req.user.id,
+    STATUS.APPROVED,
+    STATUS.RELEASED,
+    `Equipment released: ${units.map((i) => i.itemCode).join(', ')}`
+  );
   if (txn.borrower && txn.borrower.user) {
     await notifyBorrower(
       txn.borrower.user.id,
-      `Equipment for your request (Transaction #${txn.id}) has been released to you. Please return it by ${formatDate(txn.expectedReturnDatetime)} ${formatTime(txn.expectedReturnDatetime)}.`,
+      `Equipment for your request (Transaction ${txnCode(txn)}) has been released to you. Please return it by ${formatDate(txn.expectedReturnDatetime)} ${formatTime(txn.expectedReturnDatetime)}.`,
       'Release',
       `txn-${txn.id}-released`
     );
@@ -781,9 +895,9 @@ exports.complete = async (req, res) => {
   const txn = await loadTransactionOr404(req.params.id);
   assertStatus(txn, STATUS.RESOLVED);
   await transition(txn, [STATUS.RESOLVED], STATUS.COMPLETED);
-  await logStatusChange(txn.id, req.user.id, STATUS.RESOLVED, STATUS.COMPLETED);
+  await logStatusChange(txn.id, req.user.id, STATUS.RESOLVED, STATUS.COMPLETED, 'Transaction closed after replacement resolution');
   if (txn.borrower && txn.borrower.user) {
-    await notifyBorrower(txn.borrower.user.id, `Transaction #${txn.id} has been marked Completed.`, 'Completed', `txn-${txn.id}-completed`);
+    await notifyBorrower(txn.borrower.user.id, `Transaction ${txnCode(txn)} has been marked Completed.`, 'Completed', `txn-${txn.id}-completed`);
   }
   res.json({ success: true, data: serialize(await loadTransactionOr404(txn.id)) });
 };
